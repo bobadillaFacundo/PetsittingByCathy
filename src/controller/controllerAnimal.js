@@ -6,8 +6,7 @@ import usuariosModel from "../model/usuario.js"
 export const menuCrearAnimal = async (req, res) => {
     try {
         const animalesTipos = await tipoAnimalModel.find().select("-animales")
-        const {tipo} = req.params
-        return res.render('crearAnimal',{animalesTipos, tipoUsuario: tipo })
+        return res.render('crearAnimal',{animalesTipos, tipoUsuario: req.tipoUsuario })
     } catch (error) {
         console.log(error)
     }
@@ -19,9 +18,7 @@ export const todosLosAnimales = async (req, res) => {
             .populate('idTipoAnimal', 'tipo') // Trae solo el campo tipo del idTipoAnimal
             .populate('idUsuario', 'nombre email'); // Trae los campos nombre y email del idUsuario
 
-            const {tipo} = req.params
-
-        res.render('listaAnimales', { animales, tipoUsuario: tipo });
+        res.render('listaAnimales', { animales, tipoUsuario: req.tipoUsuario });
     } catch (error) {
         console.error('Error al obtener los animales:', error);
         res.status(500).send('Error al obtener los animales');
@@ -30,7 +27,7 @@ export const todosLosAnimales = async (req, res) => {
 
 export const busquedaAnimal = async (req, res) => {
     try {
-        const { nombreAnimal, tipo } = req.params
+        const { nombreAnimal } = req.params
         // Buscar animales que coincidan con el nombre
         const animales = await animalesModel.find({ nombre: { $regex: nombreAnimal, $options: 'i' } })
         .populate({
@@ -51,7 +48,7 @@ export const busquedaAnimal = async (req, res) => {
         }
     })
 
-    res.render('busquedaAnimal', { animales, usuarios, tipoUsuario: tipo   })
+    res.render('busquedaAnimal', { animales, usuarios, tipoUsuario: req.tipoUsuario })
 
     } catch (error) {
         res.status(404).json({ error: error.message })
@@ -85,9 +82,8 @@ export const todasLasMascotasAdopcion = async (req, res) => {
         const mascotas = await animalesModel.find({adopcion: true})
             .populate('idTipoAnimal', 'tipo'). // Trae solo el campo tipo del idTipoAnimal
             populate('idUsuario', 'nombre email'); // Trae los campos nombre y email del idUsuario
-            const {tipo} = req.params
 
-        res.render('viewAdopciones', { mascotas, tipoUsuario: tipo  })
+        res.render('viewAdopciones', { mascotas, tipoUsuario: req.tipoUsuario })
     } catch (error) {
         console.error('Error al obtener las mascotas:', error);
         res.status(500).send('Error al obtener las mascotas');

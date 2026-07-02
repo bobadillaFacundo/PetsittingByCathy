@@ -1,37 +1,86 @@
 {{> head}}
 <header>
-    <div class="container mt-4">
-        <ul class="nav nav-tabs" id="myTabs">
-            <!-- Logo e inicio a la izquierda -->
-            <li class="nav-item" id="logo">
-                <a class="nav-link" id="btnIniciarSesion"> <img src="/image/fondo.png" alt="Logo"
-                        style="width: 40px; height: 40px;">
-                </a>
-            </li>
-
-            <!-- Resto de los botones -->
-            <li class="nav-item"><a class="nav-link" id="btnAdopciones">Adopciones</a></li>
-            <li class="nav-item"><a class="nav-link" id="btnReservar">Reservar</a></li>
-            <li class="nav-item"><a class="nav-link" id="btnPaquetes">Paquetes</a></li>
-            <li class="nav-item"><a class="nav-link" id="btnPerfil">Perfil</a></li>
-
-            <!-- Dropdown para más opciones -->
-            <li class="nav-item dropdown">
-                <a class="nav-link dropbtn">Especies</a>
-                <div class="dropdown-content">
-                    <a href="#" id="btnTipos">Lista de especies</a>
-                    <a href="#" id="btnCrearTipos">Cargar Tipo de especie</a>
+    <div class="container">
+        <nav class="navbar navbar-expand-lg">
+            <div class="container-fluid">
+                <!-- Logo -->
+                <div class="navbar-brand" id="logo">
+                    <a class="nav-link d-flex align-items-center" id="btnIniciarSesion">
+                        <img src="/image/fondo.png" alt="Logo Guardería" class="me-2">
+                        <span class="fw-bold text-primary">Guardería Canina</span>
+                        <span class="badge bg-warning text-dark ms-2">Admin</span>
+                    </a>
                 </div>
-            </li>
-            <li class="nav-item dropdown">
-                <a class="nav-link dropbtn">Mascotas</a>
-                <div class="dropdown-content">
-                    <a href="#" id="btnAnimales">Lista de Mascotas</a>
-                    <a href="#" id="btnCrearAnimales">Cargar Mascota</a>
+
+                <!-- Navegación principal -->
+                <div class="navbar-nav mx-auto">
+                    <ul class="nav nav-tabs" id="myTabs">
+                        <li class="nav-item">
+                            <a class="nav-link" id="btnAdopciones">
+                                <i class="fas fa-heart me-2"></i>Adopciones
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" id="btnReservar">
+                                <i class="fas fa-calendar-alt me-2"></i>Reservar
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" id="btnPaquetes">
+                                <i class="fas fa-box-open me-2"></i>Paquetes
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" id="btnPerfil">
+                                <i class="fas fa-user me-2"></i>Perfil
+                            </a>
+                        </li>
+                    </ul>
                 </div>
-            </li>
-            <li class="nav-item"><a class="nav-link" id="btnCerrarSesion">Cerrar Sesión</a></li>
-        </ul>
+
+                <!-- Menús desplegables -->
+                <div class="navbar-nav">
+                    <!-- Dropdown Especies -->
+                    <div class="nav-item dropdown">
+                        <a class="nav-link dropbtn">
+                            <i class="fas fa-dna me-2"></i>Especies
+                            <i class="fas fa-chevron-down ms-1"></i>
+                        </a>
+                        <div class="dropdown-content">
+                            <a href="#" id="btnTipos">
+                                <i class="fas fa-list me-2"></i>Lista de especies
+                            </a>
+                            <a href="#" id="btnCrearTipos">
+                                <i class="fas fa-plus me-2"></i>Cargar Tipo de especie
+                            </a>
+                        </div>
+                    </div>
+                    
+                    <!-- Dropdown Mascotas -->
+                    <div class="nav-item dropdown">
+                        <a class="nav-link dropbtn">
+                            <i class="fas fa-paw me-2"></i>Mascotas
+                            <i class="fas fa-chevron-down ms-1"></i>
+                        </a>
+                        <div class="dropdown-content">
+                            <a href="#" id="btnAnimales">
+                                <i class="fas fa-list me-2"></i>Lista de Mascotas
+                            </a>
+                            <a href="#" id="btnCrearAnimales">
+                                <i class="fas fa-plus me-2"></i>Cargar Mascota
+                            </a>
+                        </div>
+                    </div>
+                    
+                    <!-- Botón cerrar sesión -->
+                    <div class="nav-item">
+                        <a class="nav-link text-danger" id="btnCerrarSesion">
+                            <i class="fas fa-sign-out-alt me-2"></i>Cerrar Sesión
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </nav>
     </div>
 </header>
 <script src="/js/header.js"></script>

@@ -36,6 +36,9 @@ const form = document.getElementById("formCrearMascota");
 
         alert('Mascota registrada con exito')
         
+        // Redirigir a la página de alta de mascotas
+        window.location.href = '/api/animales/altaAnimal'
+        
     }catch (error) {
         console.error(error);
         alert('Mascota registrada sin exito')

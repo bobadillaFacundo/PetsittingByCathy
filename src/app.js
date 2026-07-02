@@ -10,7 +10,7 @@ import cookieParser from 'cookie-parser';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import  loginModel from './router/login.router.js'
-import authMiddleware from './middlewares/authMiddleware.js'
+import authMiddleware, { adminMiddleware } from './middlewares/authMiddleware.js'
 import reservasModel from './router/reservas.router.js'
 import Cronofy from "cronofy"
 import { createClient } from '@supabase/supabase-js'
@@ -65,7 +65,7 @@ handlebars.registerHelper("eq", (a, b) => a === b)
 // Rutas
 app.use('/api/animales',authMiddleware, animalRoutes)
 app.use('/api/usuarios',usuariosModel)
-app.use('/api/tipos',authMiddleware, tipoAnimalesModel)
+app.use('/api/tipos',adminMiddleware, tipoAnimalesModel)
 app.use('/api/login', loginModel)
 app.use('/api/reservas', authMiddleware, reservasModel)
 

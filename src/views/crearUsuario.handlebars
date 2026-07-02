@@ -1,41 +1,112 @@
+<!DOCTYPE html>
+<html lang="es">
 {{> head}}
 
-<body>
-      
-  <div class="main-content">
-      
-    <!-- Contenedor principal -->
-    <div class="container mt-5">
-            <h2 class="toggle-form text-center" data-target="formU">Crear Usuario</h2>
-            <form id="formC" class="form bg-light p-4 rounded shadow" method="post"
-                action="/api/usuarios/usuariosCrear">
-                <div class="mb-3">
-                    <label for="Usuario" class="form-label">Usuario</label>
-                    <input type="text" id="Usuario" class="form-control" placeholder="Usuario" name="usuario">
-                    <small id="usuarioHelp" class="form-text text-muted">Introduce tu email.</small>
-                </div>
-                <!-- Campo nombre -->
-                <div class="mb-4">
-                    <label for="Cu" class="form-label">Nombre</label>
-                    <input type="nombre" id="nombre" class="form-control inputA" placeholder="nombre" name="nombre"
-                        required aria-describedby="nombreHelp">
-                    <small id="nombreHelp" class="form-text text-muted">Introduce tu nombre.</small>
-                </div>
-                <!-- Campo Contraseña -->
-                <div class="mb-3">
-                    <label for="ConstraseniaUsuario" class="form-label">Contraseña</label>
-                    <input type="password" id="ConstraseniaUsuario" class="form-control" placeholder="Contraseña"
-                        name="contrasenia">
-                    <small id="contraseniaHelp" class="form-text text-muted">Introduce tu Contraseña.</small>
-                </div>
-                <button type="submit" class="btn btn-primary buttonUsuarioCrear w-100">Crear</button>
-            </form>
-                <button type="submit" class="btn btn-primary btn-volver w-100">volver</button>
+<body class="create-account-page">
+    <!-- Fondo animado -->
+    <div class="login-background">
+        <div class="floating-shapes">
+            <div class="shape shape-1"></div>
+            <div class="shape shape-2"></div>
+            <div class="shape shape-3"></div>
+            <div class="shape shape-4"></div>
+        </div>
     </div>
-  </div>
-  
-{{> footer}}
+
+    <div class="container-fluid">
+        <div class="row min-vh-100 align-items-center justify-content-center">
+            <div class="col-12 col-md-8 col-lg-6 col-xl-5">
+                <!-- Card principal -->
+                <div class="login-card">
+                    <div class="login-header">
+                        <div class="logo-container">
+                            <img src="/image/fondo.png" alt="Logo Guardería" class="logo-image">
+                            <div class="logo-glow"></div>
+                        </div>
+                        <h1 class="login-title">Crear Cuenta</h1>
+                        <p class="login-subtitle">Únete a nuestra familia de mascotas</p>
+                    </div>
+
+                    <!-- Formulario de registro -->
+                    <form id="formC" class="login-form" method="post" action="/api/usuarios/usuariosCrear">
+                        <div class="form-group">
+                            <div class="input-container">
+                                <i class="fas fa-envelope input-icon"></i>
+                                <input type="email" id="Usuario" class="form-input" placeholder="Email" name="usuario" required>
+                                <div class="input-line"></div>
+                            </div>
+                            <small class="form-help">Introduce tu email</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <div class="input-container">
+                                <i class="fas fa-user input-icon"></i>
+                                <input type="text" id="nombre" class="form-input" placeholder="Nombre completo" name="nombre" required>
+                                <div class="input-line"></div>
+                            </div>
+                            <small class="form-help">Introduce tu nombre completo</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <div class="input-container">
+                                <i class="fas fa-lock input-icon"></i>
+                                <input type="password" id="ConstraseniaUsuario" class="form-input" placeholder="Contraseña" name="contrasenia" required>
+                                <div class="input-line"></div>
+                            </div>
+                            <small class="form-help">Crea una contraseña segura</small>
+                        </div>
+
+                        <button type="submit" class="login-btn">
+                            <span class="btn-text">Crear Cuenta</span>
+                            <i class="fas fa-user-plus btn-icon"></i>
+                        </button>
+                    </form>
+                    
+                    <!-- Botón volver -->
+                    <button type="button" class="back-btn btn-volver">
+                        <i class="fas fa-arrow-left"></i>
+                        <span>Volver al Login</span>
+                    </button>
+
+                    <!-- Características -->
+                    <div class="features-section">
+                        <div class="feature-item">
+                            <div class="feature-icon">
+                                <i class="fas fa-paw"></i>
+                            </div>
+                            <span>Mascotas</span>
+                        </div>
+                        <div class="feature-item">
+                            <div class="feature-icon">
+                                <i class="fas fa-home"></i>
+                            </div>
+                            <span>Hogar</span>
+                        </div>
+                        <div class="feature-item">
+                            <div class="feature-icon">
+                                <i class="fas fa-heart"></i>
+                            </div>
+                            <span>Amor</span>
+                        </div>
+                    </div>
+
+                    <!-- Mensaje de seguridad -->
+                    <div class="security-message">
+                        <i class="fas fa-shield-alt"></i>
+                        <span>Tu información está protegida</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Footer al final -->
+    <div class="footer-bottom">
+        {{> footer}}
+    </div>
 </body>
+
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="/js/crearUsuario.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="/js/crearUsuario.js"></script>
+</html>

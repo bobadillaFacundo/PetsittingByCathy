@@ -49,9 +49,9 @@ document.getElementById('formCAS').addEventListener('submit', async function (ev
         localStorage.setItem('email', email)
         localStorage.setItem('tipoUsuario', tipoUsuario)
         localStorage.setItem('idUsuario', idUsuario)
-        //definir una cookies
-        document.cookie = `token=${token}; max-age=3600; path=/; secure ; samesite=none`
-        // Redireccionar a la nueva página
+        //definir una cookies - corregido para desarrollo local
+        document.cookie = `token=${token}; max-age=3600; path=/; samesite=strict`
+        // Redireccionar a la nueva página
         window.location.href = `/api/login/principal/${tipoUsuario}/`
 
     } catch (err) {

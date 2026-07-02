@@ -1,40 +1,103 @@
 <!DOCTYPE html>
 <html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="/css/index.css">
-</head>
-<body class="login-page d-flex justify-content-center align-items-center vh-100">
-    <div class="container">
-        <div class="card shadow-lg p-4 text-center">
-            <h2 class="toggle-form mb-3">Validar Usuario</h2>
-            <form id="formCAS" class="form" method="post" action="/api/usuarios/perfil">
-                <!-- Campo Usuario -->
-                <div class="mb-3">
-                    <label for="email" class="form-label">Usuario</label>
-                    <input type="text" id="email" class="form-control" placeholder="Usuario" name="usuario" required>
-                </div>
-                
-                <!-- Campo Contraseña -->
-                <div class="mb-3">
-                    <label for="password" class="form-label">Contraseña</label>
-                    <input type="password" id="password" class="form-control" placeholder="Contraseña" name="password" required>
-                </div>
+{{> head}}
 
-                <!-- Botón de inicio -->
-                <button type="submit" class="btn btn-primary w-100">Entrar</button>
-            </form>
-            
-            <!-- Botón Crear usuario -->
-            <button type="button" class="btn btn-success w-100 mt-3 buttonCrearUsuario">Crear</button>
+<body class="login-page">
+    <!-- Fondo animado -->
+    <div class="login-background">
+        <div class="floating-shapes">
+            <div class="shape shape-1"></div>
+            <div class="shape shape-2"></div>
+            <div class="shape shape-3"></div>
+            <div class="shape shape-4"></div>
         </div>
     </div>
+
+    <div class="container-fluid">
+        <div class="row min-vh-100 align-items-center justify-content-center">
+            <div class="col-12 col-md-8 col-lg-6 col-xl-5">
+                <!-- Card principal -->
+                <div class="login-card">
+                    <div class="login-header">
+                        <div class="logo-container">
+                            <img src="/image/fondo.png" alt="Logo Guardería" class="logo-image">
+                            <div class="logo-glow"></div>
+                        </div>
+                        <h1 class="login-title">Guardería Canina</h1>
+                        <p class="login-subtitle">Donde tu mascota encuentra su segundo hogar</p>
+                    </div>
+
+                    <!-- Formulario de login -->
+                    <form id="formCAS" class="login-form" method="post" action="/api/usuarios/perfil">
+                        <div class="form-group">
+                            <div class="input-container">
+                                <i class="fas fa-user input-icon"></i>
+                                <input type="text" id="email" class="form-input" placeholder="Usuario" name="usuario" required>
+                                <div class="input-line"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <div class="input-container">
+                                <i class="fas fa-lock input-icon"></i>
+                                <input type="password" id="password" class="form-input" placeholder="Contraseña" name="password" required>
+                                <div class="input-line"></div>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="login-btn">
+                            <span class="btn-text">Iniciar Sesión</span>
+                            <i class="fas fa-arrow-right btn-icon"></i>
+                        </button>
+                    </form>
+                    
+                    <!-- Separador -->
+                    <div class="divider">
+                        <span class="divider-text">o</span>
+                    </div>
+                    
+                    <!-- Botón Crear usuario -->
+                    <button type="button" class="create-account-btn buttonCrearUsuario">
+                        <i class="fas fa-user-plus"></i>
+                        <span>Crear Cuenta</span>
+                    </button>
+
+                    <!-- Características -->
+                    <div class="features-section">
+                        <div class="feature-item">
+                            <div class="feature-icon">
+                                <i class="fas fa-heart"></i>
+                            </div>
+                            <span>Amor</span>
+                        </div>
+                        <div class="feature-item">
+                            <div class="feature-icon">
+                                <i class="fas fa-shield-alt"></i>
+                            </div>
+                            <span>Seguridad</span>
+                        </div>
+                        <div class="feature-item">
+                            <div class="feature-icon">
+                                <i class="fas fa-star"></i>
+                            </div>
+                            <span>Calidad</span>
+                        </div>
+                    </div>
+
+                    <!-- Mensaje de seguridad -->
+                    <div class="security-message">
+                        <i class="fas fa-shield-alt"></i>
+                        <span>Tus datos están seguros con nosotros</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     {{> footer}}
 </body>
-    <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="/js/login.js"></script>
+
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/js/login.js"></script>
 </html>

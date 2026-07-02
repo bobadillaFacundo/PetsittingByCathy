@@ -6,6 +6,29 @@ document.addEventListener('DOMContentLoaded', async function () {
     let selectedInfo = null;
     let modalAbierto = false;
 
+    // Función para cerrar el modal
+    function cerrarModal() {
+        reservaModal.style.display = 'none';
+        modalAbierto = false;
+        // Limpiar campos del formulario
+        if (document.getElementById('tipoReserva')) {
+            document.getElementById('tipoReserva').value = '';
+        }
+        if (document.getElementById('alimento')) {
+            document.getElementById('alimento').value = '';
+        }
+        if (document.getElementById('medicamentos')) {
+            document.getElementById('medicamentos').value = '';
+        }
+        if (document.getElementById('extras')) {
+            document.getElementById('extras').value = '';
+        }
+        // Limpiar la selección del calendario
+        if (selectedInfo) {
+            selectedInfo = null;
+        }
+    }
+
     // Crear el fondo oscuro (overlay)
     const overlay = document.createElement('div');
     overlay.style.position = 'fixed';
@@ -65,7 +88,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             menuEvento.style.left = '-9999px';
         }, 200);
     }
-    document.body.appendChild(menuEvento);
+
     function calcularDiferenciaDias(fecha1, fecha2) {
         const date1 = new Date(fecha1);
         const date2 = new Date(fecha2);
@@ -76,7 +99,6 @@ document.addEventListener('DOMContentLoaded', async function () {
         // Convierte la diferencia a días
         return Math.ceil(diferenciaTiempo / (1000 * 60 * 60 * 24));
     }
-
 
     // Función para cerrar el menú
     function cerrarMenu() {
@@ -104,13 +126,25 @@ document.addEventListener('DOMContentLoaded', async function () {
         headerToolbar: {
             left: 'prev,next today',
             center: 'title',
+            right: 'dayGridMonth'
         },
-        aspectRatio: 1,
+        aspectRatio: 1.35,
+        height: 'auto',
         select: function (info) {
             if (modalAbierto) return;
             selectedInfo = info;
-            reservaModal.style.display = 'block';
-            modalAbierto = true;
+            
+            // Verificar si hay mascotas disponibles
+            const tipoReservaSelect = document.getElementById('tipoReserva');
+            if (tipoReservaSelect && tipoReservaSelect.options.length <= 1) {
+                // No hay mascotas, mostrar mensaje
+                reservaModal.style.display = 'block';
+                modalAbierto = true;
+            } else {
+                // Hay mascotas, mostrar modal normal
+                reservaModal.style.display = 'block';
+                modalAbierto = true;
+            }
             calendar.unselect();
         },
         eventClick: function (info) {
@@ -122,6 +156,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             // Botón Eliminar
             const eliminarBtn = document.createElement('button');
             eliminarBtn.textContent = 'Eliminar';
+            eliminarBtn.className = 'btn btn-danger btn-sm me-2';
             eliminarBtn.onclick = async function () {
                 if(!info.event.extendedProps.isPagada){
                     if (confirm(`¿Eliminar la reserva de "${info.event.title}"?`)) {
@@ -142,6 +177,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             // Botón Detalle
             const detalleBtn = document.createElement('button');
             detalleBtn.textContent = 'Detalle';
+            detalleBtn.className = 'btn btn-info btn-sm me-2';
             detalleBtn.onclick = function () {
                 alert(`Detalles de la reserva: ${info.event.title} 
                       Fecha de inicio: ${info.event.start} 
@@ -158,6 +194,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             // Botón Pagar
             const pagarBtn = document.createElement('button');
             pagarBtn.textContent = 'Pagar';
+            pagarBtn.className = 'btn btn-success btn-sm';
             pagarBtn.onclick = function () {
                 const tipo = localStorage.getItem('tipoUsuario');
                 const reserva = info.event.id
@@ -198,60 +235,91 @@ document.addEventListener('DOMContentLoaded', async function () {
         });
     });
 
-    // Guardar reserva
-    guardarReservaBtn.addEventListener('click', async function () {
-        if (!selectedInfo) return;
-        const idUsuario = localStorage.getItem('idUsuario');
-        const alimento = document.getElementById('alimento').value;
-        const medicamento = document.getElementById('medicamentos').value;
-        const extras = document.getElementById('extras').value;
-        const tipoReserva = document.getElementById('tipoReserva').value
-        const montoTotal = (calcularDiferenciaDias(selectedInfo.startStr, selectedInfo.endStr) * 20000)
-        const newEvent = {
-            alimento,
-            medicamento,
-            extras,
-            montoTotal,
-            id_animal: tipoReserva,
-            fecha_desde: selectedInfo.startStr,
-            fecha_hasta: selectedInfo.endStr,
-            id_usuario: idUsuario
-        };
-        const res = await fetch('/api/reservas/guardarReserva', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ newEvent })
-        });
-        const savedEvent = await res.json();
+    calendar.render();
 
-        calendar.addEvent({
-            id: savedEvent._id,
-            title: `Reserva de: ${savedEvent.id_usuario.nombre}`,
-            start: savedEvent.fecha_desde,
-            end: savedEvent.fecha_hasta,
-            allDay: true,
-            extendedProps : {
-                alimento: savedEvent.alimento,
-                medicamento: savedEvent.medicamento,    
-                extra: savedEvent.extras,
-                montoTotal: montoTotal,
-                isPagada: savedEvent.isPagada 
+    // Event listeners para el modal
+    if (cerrarModalBtn) {
+        cerrarModalBtn.addEventListener('click', cerrarModal);
+    }
+
+    if (guardarReservaBtn) {
+        guardarReservaBtn.addEventListener('click', async function() {
+            const tipoReserva = document.getElementById('tipoReserva').value;
+            const alimento = document.getElementById('alimento').value;
+            const medicamentos = document.getElementById('medicamentos').value;
+            const extras = document.getElementById('extras').value;
+
+            if (!tipoReserva) {
+                alert('Por favor selecciona una mascota');
+                return;
+            }
+
+            if (!selectedInfo) {
+                alert('Error: No se ha seleccionado una fecha');
+                return;
+            }
+
+            const fechaDesde = selectedInfo.startStr;
+            const fechaHasta = selectedInfo.endStr;
+            const dias = calcularDiferenciaDias(fechaDesde, fechaHasta);
+
+            const reservaData = {
+                id_animal: tipoReserva,
+                fecha_desde: fechaDesde,
+                fecha_hasta: fechaHasta,
+                alimento: alimento,
+                medicamento: medicamentos,
+                extras: extras,
+                dias: dias
+            };
+
+            try {
+                const response = await fetch('/api/reservas', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(reservaData)
+                });
+
+                if (response.ok) {
+                    alert('Reserva creada exitosamente');
+                    cerrarModal();
+                    location.reload();
+                } else {
+                    const errorData = await response.json();
+                    alert(`Error al crear la reserva: ${errorData.message || 'Error desconocido'}`);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error al crear la reserva');
             }
         });
-        
-        reservaModal.style.display = 'none';
-        modalAbierto = false;
+    }
+
+    // Cerrar modal al hacer clic fuera de él
+    reservaModal.addEventListener('click', function(e) {
+        if (e.target === reservaModal) {
+            cerrarModal();
+        }
     });
 
-    // Cerrar modal
-    cerrarModalBtn.addEventListener('click', function () {
-        reservaModal.style.display = 'none';
-        modalAbierto = false;
+    // Cerrar menú al hacer clic fuera de él
+    document.addEventListener('click', function(e) {
+        if (!menuEvento.contains(e.target) && !e.target.closest('.fc-event')) {
+            ocultarMenu();
+            overlay.style.display = 'none';
+        }
     });
 
-    // Cerrar menú al hacer clic en el fondo oscuro
-    overlay.addEventListener('click', cerrarMenu);
-
-    // Renderizar calendario
-    calendar.render();
+    // Cerrar menú y modal con Escape
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            ocultarMenu();
+            overlay.style.display = 'none';
+            if (modalAbierto) {
+                cerrarModal();
+            }
+        }
+    });
 });

@@ -1,9 +1,7 @@
-
 document.addEventListener("DOMContentLoaded", function () {
     // Asignar eventos a los botones correctamente
     document.getElementById("btnAdopciones")?.addEventListener("click", function () {
-        const tipoUsuario = localStorage.getItem('tipoUsuario')
-        window.location.href = `/api/animales/adopcionAnimal/${tipoUsuario}/`
+        window.location.href = `/api/animales/adopcionAnimal/`
     });
     
     document.getElementById("btnIniciarSesion")?.addEventListener("click", function () {
@@ -13,8 +11,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     document.getElementById("btnCrearAnimales")?.addEventListener("click", function () {
         try {
-            const tipoUsuario = localStorage.getItem('tipoUsuario')
-            window.location.href = `/api/animales/altaAnimal/${tipoUsuario}/`
+            window.location.href = `/api/animales/altaAnimal/`
         } catch (error) {
             console.error("Error al redirigir:", error);
         }
@@ -22,8 +19,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
     document.getElementById("btnReservar")?.addEventListener("click", function () {
         try {
-            const tipoUsuario = localStorage.getItem('tipoUsuario')
             const idUsuario = localStorage.getItem("idUsuario");
+            const tipoUsuario = localStorage.getItem('tipoUsuario')
             window.location.href = `/api/reservas/calendario/${idUsuario}/${tipoUsuario}/`
         } catch (error) {
             console.error("Error al redirigir:", error);
@@ -35,8 +32,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     document.getElementById("btnAnimales")?.addEventListener("click", function () {
-        const tipoUsuario = localStorage.getItem('tipoUsuario')
-        window.location.href = `/api/animales/${tipoUsuario}/`
+        window.location.href = `/api/animales/`
     });
 
     document.getElementById("btnPerfil")?.addEventListener("click", function () {
