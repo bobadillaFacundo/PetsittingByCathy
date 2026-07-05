@@ -33,8 +33,8 @@ function MainApp() {
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
       <nav className="bg-white shadow-sm px-8 py-4 mb-8 sticky top-0 z-10 flex justify-between items-center">
-        <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600 tracking-tight">
-          🐾 Gestor Guarderia
+        <h1 className="text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600 flex items-center gap-2">
+          <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain" /> Gestor Guarderia
         </h1>
         <div className="flex gap-4">
           {localStorage.getItem('role') === 'admin' && (

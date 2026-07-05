@@ -25,7 +25,7 @@ export default function MascotasCRUD() {
 
   const fetchMascotas = async () => {
     try {
-      const res = await fetch('http://localhost:8000/animals/', {
+      const res = await fetch(`/api/animals/`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) {
@@ -43,7 +43,7 @@ export default function MascotasCRUD() {
 
   const fetchSpecies = async () => {
     try {
-      const res = await fetch('http://localhost:8000/animals/species', {
+      const res = await fetch(`/api/animals/species`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) {
@@ -81,8 +81,8 @@ export default function MascotasCRUD() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const url = editingId 
-      ? `http://localhost:8000/animals/${editingId}`
-      : `http://localhost:8000/animals/`;
+      ? `/api/animals/${editingId}`
+      : `/api/animals/`;
     
     const method = editingId ? 'PUT' : 'POST';
 
@@ -110,7 +110,7 @@ export default function MascotasCRUD() {
   const handleDelete = async (id, name) => {
     if (window.confirm(`¿Estás seguro de que deseas eliminar (desactivar) a ${name}?`)) {
       try {
-        const res = await fetch(`http://localhost:8000/animals/${id}`, {
+        const res = await fetch(`/api/animals/${id}`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${token}`
@@ -137,21 +137,75 @@ export default function MascotasCRUD() {
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-200">
       {/* Encabezado */}
-      <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 rounded-t-2xl">
+      <div className="p-4 sm:p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 rounded-t-2xl gap-2">
         <div>
-          <h2 className="text-xl font-bold text-gray-800">Directorio de Mascotas</h2>
-          <p className="text-sm text-gray-500 mt-1">Gestiona los pacientes de la guardería</p>
+          <h2 className="text-lg sm:text-xl font-bold text-gray-800">Directorio de Mascotas</h2>
+          <p className="text-xs sm:text-sm text-gray-500 mt-0.5 sm:mt-1">Gestiona los pacientes de la guardería</p>
         </div>
         <button 
           onClick={() => openModal()}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-medium flex items-center gap-2 transition-colors shadow-sm"
+          className="bg-indigo-600 hover:bg-indigo-700 text-white p-2.5 sm:px-4 sm:py-2 rounded-xl font-medium flex items-center gap-2 transition-colors shadow-sm shrink-0 active:scale-95"
         >
-          <Plus size={18} /> Nueva Mascota
+          <Plus size={20} /> <span className="hidden sm:inline">Nueva Mascota</span>
         </button>
       </div>
 
-      {/* Tabla */}
-      <div className="overflow-x-auto">
+      {/* Grid de Tarjetas (Móvil) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:hidden">
+        {mascotas.map((m) => (
+          <div key={m.id} className="bg-white rounded-3xl shadow-sm border border-gray-100 p-5 flex flex-col justify-between hover:shadow-md transition-shadow">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h3 className="text-xl font-black text-gray-900 tracking-tight">{m.name}</h3>
+                <span className="inline-block mt-1 px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700">
+                  {getSpeciesName(m.species_id)}
+                </span>
+              </div>
+              {m.is_active ? (
+                <span className="flex items-center gap-1.5 bg-green-50 text-green-700 px-3 py-1.5 rounded-full text-xs font-bold border border-green-100">
+                  <span className="w-2 h-2 rounded-full bg-green-500"></span> Activo
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5 bg-red-50 text-red-700 px-3 py-1.5 rounded-full text-xs font-bold border border-red-100">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span> Inactivo
+                </span>
+              )}
+            </div>
+            
+            <div className="flex justify-between items-center mt-2 pt-4 border-t border-gray-50">
+              <span className="text-sm font-bold text-gray-400 uppercase tracking-wider">
+                {m.sex === 'M' ? 'Macho' : m.sex === 'F' ? 'Hembra' : 'No def.'}
+              </span>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => openModal(m)}
+                  className="p-3 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-all active:scale-95 shadow-sm"
+                  title="Editar"
+                >
+                  <Pencil size={18} />
+                </button>
+                <button 
+                  onClick={() => handleDelete(m.id, m.name)}
+                  className="p-3 text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-all active:scale-95 shadow-sm"
+                  title="Dar de baja"
+                  disabled={!m.is_active}
+                >
+                  <Trash2 size={18} />
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+        {mascotas.length === 0 && (
+          <div className="col-span-full bg-white rounded-3xl p-12 text-center text-gray-500 border border-dashed border-gray-200">
+            <span className="text-4xl mb-4 block">🐶</span>
+            <p className="font-medium text-lg">No hay mascotas registradas.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Tabla (Desktop) */}
+      <div className="hidden md:block overflow-x-auto bg-white rounded-2xl shadow-sm border border-gray-200">
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-gray-50 text-gray-500 text-sm border-b border-gray-100">
@@ -165,22 +219,22 @@ export default function MascotasCRUD() {
           <tbody className="divide-y divide-gray-100">
             {mascotas.map((m) => (
               <tr key={m.id} className="hover:bg-gray-50/50 transition-colors">
-                <td className="px-6 py-4 font-medium text-gray-900">{m.name}</td>
+                <td className="px-6 py-4 font-bold text-gray-900">{m.name}</td>
                 <td className="px-6 py-4 text-gray-600">
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
                     {getSpeciesName(m.species_id)}
                   </span>
                 </td>
-                <td className="px-6 py-4 text-gray-600">
+                <td className="px-6 py-4 text-gray-600 text-sm font-medium">
                   {m.sex === 'M' ? 'Macho' : m.sex === 'F' ? 'Hembra' : 'No definido'}
                 </td>
                 <td className="px-6 py-4">
                   {m.is_active ? (
-                    <span className="inline-flex items-center gap-1 text-sm text-green-600 font-medium">
+                    <span className="inline-flex items-center gap-1.5 text-xs text-green-700 font-bold bg-green-50 px-2 py-1 rounded-full border border-green-100">
                       <span className="w-2 h-2 rounded-full bg-green-500"></span> Activo
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 text-sm text-red-600 font-medium">
+                    <span className="inline-flex items-center gap-1.5 text-xs text-red-700 font-bold bg-red-50 px-2 py-1 rounded-full border border-red-100">
                       <span className="w-2 h-2 rounded-full bg-red-500"></span> Inactivo
                     </span>
                   )}
@@ -188,14 +242,14 @@ export default function MascotasCRUD() {
                 <td className="px-6 py-4 flex justify-end gap-2">
                   <button 
                     onClick={() => openModal(m)}
-                    className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                    className="p-2 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl transition-colors active:scale-95"
                     title="Editar"
                   >
                     <Pencil size={18} />
                   </button>
                   <button 
                     onClick={() => handleDelete(m.id, m.name)}
-                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-xl transition-colors active:scale-95"
                     title="Dar de baja"
                     disabled={!m.is_active}
                   >
@@ -206,7 +260,7 @@ export default function MascotasCRUD() {
             ))}
             {mascotas.length === 0 && (
               <tr>
-                <td colSpan="5" className="text-center py-8 text-gray-500">
+                <td colSpan="5" className="text-center py-12 text-gray-500">
                   No hay mascotas registradas.
                 </td>
               </tr>

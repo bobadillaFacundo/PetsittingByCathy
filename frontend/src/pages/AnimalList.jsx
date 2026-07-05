@@ -5,7 +5,7 @@ export default function AnimalList() {
 
   useEffect(() => {
     // Aquí luego integraremos la llamada a la API real
-    // fetch("http://localhost:8000/animals/")
+    // fetch(`/api/animals/`)
     setAnimals([
       { id: 1, name: "Theo", species_id: 1, is_active: true },
       { id: 2, name: "Cleopatra", species_id: 1, is_active: true }

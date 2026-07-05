@@ -15,7 +15,7 @@ export default function VoiceRecorder() {
   const audioChunks = useRef([]);
 
   useEffect(() => {
-    fetch("http://localhost:8000/animals/")
+    fetch(`/api/animals/`)
       .then(res => res.json())
       .then(data => setAnimals(data))
       .catch(err => console.error("Error fetching animals:", err));
@@ -65,7 +65,7 @@ export default function VoiceRecorder() {
     formData.append("animal_name", selectedAnimal.name);
     
     try {
-      const response = await fetch(`http://localhost:8000/reports/analyze-voice`, {
+      const response = await fetch(`/api/reports/analyze-voice`, {
         method: "POST",
         body: formData,
       });
@@ -96,7 +96,7 @@ export default function VoiceRecorder() {
     };
 
     try {
-      const response = await fetch(`http://localhost:8000/reports/confirm`, {
+      const response = await fetch(`/api/reports/confirm`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

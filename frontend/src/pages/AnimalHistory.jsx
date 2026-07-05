@@ -6,7 +6,7 @@ export default function AnimalHistory({ animalId = 1 }) { // Hardcoded Theo for 
 
   useEffect(() => {
     // LLamada a la API real
-    fetch(`http://localhost:8000/animals/${animalId}/history`)
+    fetch(`/api/animals/${animalId}/history`)
       .then(res => res.json())
       .then(d => {
         setData(d);

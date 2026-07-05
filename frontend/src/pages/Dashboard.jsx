@@ -7,7 +7,7 @@ export default function Dashboard() {
   const [selectedAnimal, setSelectedAnimal] = useState(null);
 
   useEffect(() => {
-    fetch("http://localhost:8000/dashboard/")
+    fetch(`/api/dashboard/`)
       .then(res => res.json())
       .then(d => {
         setData(d);
@@ -65,9 +65,9 @@ export default function Dashboard() {
 
       {/* SECCIÓN NORMALES */}
       <div>
-        <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-          🐾 Animales Activos
-        </h2>
+        <h1 className="text-2xl font-black text-gray-900 tracking-tight flex items-center gap-2">
+          <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain" /> Animales Activos
+        </h1>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {data.normal_animals.map(animal => (
             <AnimalCard key={animal.id} animal={animal} onSelect={setSelectedAnimal} type="normal" />
