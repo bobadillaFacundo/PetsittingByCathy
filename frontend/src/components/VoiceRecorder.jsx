@@ -1,6 +1,15 @@
 import { useState, useRef, useEffect } from "react";
 
-export default function VoiceRecorder() {
+export default function VoiceRecorder({ onSave }) {
+  const speciesEmoji = {
+    1: "🐶", // Perro
+    2: "🐱", // Gato
+    3: "🦜", // Loro
+    4: "🐰", // Conejo
+    5: "🐢", // Tortuga
+    6: "🦔"  // Erizo
+  };
+
   const [animals, setAnimals] = useState([]);
   const [selectedAnimal, setSelectedAnimal] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
@@ -59,7 +68,7 @@ export default function VoiceRecorder() {
       alert("Por favor, selecciona un paciente primero.");
       return;
     }
-    const audioBlob = new Blob(audioChunks.current, { type: 'audio/webm' });
+    const audioBlob = new Blob(audioChunks.current);
     const formData = new FormData();
     formData.append("audio_file", audioBlob, "reporte.webm");
     formData.append("animal_name", selectedAnimal.name);
@@ -107,6 +116,7 @@ export default function VoiceRecorder() {
         setEditableData(null);
         setSaveSuccess(true);
         setSelectedAnimal(null); // Reset selection
+        if (onSave) onSave();
       } else {
         alert("Error al confirmar el guardado.");
       }
@@ -124,7 +134,8 @@ export default function VoiceRecorder() {
       {!selectedAnimal ? (
         <div className="w-full">
           <p className="text-center text-gray-600 font-medium mb-4">Paso 1: Selecciona el paciente</p>
-          <div className="flex flex-wrap justify-center gap-4">
+          
+          <div className="flex flex-wrap justify-center gap-3 max-h-64 overflow-y-auto p-2 scrollbar-thin scrollbar-thumb-indigo-200">
             {animals.map((animal) => (
               <button
                 key={animal.id}
@@ -133,13 +144,13 @@ export default function VoiceRecorder() {
                   setSaveSuccess(false);
                   setAnalysisResult(null);
                 }}
-                className="px-6 py-4 bg-white border-2 border-indigo-100 rounded-xl hover:border-indigo-500 hover:shadow-md transition-all flex items-center gap-3"
+                className="px-5 py-3 bg-white border-2 border-indigo-50 rounded-xl hover:border-indigo-500 hover:shadow-md transition-all flex items-center gap-3 w-[45%] sm:w-[30%] min-w-[140px]"
               >
-                <span className="text-2xl">🐶</span>
-                <span className="font-bold text-gray-800 text-lg">{animal.name}</span>
+                <span className="text-2xl">{speciesEmoji[animal.species_id] || "🐾"}</span>
+                <span className="font-bold text-gray-800 text-base truncate">{animal.name}</span>
               </button>
             ))}
-            {animals.length === 0 && <p className="text-sm text-gray-500">Cargando pacientes...</p>}
+            {animals.length === 0 && <p className="text-sm text-gray-500 text-center w-full mt-3">Cargando pacientes...</p>}
           </div>
         </div>
       ) : (
@@ -233,7 +244,7 @@ export default function VoiceRecorder() {
 
                     <div className="mb-6">
                       <div className="flex items-center gap-2 border-b pb-2 mb-3">
-                        <span className="text-xl">🐾</span>
+                        <span className="text-xl">{speciesEmoji[selectedAnimal?.species_id] || "🐾"}</span>
                         <input 
                           type="text"
                           className="font-bold text-lg text-gray-800 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-indigo-500 focus:outline-none transition-colors w-full"

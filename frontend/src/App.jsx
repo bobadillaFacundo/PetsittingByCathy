@@ -1,6 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import VoiceRecorder from './components/VoiceRecorder';
-import SmartSearch from './components/SmartSearch';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -58,10 +57,7 @@ function MainApp() {
         </div>
       </nav>
       <main className="px-4 pb-12 max-w-6xl mx-auto space-y-12">
-        <section>
-          <SmartSearch />
-        </section>
-        
+
         <section className="flex justify-center">
           <VoiceRecorder />
         </section>

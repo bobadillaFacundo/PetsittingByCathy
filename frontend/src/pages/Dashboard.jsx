@@ -91,6 +91,9 @@ export default function Dashboard() {
 
 function AnimalCard({ animal, onSelect, type }) {
   const isObs = type === "obs";
+  const speciesEmoji = {
+    1: "🐶", 2: "🐱", 3: "🦜", 4: "🐰", 5: "🐢", 6: "🦔"
+  };
   return (
     <div 
       onClick={() => onSelect(animal.id)}
@@ -98,7 +101,10 @@ function AnimalCard({ animal, onSelect, type }) {
         isObs ? "bg-amber-50 border-amber-200 hover:bg-amber-100" : "bg-white border-gray-100 hover:border-indigo-100"
       }`}
     >
-      <h3 className="text-xl font-bold text-gray-900">{animal.name}</h3>
+      <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+        <span>{speciesEmoji[animal.species_id] || "🐾"}</span>
+        {animal.name}
+      </h3>
       <span className={`inline-block mt-3 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${
         isObs ? "bg-amber-200 text-amber-800" : "bg-green-100 text-green-700"
       }`}>

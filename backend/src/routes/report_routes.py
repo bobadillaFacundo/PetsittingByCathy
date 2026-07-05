@@ -85,8 +85,8 @@ async def analyze_voice_report(
                 pass
                 
         mapped_extracted_data.append({
-            "animal_name": animal_d.get("animal_name", animal_name),
-            "events": mapped_inserts
+            "animal": animal_d.get("animal", animal_d.get("animal_name", animal_name)),
+            "inserts": mapped_inserts
         })
     
     return {
@@ -144,8 +144,8 @@ def analyze_text_report(
                 pass
             
         mapped_extracted_data.append({
-            "animal_name": animal_d.get("animal_name", animal_name),
-            "events": mapped_inserts
+            "animal": animal_d.get("animal", animal_d.get("animal_name", animal_name)),
+            "inserts": mapped_inserts
         })
         
     return {
