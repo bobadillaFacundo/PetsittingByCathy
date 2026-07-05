@@ -9,6 +9,46 @@ export default function AuditoriaPanel() {
   const [isLoading, setIsLoading] = useState(true);
   
   const [selectedAnimal, setSelectedAnimal] = useState('');
+  const [filterAnimal, setFilterAnimal] = useState('Todos');
+  const [filterDate, setFilterDate] = useState('');
+
+  const COLORS = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+
+  const fetchReports = async () => {
+    setIsLoading(true);
+    try {
+      const [reportsRes, animalsRes] = await Promise.all([
+        fetch('/api/reports/all', {
+          headers: {
+            "Authorization": `Bearer ${localStorage.getItem("token")}`
+          }
+        }),
+        fetch('/api/animals/')
+      ]);
+
+      if (reportsRes.ok) {
+        const reportsData = await reportsRes.json();
+        setReports(reportsData);
+      } else {
+        console.error("Error al obtener reportes", await reportsRes.text());
+      }
+
+      if (animalsRes.ok) {
+        const animalsData = await animalsRes.json();
+        setMascotas(animalsData);
+      } else {
+        console.error("Error al obtener mascotas", await animalsRes.text());
+      }
+    } catch (error) {
+      console.error("Error fetching data:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchReports();
+  }, []);
 
   // Filtro
   const filteredReports = useMemo(() => {
