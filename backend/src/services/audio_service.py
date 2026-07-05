@@ -66,7 +66,7 @@ class NLPService:
         }
         
         # El formato JSON puede variar según si el modelo soporta response_format
-        if json_format and is_groq:
+        if json_format:
             payload["response_format"] = {"type": "json_object"}
             
         url = GROQ_URL if is_groq else VLLM_URL
@@ -76,7 +76,7 @@ class NLPService:
         return response.json()["choices"][0]["message"]["content"]
 
     @staticmethod
-    def extract_events_from_transcript(transcript: str, dictionaries: list) -> list[Dict[str, Any]]:
+    def extract_events_from_transcript(transcript: str, dictionaries: list) -> Dict[str, Any]:
         # Construir configuración dinámica para el prompt
         schema_instructions = ""
         for d in dictionaries:
@@ -85,31 +85,33 @@ class NLPService:
             schema_instructions += f"  Campos requeridos: {d.fields_config}\n"
 
         prompt = f"""
-Extrae la información del siguiente reporte veterinario en formato JSON estricto.
-Identifica los animales mencionados y qué registros clínicos se deben insertar.
+Extrae la información del reporte veterinario en formato JSON.
+Reglas:
+1. SOLO usa los nombres de los animales que aparecen explícitamente en el reporte.
+2. NO incluyas animales del ejemplo (Luna, Simba) a menos que se nombren en el reporte.
+3. Si solo se nombra a un animal, devuelve un solo elemento en el array.
 
-Dispones del siguiente Diccionario de Datos Dinámico:
+Diccionario de Datos:
 {schema_instructions}
 
-Reporte: "{transcript}"
-
-Basándote en los sinónimos y contexto, detecta a qué tabla(s) corresponde la información y extrae los campos requeridos.
-Responde ÚNICAMENTE con JSON, con una clave "data" que sea un array de objetos usando esta estructura exacta (cada animal agrupa sus inserciones):
+EJEMPLO (solo formato, NO copiar los datos):
+Reporte: "Luunq comio y... uhm... tomo aguita"
+Respuesta:
 {{
+  "cleaned_text": "Luna comió todo y tomó agua.",
   "data": [
     {{
-      "animal": "NombreDelAnimal",
+      "animal": "Luna",
       "inserts": [
-        {{
-          "table_name": "nombre_de_la_tabla",
-          "fields": {{
-             "nombre_del_campo": "valor extraído"
-          }}
-        }}
+        {{"table_name": "report_events", "fields": {{"event_type_name": "comida", "value": "todo"}}}},
+        {{"table_name": "report_events", "fields": {{"event_type_name": "agua", "value": "sí"}}}}
       ]
     }}
   ]
 }}
+
+REPORTE REAL A ANALIZAR: "{transcript}"
+Responde ÚNICAMENTE con el objeto JSON.
 """
         try:
             content = NLPService._call_llm([{"role": "user", "content": prompt}], json_format=True)
@@ -118,7 +120,7 @@ Responde ÚNICAMENTE con JSON, con una clave "data" que sea un array de objetos 
             content = content.replace("```json", "").replace("```", "").strip()
             
             data = json.loads(content)
-            return data.get("data", [])
+            return data # Devuelve tanto cleaned_text como data
         except Exception as e:
             print(f"Error con LLM (extracción): {e}")
             return []

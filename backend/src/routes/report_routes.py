@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from sqlalchemy.orm import Session
 from src.database.session import get_db
 from src.services.audio_service import AudioService, NLPService
-from src.models.models import Animal, Report, ReportEvent, EventType, User
+from src.models.models import Animal, Report, ReportEvent, EventType, User, DataDictionary
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
@@ -18,7 +18,8 @@ class ReportConfirmRequest(BaseModel):
 
 @router.post("/analyze-voice")
 async def analyze_voice_report(
-    audio_file: UploadFile = File(...)
+    audio_file: UploadFile = File(...),
+    db: Session = Depends(get_db)
 ):
     # 1. Guardar Audio
     file_path = await AudioService.save_audio(audio_file)
@@ -27,12 +28,31 @@ async def analyze_voice_report(
     transcript = AudioService.transcribe_audio(file_path)
     
     # 3. Extraer info NLP
-    extracted_data = NLPService.extract_events_from_transcript(transcript)
+    dictionaries = db.query(DataDictionary).all()
+    nlp_result = NLPService.extract_events_from_transcript(transcript, dictionaries)
+    
+    extracted_data = nlp_result.get("data", []) if isinstance(nlp_result, dict) else []
+    cleaned_transcript = nlp_result.get("cleaned_text", transcript) if isinstance(nlp_result, dict) else transcript
+    
+    import json
+    schema_map = {}
+    for d in dictionaries:
+        try:
+            schema_map[d.table_name] = {
+                "entity_name": d.entity_name,
+                "fields": json.loads(d.fields_config)
+            }
+        except:
+            schema_map[d.table_name] = {
+                "entity_name": d.entity_name,
+                "fields": []
+            }
     
     return {
         "message": "Análisis completado. Por favor, confirme los datos.",
-        "transcript": transcript,
-        "extracted_data": extracted_data
+        "transcript": cleaned_transcript,
+        "extracted_data": extracted_data,
+        "schema_map": schema_map
     }
 
 @router.post("/confirm")

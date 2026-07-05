@@ -14,5 +14,9 @@ start "vLLM" wsl -e bash -lc "source /mnt/f/guarderiaCanina/backend/wsl_venv/bin
 echo Iniciando servidor Frontend...
 start "frontend" cmd /k "cd /d "%~dp0frontend" && npm run dev"
 
+:: --- Configuración del DevTunnel (Acceso a Internet) ---
+echo Iniciando túnel estático a internet...
+start "DevTunnel" cmd /k "devtunnel host guarderia-canina.brs -a"
+
 echo ¡Servidores iniciados en ventanas separadas!
 pause

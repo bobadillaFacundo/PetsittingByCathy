@@ -4,6 +4,9 @@ export default function VoiceRecorder() {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(null);
+  const [editableData, setEditableData] = useState(null);
+  const [editableTranscript, setEditableTranscript] = useState("");
+  const [currentStep, setCurrentStep] = useState(0);
   const [saveSuccess, setSaveSuccess] = useState(false);
   
   const mediaRecorder = useRef(null);
@@ -58,6 +61,9 @@ export default function VoiceRecorder() {
         return;
       }
       setAnalysisResult(data);
+      setEditableData(data.extracted_data);
+      setEditableTranscript(data.transcript);
+      setCurrentStep(0);
     } catch (error) {
       console.error("Error analizando el audio:", error);
       alert("Hubo un error procesando el reporte.");
@@ -70,8 +76,8 @@ export default function VoiceRecorder() {
     setIsProcessing(true);
     const payload = {
       user_id: 1, // Hardcodeado por ahora
-      transcript: analysisResult.transcript,
-      extracted_data: analysisResult.extracted_data
+      transcript: editableTranscript,
+      extracted_data: editableData
     };
 
     try {
@@ -83,6 +89,7 @@ export default function VoiceRecorder() {
       
       if (response.ok) {
         setAnalysisResult(null);
+        setEditableData(null);
         setSaveSuccess(true);
       } else {
         alert("Error al confirmar el guardado.");
@@ -131,54 +138,141 @@ export default function VoiceRecorder() {
       {analysisResult && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="p-6 bg-indigo-50 border-b border-indigo-100">
+            <div className="p-6 bg-indigo-50 border-b border-indigo-100 flex flex-col gap-2">
               <h3 className="text-xl font-bold text-indigo-900">Verificar Datos Extraídos</h3>
-              <p className="text-sm text-indigo-700 mt-2 italic">"{analysisResult.transcript}"</p>
+              <label className="text-xs font-semibold text-indigo-700 uppercase">Texto interpretado del audio (Editable):</label>
+              <textarea 
+                className="w-full bg-white border border-indigo-200 rounded-lg p-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm resize-y"
+                rows="3"
+                value={editableTranscript}
+                onChange={(e) => setEditableTranscript(e.target.value)}
+              />
             </div>
             
             <div className="p-6 overflow-y-auto flex-1">
-              {analysisResult.extracted_data.map((animalData, i) => (
-                <div key={i} className="mb-6 last:mb-0">
-                  <h4 className="font-bold text-lg text-gray-800 border-b pb-2 mb-3">🐾 Paciente: {animalData.animal}</h4>
-                  
-                  {animalData.inserts?.length > 0 ? (
-                    <div className="space-y-3">
-                      {animalData.inserts.map((insert, j) => (
-                        <div key={j} className="bg-gray-50 border border-gray-200 p-3 rounded-lg text-sm">
-                          <span className="font-bold text-indigo-600 uppercase text-xs tracking-wide">
-                            Tabla destino: {insert.table_name}
-                          </span>
-                          <ul className="mt-2 space-y-1">
-                            {Object.entries(insert.fields || {}).map(([key, val]) => (
-                              <li key={key} className="flex gap-2">
-                                <span className="font-medium text-gray-600">{key}:</span>
-                                <span className="text-gray-900">{String(val)}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-gray-500 italic text-sm">No se extrajeron registros para este paciente.</p>
-                  )}
-                </div>
-              ))}
-            </div>
+              {(() => {
+                if (!editableData) return null;
+                const steps = [];
+                editableData.forEach((animalData, i) => {
+                  if (animalData.inserts && animalData.inserts.length > 0) {
+                    animalData.inserts.forEach((insert, j) => {
+                      steps.push({ animalIndex: i, insertIndex: j, animal: animalData.animal, insert });
+                    });
+                  } else {
+                    steps.push({ animalIndex: i, insertIndex: null, animal: animalData.animal, insert: null });
+                  }
+                });
+                
+                if (steps.length === 0) return <p className="text-gray-500 italic text-sm">No se extrajeron registros.</p>;
+                
+                const step = steps[currentStep];
+                const i = step.animalIndex;
+                const j = step.insertIndex;
+                const animalData = editableData[i];
+                const insert = step.insert;
 
-            <div className="p-4 border-t border-gray-100 flex justify-end gap-3 bg-gray-50">
-              <button 
-                onClick={() => setAnalysisResult(null)}
-                className="px-5 py-2 rounded-xl text-gray-600 hover:bg-gray-200 font-medium transition"
-              >
-                Cancelar
-              </button>
-              <button 
-                onClick={confirmAndSave}
-                className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-md transition"
-              >
-                Confirmar e Insertar
-              </button>
+                return (
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <span className="text-xs font-bold text-indigo-500 uppercase tracking-wide">
+                        Paso {currentStep + 1} de {steps.length}
+                      </span>
+                    </div>
+
+                    <div className="mb-6">
+                      <div className="flex items-center gap-2 border-b pb-2 mb-3">
+                        <span className="text-xl">🐾</span>
+                        <input 
+                          type="text"
+                          className="font-bold text-lg text-gray-800 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-indigo-500 focus:outline-none transition-colors w-full"
+                          value={animalData.animal}
+                          onChange={(e) => {
+                            const newData = [...editableData];
+                            newData[i].animal = e.target.value;
+                            setEditableData(newData);
+                          }}
+                        />
+                      </div>
+                      
+                      {insert ? (
+                        <div className="bg-gray-50 border border-gray-200 p-3 rounded-lg text-sm">
+                          {(() => {
+                            const tableSchema = analysisResult.schema_map[insert.table_name] || { entity_name: insert.table_name, fields: [] };
+                            return (
+                              <>
+                                <span className="font-bold text-indigo-600 uppercase text-xs tracking-wide">
+                                  Categoría: {tableSchema.entity_name}
+                                </span>
+                                <ul className="mt-2 space-y-2">
+                                  {tableSchema.fields.map((field) => {
+                                    const key = field.name;
+                                    const val = insert.fields?.[key] || "";
+                                    const isMissing = !val;
+                                    const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                                    
+                                    return (
+                                      <li key={key} className="flex gap-2 items-center bg-white p-1.5 rounded border border-gray-100">
+                                        <span className="font-medium text-gray-600 w-32 shrink-0">{formattedKey}:</span>
+                                        <input 
+                                          type="text" 
+                                          className={`w-full bg-transparent border-b focus:outline-none text-gray-900 py-1 transition-colors ${
+                                            isMissing ? 'border-red-300 focus:border-red-500 bg-red-50/30' : 'border-gray-200 focus:border-indigo-500'
+                                          }`}
+                                          value={String(val)}
+                                          placeholder={isMissing ? 'Falta completar...' : ''}
+                                          onChange={(e) => {
+                                            const newData = [...editableData];
+                                            if (!newData[i].inserts[j].fields) {
+                                              newData[i].inserts[j].fields = {};
+                                            }
+                                            newData[i].inserts[j].fields[key] = e.target.value;
+                                            setEditableData(newData);
+                                          }}
+                                        />
+                                        {isMissing && (
+                                          <span title="Dato no encontrado en el audio. Por favor, completar a mano." className="text-red-500 text-lg cursor-help">⚠️</span>
+                                        )}
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      ) : (
+                        <p className="text-gray-500 italic text-sm">No hay registros extraídos para este paciente.</p>
+                      )}
+                    </div>
+
+                    <div className="flex justify-between items-center mt-6 border-t pt-4">
+                      <button 
+                        onClick={() => setCurrentStep(prev => Math.max(0, prev - 1))}
+                        disabled={currentStep === 0}
+                        className={`px-4 py-2 rounded-lg font-medium transition ${currentStep === 0 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                      >
+                        Anterior
+                      </button>
+                      
+                      {currentStep < steps.length - 1 ? (
+                        <button 
+                          onClick={() => setCurrentStep(prev => prev + 1)}
+                          className="px-5 py-2 rounded-xl bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-bold transition"
+                        >
+                          Siguiente
+                        </button>
+                      ) : (
+                        <button 
+                          onClick={confirmAndSave}
+                          className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-md transition"
+                        >
+                          Confirmar e Insertar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
