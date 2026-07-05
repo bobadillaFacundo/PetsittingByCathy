@@ -62,7 +62,7 @@ class NLPService:
         payload = {
             "model": GROQ_MODEL if is_groq else VLLM_MODEL,
             "messages": messages,
-            "temperature": 0.1 if json_format else 0.7
+            "temperature": 0.05 if json_format else 0.7
         }
         
         # El formato JSON puede variar según si el modelo soporta response_format
@@ -88,33 +88,35 @@ Extrae la información del reporte veterinario para el paciente "{animal_name}" 
 Reglas IMPORTANTES:
 1. Ignora cualquier texto irrelevante, charla adicional o ruido en el reporte.
 2. Todo el reporte corresponde exclusivamente a "{animal_name}". No busques datos para otros animales.
-3. Clasifica los eventos encontrados en los 5 Conjuntos disponibles. Si el reporte menciona comida y también pis, extrae ambos por separado.
-4. Para cada evento extraído, debes indicar:
+3. SOLO extrae eventos que se mencionaron EXPLÍCITAMENTE en el audio. NO INVENTES datos.
+4. Si el usuario NO mencionó nada sobre enfermedad o medicación, NO agregues un insert de "Enfermedad" ni "Medicacion". Esas categorías son OPCIONALES y solo deben aparecer si el usuario las mencionó claramente.
+5. Para cada evento extraído, debes indicar:
    - "standard_set": El nombre exacto del conjunto al que pertenece.
    - "spoken_variant": La palabra o frase exacta que dijo el usuario (por ejemplo: "morfó", "garcó", "peste").
    - "value": El valor o descripción asociada (ej: "todo", "blanda", "infección de oído").
+6. Si solo se mencionó comida y pis, devuelve SOLO comida y pis. NO agregues caca, agua, enfermedad ni medicación si no se dijeron.
 
 Conjuntos y sus Variantes Conocidas:
 {tags_instructions}
 
 EJEMPLO (solo formato, NO copiar los datos):
-Reporte: "Hola, paso a contarte sobre Luna... Luunq morfó todo y... uhm... le agarró una peste. Listo, chau."
+Reporte: "Luna morfó todo y tomó agua normal."
 Respuesta:
 {{
-  "cleaned_text": "Luna morfó todo y le agarró una peste.",
+  "cleaned_text": "Luna morfó todo y tomó agua normal.",
   "data": [
     {{
       "animal": "{animal_name}",
       "inserts": [
         {{"standard_set": "Comida", "spoken_variant": "morfó", "value": "todo"}},
-        {{"standard_set": "Enfermedad", "spoken_variant": "peste", "value": "una peste"}}
+        {{"standard_set": "Agua", "spoken_variant": "tomó agua", "value": "normal"}}
       ]
     }}
   ]
 }}
 
 REPORTE REAL A ANALIZAR: "{transcript}"
-Responde ÚNICAMENTE con el objeto JSON.
+Responde ÚNICAMENTE con el objeto JSON. NO inventes eventos que no se mencionaron.
 """
         try:
             content = NLPService._call_llm([{"role": "user", "content": prompt}], json_format=True)
