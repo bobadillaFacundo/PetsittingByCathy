@@ -76,6 +76,9 @@ export default function VoiceRecorder({ onSave }) {
     try {
       const response = await fetch(`/api/reports/analyze-voice`, {
         method: "POST",
+        headers: {
+          "Authorization": `Bearer ${localStorage.getItem("token")}`
+        },
         body: formData,
       });
       
@@ -260,16 +263,18 @@ export default function VoiceRecorder({ onSave }) {
                       {insert ? (
                         <div className="bg-gray-50 border border-gray-200 p-3 rounded-lg text-sm">
                           {(() => {
-                            const tableSchema = analysisResult.schema_map[insert.table_name] || { entity_name: insert.table_name, fields: [] };
+                            const entityName = insert.table_name === "ReportEvent" ? "Evento Rutinario" : (insert.table_name === "AnimalDiagnosis" ? "Diagnóstico" : insert.table_name);
+                            const fields = insert.fields || {};
+                            const keys = Object.keys(fields);
+
                             return (
                               <>
                                 <span className="font-bold text-indigo-600 uppercase text-xs tracking-wide">
-                                  Categoría: {tableSchema.entity_name}
+                                  Categoría: {entityName}
                                 </span>
                                 <ul className="mt-2 space-y-2">
-                                  {tableSchema.fields.map((field) => {
-                                    const key = field.name;
-                                    const val = insert.fields?.[key] || "";
+                                  {keys.map((key) => {
+                                    const val = fields[key] || "";
                                     const isMissing = !val;
                                     const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
                                     
