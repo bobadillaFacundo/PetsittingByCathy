@@ -5,9 +5,10 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from sqlalchemy import create_engine
-from src.database.session import SQLALCHEMY_DATABASE_URL, Base
-from src.models.models import DataDictionary
-from src.database.session import SessionLocal
+from sqlalchemy.orm import Session
+from src.database.session import SQLALCHEMY_DATABASE_URL, engine, SessionLocal, Base
+from src.models.models import User, Species, Veterinarian, Animal, DataDictionary, TagSet
+from src.auth import get_password_hash
 
 # Crear el engine
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
@@ -17,6 +18,12 @@ DataDictionary.__table__.create(bind=engine, checkfirst=True)
 
 # Llenar con datos por defecto
 db = SessionLocal()
+
+# Seed Users (Roles)
+if not db.query(User).first():
+    db.add(User(name="admin", password_hash=get_password_hash("admin123"), role="admin"))
+    db.add(User(name="user", password_hash=get_password_hash("user123"), role="user"))
+    db.commit()
 
 # Datos a cargar o actualizar
 dictionary_data = [

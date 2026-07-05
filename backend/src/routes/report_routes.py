@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Form
 from sqlalchemy.orm import Session
 from src.database.session import get_db
 from src.services.audio_service import AudioService, NLPService
@@ -16,10 +16,18 @@ class ReportConfirmRequest(BaseModel):
     transcript: str
     extracted_data: List[Any]
 
+class TextAnalyzeRequest(BaseModel):
+    animal_name: str
+    text: str
+
+from src.auth import get_current_admin, get_current_user
+
 @router.post("/analyze-voice")
 async def analyze_voice_report(
+    animal_name: str = Form(...),
     audio_file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
     # 1. Guardar Audio
     file_path = await AudioService.save_audio(audio_file)
@@ -29,36 +37,127 @@ async def analyze_voice_report(
     
     # 3. Extraer info NLP
     dictionaries = db.query(DataDictionary).all()
-    nlp_result = NLPService.extract_events_from_transcript(transcript, dictionaries)
+    from src.models.models import TagSet
+    tag_sets = db.query(TagSet).all()
+    nlp_result = NLPService.extract_events_from_transcript(transcript, dictionaries, animal_name, tag_sets)
     
     extracted_data = nlp_result.get("data", []) if isinstance(nlp_result, dict) else []
     cleaned_transcript = nlp_result.get("cleaned_text", transcript) if isinstance(nlp_result, dict) else transcript
     
-    import json
-    schema_map = {}
-    for d in dictionaries:
-        try:
-            schema_map[d.table_name] = {
-                "entity_name": d.entity_name,
-                "fields": json.loads(d.fields_config)
-            }
-        except:
-            schema_map[d.table_name] = {
-                "entity_name": d.entity_name,
-                "fields": []
-            }
+    # 4. Auto-Aprendizaje y Mapeo a Formato Legacy
+    mapped_extracted_data = []
+    for animal_d in extracted_data:
+        mapped_inserts = []
+        for item in animal_d.get("inserts", []):
+            std_set = item.get("standard_set")
+            spk_var = item.get("spoken_variant", "").lower().strip()
+            val = item.get("value")
+            
+            if not std_set: continue
+            
+            # Auto-incremento: Buscar el TagSet y añadir la variante si no existe
+            tag_record = db.query(TagSet).filter(TagSet.name.ilike(std_set)).first()
+            if tag_record and spk_var:
+                current_variants = [v.strip().lower() for v in tag_record.variants.split(",")]
+                if spk_var not in current_variants:
+                    tag_record.variants += f", {spk_var}"
+                    db.commit() # Guardar aprendizaje
+            
+            # Mapeo a legacy para el Frontend
+            if std_set.lower() in ["comida", "pis", "caca", "agua"]:
+                mapped_inserts.append({
+                    "table_name": "ReportEvent",
+                    "fields": {
+                        "event_type_name": std_set,
+                        "value": val,
+                        "spoken_variant": spk_var
+                    }
+                })
+            elif std_set.lower() in ["enfermedad"]:
+                mapped_inserts.append({
+                    "table_name": "AnimalDiagnosis",
+                    "fields": {
+                        "diagnosis_name": val,
+                        "spoken_variant": spk_var
+                    }
+                })
+            else:
+                pass
+                
+        mapped_extracted_data.append({
+            "animal_name": animal_d.get("animal_name", animal_name),
+            "events": mapped_inserts
+        })
     
     return {
-        "message": "Análisis completado. Por favor, confirme los datos.",
         "transcript": cleaned_transcript,
-        "extracted_data": extracted_data,
-        "schema_map": schema_map
+        "extracted_data": mapped_extracted_data
+    }
+
+@router.post("/analyze-text")
+def analyze_text_report(
+    req: TextAnalyzeRequest,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    transcript = req.text
+    animal_name = req.animal_name
+
+    dictionaries = db.query(DataDictionary).all()
+    from src.models.models import TagSet
+    tag_sets = db.query(TagSet).all()
+    
+    nlp_result = NLPService.extract_events_from_transcript(transcript, dictionaries, animal_name, tag_sets)
+    
+    extracted_data = nlp_result.get("data", []) if isinstance(nlp_result, dict) else []
+    cleaned_transcript = nlp_result.get("cleaned_text", transcript) if isinstance(nlp_result, dict) else transcript
+    
+    mapped_extracted_data = []
+    for animal_d in extracted_data:
+        mapped_inserts = []
+        for item in animal_d.get("inserts", []):
+            std_set = item.get("standard_set")
+            spk_var = item.get("spoken_variant", "").lower().strip()
+            val = item.get("value")
+            
+            if not std_set: continue
+            
+            tag_record = db.query(TagSet).filter(TagSet.name.ilike(std_set)).first()
+            if tag_record and spk_var:
+                current_variants = [v.strip().lower() for v in tag_record.variants.split(",")]
+                if spk_var not in current_variants:
+                    tag_record.variants += f", {spk_var}"
+                    db.commit()
+            
+            if std_set.lower() in ["comida", "pis", "caca", "agua"]:
+                mapped_inserts.append({
+                    "event_type": std_set.capitalize(),
+                    "value": val if val else spk_var,
+                    "severity": 3
+                })
+            elif std_set.lower() in ["enfermedad", "medicacion"]:
+                mapped_inserts.append({
+                    "diagnosis": spk_var.capitalize(),
+                    "notes": val if val else ""
+                })
+            else:
+                pass
+            
+        mapped_extracted_data.append({
+            "animal_name": animal_d.get("animal_name", animal_name),
+            "events": mapped_inserts
+        })
+        
+    return {
+        "transcript": cleaned_transcript,
+        "extracted_data": mapped_extracted_data
     }
 
 @router.post("/confirm")
-def confirm_voice_report(
+def confirm_report(
     request: ReportConfirmRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
     from src.models.models import DiagnosisCatalog, MedicationCatalog, AnimalDiagnosis, AnimalMedication, AnimalObservation
     saved_reports = []
@@ -75,58 +174,86 @@ def confirm_voice_report(
         
         # Crear Reporte general
         report = Report(
-            user_id=request.user_id,
+            user_id=current_user.id,
             animal_id=animal.id,
             audio_transcript=request.transcript
         )
         db.add(report)
         db.flush()
         
-        # 1. Eventos rutinarios
-        for event in animal_data.get("events", []):
-            event_type_name = event.get("type")
-            event_type = db.query(EventType).filter(EventType.name.ilike(f"%{event_type_name}%")).first()
-            if not event_type:
-                event_type = EventType(name=event_type_name)
-                db.add(event_type)
-                db.flush()
-            report_event = ReportEvent(report_id=report.id, event_type_id=event_type.id, value=event.get("value"))
-            db.add(report_event)
+        # Procesar inserts según table_name
+        for insert in animal_data.get("inserts", []):
+            table_name = insert.get("table_name")
+            fields = insert.get("fields", {})
             
-        # 2. Diagnósticos
-        for diag in animal_data.get("diagnoses", []):
-            diag_name = diag.get("name")
-            catalog = db.query(DiagnosisCatalog).filter(DiagnosisCatalog.name.ilike(f"%{diag_name}%")).first()
-            if not catalog:
-                catalog = DiagnosisCatalog(name=diag_name)
-                db.add(catalog)
-                db.flush()
-            animal_diag = AnimalDiagnosis(animal_id=animal.id, diagnosis_id=catalog.id, date_diagnosed=datetime.utcnow())
-            db.add(animal_diag)
-            
-        # 3. Medicaciones
-        for med in animal_data.get("medications", []):
-            med_name = med.get("name")
-            catalog = db.query(MedicationCatalog).filter(MedicationCatalog.name.ilike(f"%{med_name}%")).first()
-            if not catalog:
-                catalog = MedicationCatalog(name=med_name)
-                db.add(catalog)
-                db.flush()
-            dosage = med.get("dosage") or "No especificada"
-            animal_med = AnimalMedication(animal_id=animal.id, medication_id=catalog.id, dosage=dosage, frequency="Según indicación")
-            db.add(animal_med)
-            
-        # 4. Observaciones
-        for obs in animal_data.get("observations", []):
-            text = obs.get("text")
-            animal_obs = AnimalObservation(animal_id=animal.id, observation=text)
-            db.add(animal_obs)
+            if table_name == "ReportEvent":
+                event_type_name = fields.get("event_type_name")
+                if not event_type_name: continue
+                event_type = db.query(EventType).filter(EventType.name.ilike(f"%{event_type_name}%")).first()
+                if not event_type:
+                    event_type = EventType(name=event_type_name)
+                    db.add(event_type)
+                    db.flush()
+                report_event = ReportEvent(report_id=report.id, event_type_id=event_type.id, value=fields.get("value"))
+                db.add(report_event)
+                
+            elif table_name == "AnimalDiagnosis":
+                diag_name = fields.get("diagnosis_name")
+                if not diag_name: continue
+                catalog = db.query(DiagnosisCatalog).filter(DiagnosisCatalog.name.ilike(f"%{diag_name}%")).first()
+                if not catalog:
+                    catalog = DiagnosisCatalog(name=diag_name)
+                    db.add(catalog)
+                    db.flush()
+                animal_diag = AnimalDiagnosis(animal_id=animal.id, diagnosis_id=catalog.id, date_diagnosed=datetime.utcnow())
+                db.add(animal_diag)
+                
+            elif table_name == "AnimalMedication":
+                med_name = fields.get("medication_name")
+                if not med_name: continue
+                catalog = db.query(MedicationCatalog).filter(MedicationCatalog.name.ilike(f"%{med_name}%")).first()
+                if not catalog:
+                    catalog = MedicationCatalog(name=med_name)
+                    db.add(catalog)
+                    db.flush()
+                dosage = fields.get("dosage") or "No especificada"
+                animal_med = AnimalMedication(animal_id=animal.id, medication_id=catalog.id, dosage=dosage, frequency="Según indicación")
+                db.add(animal_med)
+                
+            elif table_name == "AnimalObservation":
+                text = fields.get("observation")
+                if not text: continue
+                animal_obs = AnimalObservation(animal_id=animal.id, observation=text)
+                db.add(animal_obs)
                 
         db.commit()
         saved_reports.append({"animal": animal_name, "report_id": report.id})
         
-    return {
-        "message": "Reportes guardados correctamente en la base de datos.",
-        "saved_reports": saved_reports
-    }
+    return {"status": "success", "message": "Reportes guardados correctamente"}
 
+@router.get("/all")
+def get_all_reports(limit: int = 100, db: Session = Depends(get_db), current_admin = Depends(get_current_admin)):
+    from src.dtos.animal_dto import ReportHistoryDTO, EventDTO
+    reports = db.query(Report).order_by(Report.created_at.desc()).limit(limit).all()
+    
+    history = []
+    for r in reports:
+        events = db.query(ReportEvent).filter(ReportEvent.report_id == r.id).all()
+        user = db.query(User).filter(User.id == r.user_id).first()
+        animal = db.query(Animal).filter(Animal.id == r.animal_id).first()
+        
+        event_dtos = []
+        for e in events:
+            etype = db.query(EventType).filter(EventType.id == e.event_type_id).first()
+            event_dtos.append(EventDTO(type=etype.name if etype else "Desconocido", value=e.value))
+            
+        history.append({
+            "id": r.id,
+            "created_at": r.created_at,
+            "transcript": r.audio_transcript,
+            "user_name": user.name if user else "Desconocido",
+            "animal_name": animal.name if animal else "Desconocido",
+            "events": event_dtos
+        })
+        
+    return history

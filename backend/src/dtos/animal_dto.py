@@ -14,6 +14,15 @@ class AnimalBase(BaseModel):
 class AnimalCreate(AnimalBase):
     pass
 
+class AnimalUpdate(BaseModel):
+    name: Optional[str] = None
+    species_id: Optional[int] = None
+    veterinarian_id: Optional[int] = None
+    birth_date: Optional[date] = None
+    sex: Optional[str] = None
+    photo_url: Optional[str] = None
+    is_active: Optional[bool] = None
+
 class AnimalResponse(AnimalBase):
     id: int
 

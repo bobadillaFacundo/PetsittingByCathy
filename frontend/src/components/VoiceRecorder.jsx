@@ -1,6 +1,8 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 
 export default function VoiceRecorder() {
+  const [animals, setAnimals] = useState([]);
+  const [selectedAnimal, setSelectedAnimal] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(null);
@@ -11,6 +13,13 @@ export default function VoiceRecorder() {
   
   const mediaRecorder = useRef(null);
   const audioChunks = useRef([]);
+
+  useEffect(() => {
+    fetch("http://localhost:8000/animals/")
+      .then(res => res.json())
+      .then(data => setAnimals(data))
+      .catch(err => console.error("Error fetching animals:", err));
+  }, []);
 
   const startRecording = async () => {
     try {
@@ -28,7 +37,6 @@ export default function VoiceRecorder() {
       
       mediaRecorder.current.start();
       setIsRecording(true);
-      setAnalysisResult(null);
       setSaveSuccess(false);
     } catch (err) {
       console.error("Error accediendo al micrófono:", err);
@@ -39,15 +47,22 @@ export default function VoiceRecorder() {
   const stopRecording = () => {
     if (mediaRecorder.current && isRecording) {
       mediaRecorder.current.stop();
+      // Apagar el hardware del micrófono
+      mediaRecorder.current.stream.getTracks().forEach(track => track.stop());
       setIsRecording(false);
       setIsProcessing(true);
     }
   };
 
   const sendAudioForAnalysis = async () => {
+    if (!selectedAnimal) {
+      alert("Por favor, selecciona un paciente primero.");
+      return;
+    }
     const audioBlob = new Blob(audioChunks.current, { type: 'audio/webm' });
     const formData = new FormData();
     formData.append("audio_file", audioBlob, "reporte.webm");
+    formData.append("animal_name", selectedAnimal.name);
     
     try {
       const response = await fetch(`http://localhost:8000/reports/analyze-voice`, {
@@ -91,6 +106,7 @@ export default function VoiceRecorder() {
         setAnalysisResult(null);
         setEditableData(null);
         setSaveSuccess(true);
+        setSelectedAnimal(null); // Reset selection
       } else {
         alert("Error al confirmar el guardado.");
       }
@@ -105,22 +121,58 @@ export default function VoiceRecorder() {
     <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-8 flex flex-col items-center relative">
       <h2 className="text-xl font-semibold mb-4 text-gray-800">Reporte Diario Dinámico</h2>
       
-      <button 
-        onMouseDown={startRecording}
-        onMouseUp={stopRecording}
-        onTouchStart={startRecording}
-        onTouchEnd={stopRecording}
-        className={`w-32 h-32 rounded-full flex flex-col items-center justify-center transition-all duration-300 shadow-lg ${
-          isRecording 
-            ? 'bg-red-500 hover:bg-red-600 scale-110 shadow-red-200' 
-            : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200'
-        }`}
-      >
-        <span className="text-4xl mb-2">🎙️</span>
-        <span className="text-white font-medium text-sm">
-          {isRecording ? "Grabando..." : "Mantener"}
-        </span>
-      </button>
+      {!selectedAnimal ? (
+        <div className="w-full">
+          <p className="text-center text-gray-600 font-medium mb-4">Paso 1: Selecciona el paciente</p>
+          <div className="flex flex-wrap justify-center gap-4">
+            {animals.map((animal) => (
+              <button
+                key={animal.id}
+                onClick={() => {
+                  setSelectedAnimal(animal);
+                  setSaveSuccess(false);
+                  setAnalysisResult(null);
+                }}
+                className="px-6 py-4 bg-white border-2 border-indigo-100 rounded-xl hover:border-indigo-500 hover:shadow-md transition-all flex items-center gap-3"
+              >
+                <span className="text-2xl">🐶</span>
+                <span className="font-bold text-gray-800 text-lg">{animal.name}</span>
+              </button>
+            ))}
+            {animals.length === 0 && <p className="text-sm text-gray-500">Cargando pacientes...</p>}
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col items-center w-full animate-fadeIn">
+          <div className="flex items-center gap-4 mb-6 bg-indigo-50 px-6 py-3 rounded-full border border-indigo-100">
+            <span className="text-indigo-800 font-semibold">Paciente seleccionado: <span className="font-bold text-xl ml-1">{selectedAnimal.name}</span></span>
+            <button 
+              onClick={() => setSelectedAnimal(null)}
+              className="text-xs text-indigo-600 hover:text-indigo-800 underline font-medium"
+            >
+              Cambiar
+            </button>
+          </div>
+
+          <p className="text-center text-gray-600 font-medium mb-4">Paso 2: Mantén presionado para hablar</p>
+          <button 
+            onMouseDown={startRecording}
+            onMouseUp={stopRecording}
+            onTouchStart={startRecording}
+            onTouchEnd={stopRecording}
+            className={`w-32 h-32 rounded-full flex flex-col items-center justify-center transition-all duration-300 shadow-lg ${
+              isRecording 
+                ? 'bg-red-500 hover:bg-red-600 scale-110 shadow-red-200' 
+                : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200'
+            }`}
+          >
+            <span className="text-4xl mb-2">🎙️</span>
+            <span className="text-white font-medium text-sm">
+              {isRecording ? "Grabando..." : "Mantener"}
+            </span>
+          </button>
+        </div>
+      )}
 
       {isProcessing && (
         <p className="mt-4 text-indigo-600 font-medium animate-pulse">
@@ -245,30 +297,46 @@ export default function VoiceRecorder() {
                       )}
                     </div>
 
-                    <div className="flex justify-between items-center mt-6 border-t pt-4">
-                      <button 
-                        onClick={() => setCurrentStep(prev => Math.max(0, prev - 1))}
-                        disabled={currentStep === 0}
-                        className={`px-4 py-2 rounded-lg font-medium transition ${currentStep === 0 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                    <div className="flex justify-between items-center mt-8 pt-6 border-t border-gray-100">
+                      <button
+                        onClick={() => {
+                          setEditableData(null);
+                          setAnalysisResult(null);
+                        }}
+                        className="px-6 py-2 bg-white text-red-600 border border-red-200 hover:bg-red-50 hover:border-red-300 rounded-lg font-medium shadow-sm transition-all"
                       >
-                        Anterior
+                        Cancelar Reporte
                       </button>
-                      
-                      {currentStep < steps.length - 1 ? (
-                        <button 
-                          onClick={() => setCurrentStep(prev => prev + 1)}
-                          className="px-5 py-2 rounded-xl bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-bold transition"
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => setCurrentStep(prev => Math.max(0, prev - 1))}
+                          disabled={currentStep === 0}
+                          className={`px-6 py-2 rounded-lg font-medium transition-all ${
+                            currentStep === 0 
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                            : 'bg-white text-indigo-600 border border-indigo-200 hover:bg-indigo-50 shadow-sm'
+                          }`}
                         >
-                          Siguiente
+                          Anterior
                         </button>
-                      ) : (
-                        <button 
-                          onClick={confirmAndSave}
-                          className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-md transition"
-                        >
-                          Confirmar e Insertar
-                        </button>
-                      )}
+                        
+                        {currentStep < steps.length - 1 ? (
+                          <button
+                            onClick={() => setCurrentStep(prev => prev + 1)}
+                            className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium shadow-md hover:shadow-lg transition-all"
+                          >
+                            Siguiente
+                          </button>
+                        ) : (
+                          <button
+                            onClick={confirmAndSave}
+                            className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium shadow-md hover:shadow-lg transition-all flex items-center gap-2"
+                          >
+                            <span className="text-xl">✅</span>
+                            Confirmar e Insertar
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );

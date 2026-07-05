@@ -14,6 +14,13 @@ class DataDictionary(Base):
     synonyms = Column(String, nullable=False) # e.g. "comió, tomó agua, pis, caca"
     fields_config = Column(String, nullable=False) # JSON: [{"name": "value", "type": "string"}]
 
+class TagSet(Base):
+    """Conjuntos dinámicos auto-incrementales para la IA (Comida, Enfermedad, Pis, Caca, Agua)."""
+    __tablename__ = "tag_sets"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True, nullable=False) # e.g. "Comida"
+    variants = Column(Text, nullable=False) # e.g. "comió, morfó, tragó, se alimentó"
+
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)

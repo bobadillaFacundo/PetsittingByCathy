@@ -7,8 +7,8 @@ from typing import Dict, Any
 
 try:
     from faster_whisper import WhisperModel
-    # Modelo tiny (muy rápido y ligero) para uso local
-    whisper_model = WhisperModel("tiny", device="cpu", compute_type="int8")
+    # Usar el modelo large-v3 a pedido del usuario (mucho más preciso, pero consumirá más RAM y CPU)
+    whisper_model = WhisperModel("large-v3", device="cpu", compute_type="int8")
 except ImportError:
     whisper_model = None
     print("ADVERTENCIA: faster-whisper no está instalado. Ejecute 'pip install faster-whisper'.")
@@ -76,35 +76,38 @@ class NLPService:
         return response.json()["choices"][0]["message"]["content"]
 
     @staticmethod
-    def extract_events_from_transcript(transcript: str, dictionaries: list) -> Dict[str, Any]:
-        # Construir configuración dinámica para el prompt
-        schema_instructions = ""
-        for d in dictionaries:
-            schema_instructions += f"- Tabla '{d.table_name}' ({d.entity_name}):\n"
-            schema_instructions += f"  Sinónimos para detectar cuándo usarla: {d.synonyms}\n"
-            schema_instructions += f"  Campos requeridos: {d.fields_config}\n"
+    def extract_events_from_transcript(transcript: str, dictionaries: list, animal_name: str, tag_sets: list) -> Dict[str, Any]:
+        # Construir configuración de etiquetas
+        tags_instructions = ""
+        for tag in tag_sets:
+            tags_instructions += f"- Conjunto: '{tag.name}'\n"
+            tags_instructions += f"  Variantes conocidas: {tag.variants}\n"
 
         prompt = f"""
-Extrae la información del reporte veterinario en formato JSON.
-Reglas:
-1. SOLO usa los nombres de los animales que aparecen explícitamente en el reporte.
-2. NO incluyas animales del ejemplo (Luna, Simba) a menos que se nombren en el reporte.
-3. Si solo se nombra a un animal, devuelve un solo elemento en el array.
+Extrae la información del reporte veterinario para el paciente "{animal_name}" en formato JSON.
+Reglas IMPORTANTES:
+1. Ignora cualquier texto irrelevante, charla adicional o ruido en el reporte.
+2. Todo el reporte corresponde exclusivamente a "{animal_name}". No busques datos para otros animales.
+3. Clasifica los eventos encontrados en los 5 Conjuntos disponibles. Si el reporte menciona comida y también pis, extrae ambos por separado.
+4. Para cada evento extraído, debes indicar:
+   - "standard_set": El nombre exacto del conjunto al que pertenece.
+   - "spoken_variant": La palabra o frase exacta que dijo el usuario (por ejemplo: "morfó", "garcó", "peste").
+   - "value": El valor o descripción asociada (ej: "todo", "blanda", "infección de oído").
 
-Diccionario de Datos:
-{schema_instructions}
+Conjuntos y sus Variantes Conocidas:
+{tags_instructions}
 
 EJEMPLO (solo formato, NO copiar los datos):
-Reporte: "Luunq comio y... uhm... tomo aguita"
+Reporte: "Hola, paso a contarte sobre Luna... Luunq morfó todo y... uhm... le agarró una peste. Listo, chau."
 Respuesta:
 {{
-  "cleaned_text": "Luna comió todo y tomó agua.",
+  "cleaned_text": "Luna morfó todo y le agarró una peste.",
   "data": [
     {{
-      "animal": "Luna",
+      "animal": "{animal_name}",
       "inserts": [
-        {{"table_name": "report_events", "fields": {{"event_type_name": "comida", "value": "todo"}}}},
-        {{"table_name": "report_events", "fields": {{"event_type_name": "agua", "value": "sí"}}}}
+        {{"standard_set": "Comida", "spoken_variant": "morfó", "value": "todo"}},
+        {{"standard_set": "Enfermedad", "spoken_variant": "peste", "value": "una peste"}}
       ]
     }}
   ]
