@@ -1,3 +1,55 @@
-node_modules
+# Entornos Virtuales y Dependencias de Python
+backend/venv/
+backend/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Node / Vite (Frontend)
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Base de datos local
+backend/*.db
+backend/*.sqlite3
+
+# Variables de entorno
 .env
-client_secret_724608932477-41d1a24aqdteqef8pii1crjcsmamd898.apps.googleusercontent.com.json
+.env.*
+!.env.example
+
+# Archivos de SO y editores
+.DS_Store
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Archivos subidos o procesados
+backend/uploads/

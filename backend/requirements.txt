@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+python-multipart
+requests
+python-dotenv
+faster-whisper
+vllm
