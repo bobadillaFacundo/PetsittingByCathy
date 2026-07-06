@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import MascotasCRUD from './MascotasCRUD';
 import AuditoriaPanel from './AuditoriaPanel';
+import AnalisisPanel from './AnalisisPanel';
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('diccionario');
@@ -27,6 +28,7 @@ export default function AdminDashboard() {
 
   const navItems = [
     { id: 'diccionario', label: 'Diccionario IA', icon: BookOpen },
+    { id: 'analisis', label: 'Análisis IA', icon: Activity },
     { id: 'pacientes', label: 'Mascotas', icon: HeartPulse },
     { id: 'reportes', label: 'Auditoría Reportes', icon: Database },
     { id: 'usuarios', label: 'Usuarios', icon: Users },
@@ -108,6 +110,10 @@ export default function AdminDashboard() {
 
             {activeTab === 'pacientes' && (
               <MascotasCRUD />
+            )}
+
+            {activeTab === 'analisis' && (
+              <AnalisisPanel />
             )}
 
             {activeTab === 'reportes' && (

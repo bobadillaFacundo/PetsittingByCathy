@@ -89,3 +89,48 @@ def get_animal_history(animal_id: int, db: Session = Depends(get_db)):
         ))
         
     return AnimalHistoryResponse(animal=animal, reports=history)
+
+from pydantic import BaseModel
+class EvolutionAnalysisResponse(BaseModel):
+    analysis: str
+
+@router.get("/{animal_id}/evolution-analysis", response_model=EvolutionAnalysisResponse)
+def get_evolution_analysis(animal_id: int, db: Session = Depends(get_db)):
+    from src.models.models import Report, ReportEvent, EventType, User
+    from src.services.audio_service import NLPService
+    
+    animal = db.query(Animal).filter(Animal.id == animal_id).first()
+    if not animal:
+        raise HTTPException(status_code=404, detail="Animal no encontrado")
+        
+    # Obtener últimos 2 reportes (el actual y el anterior) para comparar la evolución
+    reports = db.query(Report).filter(Report.animal_id == animal_id).order_by(Report.created_at.desc()).limit(2).all()
+    
+    if not reports:
+        return EvolutionAnalysisResponse(analysis="No hay reportes suficientes para analizar la evolución.")
+        
+    # Invertir para que estén en orden cronológico (más antiguo primero) para la IA
+    reports = list(reversed(reports))
+    
+    context_lines = []
+    for r in reports:
+        events = db.query(ReportEvent).filter(ReportEvent.report_id == r.id).all()
+        date_str = r.created_at.strftime("%Y-%m-%d %H:%M")
+        
+        event_descriptions = []
+        for e in events:
+            etype = db.query(EventType).filter(EventType.id == e.event_type_id).first()
+            type_name = etype.name if etype else "Desconocido"
+            val = e.value if e.value else ""
+            event_descriptions.append(f"{type_name}: {val}")
+            
+        event_str = ", ".join(event_descriptions)
+        if not event_str:
+            event_str = "Sin eventos registrados"
+            
+        context_lines.append(f"[{date_str}] {event_str}")
+        
+    history_context = "\n".join(context_lines)
+    analysis_result = NLPService.analyze_animal_evolution(animal.name, history_context)
+    
+    return EvolutionAnalysisResponse(analysis=analysis_result)

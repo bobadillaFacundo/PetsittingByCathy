@@ -176,3 +176,26 @@ Sé breve, amable y directo. Si no sabes la respuesta o no está en el historial
         except Exception as e:
             print(f"Error con LLM (chat): {e}")
             return "Ocurrió un error al contactar al modelo de IA. Revisa los logs o tu conexión."
+
+    @staticmethod
+    def analyze_animal_evolution(animal_name: str, history_context: str) -> str:
+        system_prompt = f"""
+Eres un veterinario experto analizando la evolución clínica de un paciente llamado "{animal_name}".
+Se te proporcionará un historial reciente de eventos (reportes, comidas, síntomas, deposiciones, etc.).
+
+Tu tarea es:
+1. Resumir brevemente el estado actual del animal basándote en los últimos eventos.
+2. Analizar su evolución (si mejoró, empeoró o se mantiene estable respecto a días o reportes previos).
+3. Redactar tu respuesta en un solo párrafo claro, conciso y profesional.
+
+Si no hay suficientes datos para analizar una evolución, indícalo amablemente.
+"""
+        try:
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Historial de {animal_name}:\n{history_context}"}
+            ]
+            return NLPService._call_llm(messages, json_format=False)
+        except Exception as e:
+            print(f"Error con LLM (evolución): {e}")
+            return "Ocurrió un error al generar el análisis. Revisa los logs de la aplicación."
