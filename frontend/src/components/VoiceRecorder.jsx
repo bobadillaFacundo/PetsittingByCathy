@@ -82,6 +82,15 @@ export default function VoiceRecorder({ onSave }) {
         body: formData,
       });
       
+      if (!response.ok) {
+        if (response.status === 401) {
+          alert("Tu sesión ha expirado o no tienes permisos. Por favor, inicia sesión nuevamente.");
+          window.location.href = '/login';
+          return;
+        }
+        throw new Error("Error en el servidor al analizar el audio.");
+      }
+
       const data = await response.json();
       if (data.error) {
         alert(data.error);
@@ -93,7 +102,7 @@ export default function VoiceRecorder({ onSave }) {
       setCurrentStep(0);
     } catch (error) {
       console.error("Error analizando el audio:", error);
-      alert("Hubo un error procesando el reporte.");
+      alert("Hubo un error procesando el reporte. Por favor, intenta de nuevo.");
     } finally {
       setIsProcessing(false);
     }

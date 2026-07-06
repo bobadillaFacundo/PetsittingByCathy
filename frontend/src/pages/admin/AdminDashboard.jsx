@@ -7,6 +7,7 @@ import {
 import MascotasCRUD from './MascotasCRUD';
 import AuditoriaPanel from './AuditoriaPanel';
 import AnalisisPanel from './AnalisisPanel';
+import DiccionarioPanel from './DiccionarioPanel';
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('diccionario');
@@ -99,13 +100,7 @@ export default function AdminDashboard() {
         <div className="flex-1 overflow-y-auto p-4 md:p-8">
           <div className="max-w-6xl mx-auto space-y-8">
             {activeTab === 'diccionario' && (
-              <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">Diccionario IA</h3>
-                <p className="text-gray-600">Configuración de NLP y diccionarios de extracción. (En desarrollo)</p>
-                <div className="mt-4 p-4 bg-gray-50 rounded-xl text-gray-500 text-sm border border-gray-200">
-                  Actualmente la IA está aprendiendo y registrando en la base de datos automáticamente.
-                </div>
-              </div>
+              <DiccionarioPanel />
             )}
 
             {activeTab === 'pacientes' && (

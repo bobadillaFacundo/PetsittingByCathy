@@ -71,3 +71,17 @@ def get_dashboard(db: Session = Depends(get_db)):
         observation_animals=observation_animals,
         alerts=alerts
     )
+
+@router.get("/dictionary")
+def get_dictionary(db: Session = Depends(get_db)):
+    from src.models.models import TagSet
+    tags = db.query(TagSet).all()
+    result = []
+    for tag in tags:
+        variants_list = [v.strip() for v in tag.variants.split(",") if v.strip()]
+        result.append({
+            "id": tag.id,
+            "name": tag.name,
+            "variants": variants_list
+        })
+    return result
