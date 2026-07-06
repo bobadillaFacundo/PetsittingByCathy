@@ -7,8 +7,8 @@ from typing import Dict, Any
 
 try:
     from faster_whisper import WhisperModel
-    # Usar el modelo large-v3 a pedido del usuario (mucho más preciso, pero consumirá más RAM y CPU)
-    whisper_model = WhisperModel("large-v3", device="cpu", compute_type="int8")
+    # Usar el modelo medium a pedido del usuario (buen balance entre velocidad y precisión)
+    whisper_model = WhisperModel("medium", device="cpu", compute_type="int8")
 except ImportError:
     whisper_model = None
     print("ADVERTENCIA: faster-whisper no está instalado. Ejecute 'pip install faster-whisper'.")
@@ -39,10 +39,26 @@ class AudioService:
     @staticmethod
     def transcribe_audio(file_path: str) -> str:
         if whisper_model:
-            # Transcripción real usando Whisper Local
-            segments, info = whisper_model.transcribe(file_path, beam_size=5)
-            transcript = " ".join([segment.text for segment in segments])
-            return transcript.strip()
+            # Transcripción real usando Whisper Local con VAD (Voice Activity Detection)
+            # Ajustado para ser menos sensible al ruido de fondo y priorizar la voz principal
+            segments, info = whisper_model.transcribe(
+                file_path, 
+                beam_size=5, 
+                vad_filter=True,
+                vad_parameters=dict(threshold=0.7), # 0.7 exige que la voz sea más clara/fuerte para ser grabada
+                no_speech_threshold=0.4, # Si la probabilidad de silencio/ruido pasa el 40%, ignora el audio
+                condition_on_previous_text=False, # Reduce alucinaciones basadas en frases anteriores
+                temperature=0.0 # Evita la creatividad del modelo (no intenta buscarle sentido al ruido)
+            )
+            transcript = " ".join([segment.text for segment in segments]).strip()
+            
+            # Filtro secundario de seguridad para alucinaciones comunes muy cortas
+            lower_t = transcript.lower()
+            hallucinations = ["thanks for watching", "thank you for watching", "subscribe", "subscríbete", "suscríbete"]
+            if any(h in lower_t for h in hallucinations) and len(transcript) < 40:
+                return "Silencio o ruido de fondo (no se detectó voz real)."
+                
+            return transcript if transcript else "Silencio o ruido de fondo (no se detectó voz real)."
         else:
             return "Theo comió, tomó agua, hizo pis, no hizo caca. Cleopatra tomó poca agua y tuvo caca blanda."
 
@@ -84,19 +100,18 @@ class NLPService:
             tags_instructions += f"  Variantes conocidas: {tag.variants}\n"
 
         prompt = f"""
-Extrae la información del reporte veterinario para el paciente "{animal_name}" en formato JSON.
-Reglas IMPORTANTES:
-1. Ignora cualquier texto irrelevante, charla adicional o ruido en el reporte.
-2. Todo el reporte corresponde exclusivamente a "{animal_name}". No busques datos para otros animales.
-3. SOLO extrae eventos que se mencionaron EXPLÍCITAMENTE en el audio. NO INVENTES datos.
-4. Si el usuario NO mencionó nada sobre enfermedad o medicación, NO agregues un insert de "Enfermedad" ni "Medicacion". Esas categorías son OPCIONALES y solo deben aparecer si el usuario las mencionó claramente.
+ERES UN EXTRACTOR DE DATOS ESTRICTO. Extrae la información del reporte veterinario para el paciente "{animal_name}" en formato JSON.
+Reglas CRÍTICAS Y OBLIGATORIAS (PENALIZACIÓN SI NO SE CUMPLEN):
+1. SOLO extrae eventos que se mencionaron EXPLÍCITAMENTE. NO INFIERAS, NO ASUMAS, NO INVENTES.
+2. ESTRICTAMENTE PROHIBIDO agregar "Enfermedad" o "Medicacion" a menos que se diga explícitamente (ej: "está enfermo", "vomitó", "le di remedio"). Una revisión normal NO es enfermedad.
+3. NO DUPLIQUES EVENTOS. Cada conjunto (ej. Comida, Pis, Enfermedad) debe aparecer MÁXIMO UNA VEZ por paciente.
+4. Todo el reporte corresponde exclusivamente a "{animal_name}".
 5. Para cada evento extraído, debes indicar:
-   - "standard_set": El nombre exacto del conjunto al que pertenece.
+   - "standard_set": El nombre exacto del conjunto (Debe coincidir con uno de los conjuntos conocidos).
    - "spoken_variant": La palabra o frase exacta que dijo el usuario (por ejemplo: "morfó", "garcó", "peste").
    - "value": El valor o descripción asociada (ej: "todo", "blanda", "infección de oído").
-6. Si solo se mencionó comida y pis, devuelve SOLO comida y pis. NO agregues caca, agua, enfermedad ni medicación si no se dijeron.
 
-Conjuntos y sus Variantes Conocidas:
+Conjuntos conocidos permitidos:
 {tags_instructions}
 
 EJEMPLO (solo formato, NO copiar los datos):
