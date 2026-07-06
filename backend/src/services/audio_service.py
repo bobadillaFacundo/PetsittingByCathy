@@ -190,7 +190,10 @@ Tu tarea es:
 2. Analizar su evolución (si mejoró, empeoró o se mantiene estable respecto a días o reportes previos).
 3. Redactar tu respuesta en un solo párrafo claro, conciso y profesional.
 
-Si no hay suficientes datos para analizar una evolución, indícalo amablemente.
+REGLAS CRÍTICAS:
+- BÁSATE ESTRICTAMENTE Y ÚNICAMENTE en la información proporcionada en el historial.
+- NO ASUMAS, NO INFIERAS Y NO INVENTES síntomas, enfermedades, mejoras ni medicamentos que no estén escritos ahí.
+- Si no hay suficientes datos para analizar una evolución, indícalo amablemente sin inventar nada.
 """
         try:
             messages = [

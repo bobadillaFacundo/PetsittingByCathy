@@ -22,8 +22,6 @@ export default function AnalisisPanel() {
       const data = await res.json();
       const activeAnimals = data.filter(a => a.is_active);
       setAnimals(activeAnimals);
-      // Generar análisis automáticamente de todos al cargar
-      generateAll(activeAnimals);
     } catch (error) {
       console.error("Error al cargar mascotas:", error);
     } finally {
