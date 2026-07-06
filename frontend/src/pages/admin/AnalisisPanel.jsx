@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Activity, Play, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
-import api from '../../services/api';
 
 export default function AnalisisPanel() {
   const [animals, setAnimals] = useState([]);
   const [loadingAnimals, setLoadingAnimals] = useState(true);
   const [analyses, setAnalyses] = useState({}); // { animal_id: { loading: boolean, data: string, error: string } }
   
+  const token = localStorage.getItem('token');
+
   useEffect(() => {
     fetchAnimals();
   }, []);
@@ -14,8 +15,12 @@ export default function AnalisisPanel() {
   const fetchAnimals = async () => {
     try {
       setLoadingAnimals(true);
-      const res = await api.get('/animals/');
-      const activeAnimals = res.data.filter(a => a.is_active);
+      const res = await fetch('/api/animals/', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const activeAnimals = data.filter(a => a.is_active);
       setAnimals(activeAnimals);
       // Generar análisis automáticamente de todos al cargar
       generateAll(activeAnimals);
@@ -34,10 +39,14 @@ export default function AnalisisPanel() {
     }));
 
     try {
-      const res = await api.get(`/animals/${animalId}/evolution-analysis`);
+      const res = await fetch(`/api/animals/${animalId}/evolution-analysis`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
       setAnalyses(prev => ({
         ...prev,
-        [animalId]: { loading: false, data: res.data.analysis, error: null }
+        [animalId]: { loading: false, data: data.analysis, error: null }
       }));
     } catch (error) {
       console.error(`Error generando análisis para ${animalId}:`, error);

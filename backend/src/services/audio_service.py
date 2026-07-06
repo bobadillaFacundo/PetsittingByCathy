@@ -108,23 +108,25 @@ Reglas CRÍTICAS Y OBLIGATORIAS (PENALIZACIÓN SI NO SE CUMPLEN):
 4. Todo el reporte corresponde exclusivamente a "{animal_name}".
 5. Para cada evento extraído, debes indicar:
    - "standard_set": El nombre exacto del conjunto (Debe coincidir con uno de los conjuntos conocidos).
-   - "spoken_variant": La palabra o frase exacta que dijo el usuario (por ejemplo: "morfó", "garcó", "peste").
-   - "value": El valor o descripción asociada (ej: "todo", "blanda", "infección de oído").
+   - "spoken_variant": El verbo o acción exacta que dijo el usuario (por ejemplo: "morfó", "garcó", "vomitó").
+   - "value": El valor, cantidad, estado o descripción. MUY IMPORTANTE: Si es negativo (ej. "no hizo caca", "no comió"), el valor debe ser "no" o "nada". Si es positivo, pon el estado (ej: "todo", "normal", "blanda", "con sangre", "mitad"). Nunca dejes el valor vacío si hay contexto.
 
 Conjuntos conocidos permitidos:
 {tags_instructions}
 
 EJEMPLO (solo formato, NO copiar los datos):
-Reporte: "Luna morfó todo y tomó agua normal."
+Reporte: "Luna morfó todo, tomó agua normal, no hizo caca y vomitó amarillo."
 Respuesta:
 {{
-  "cleaned_text": "Luna morfó todo y tomó agua normal.",
+  "cleaned_text": "Luna morfó todo, tomó agua normal, no hizo caca y vomitó amarillo.",
   "data": [
     {{
       "animal": "{animal_name}",
       "inserts": [
         {{"standard_set": "Comida", "spoken_variant": "morfó", "value": "todo"}},
-        {{"standard_set": "Agua", "spoken_variant": "tomó agua", "value": "normal"}}
+        {{"standard_set": "Agua", "spoken_variant": "tomó agua", "value": "normal"}},
+        {{"standard_set": "Caca", "spoken_variant": "hizo caca", "value": "no"}},
+        {{"standard_set": "Vomito", "spoken_variant": "vomitó", "value": "amarillo"}}
       ]
     }}
   ]

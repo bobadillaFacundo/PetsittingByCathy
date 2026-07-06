@@ -110,7 +110,10 @@ export default function VoiceRecorder({ onSave }) {
     try {
       const response = await fetch(`/api/reports/confirm`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("token")}`
+        },
         body: JSON.stringify(payload),
       });
       
@@ -168,21 +171,18 @@ export default function VoiceRecorder({ onSave }) {
             </button>
           </div>
 
-          <p className="text-center text-gray-600 font-medium mb-4">Paso 2: Mantén presionado para hablar</p>
+          <p className="text-center text-gray-600 font-medium mb-4">Paso 2: Toca para grabar, toca para detener</p>
           <button 
-            onMouseDown={startRecording}
-            onMouseUp={stopRecording}
-            onTouchStart={startRecording}
-            onTouchEnd={stopRecording}
+            onClick={isRecording ? stopRecording : startRecording}
             className={`w-32 h-32 rounded-full flex flex-col items-center justify-center transition-all duration-300 shadow-lg ${
               isRecording 
-                ? 'bg-red-500 hover:bg-red-600 scale-110 shadow-red-200' 
+                ? 'bg-red-500 hover:bg-red-600 scale-110 shadow-red-200 animate-pulse' 
                 : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200'
             }`}
           >
             <span className="text-4xl mb-2">🎙️</span>
             <span className="text-white font-medium text-sm">
-              {isRecording ? "Grabando..." : "Mantener"}
+              {isRecording ? "Detener" : "Grabar"}
             </span>
           </button>
         </div>
@@ -269,13 +269,25 @@ export default function VoiceRecorder({ onSave }) {
 
                             return (
                               <>
-                                <span className="font-bold text-indigo-600 uppercase text-xs tracking-wide">
-                                  Categoría: {entityName}
-                                </span>
-                                <ul className="mt-2 space-y-2">
+                                <div className="flex justify-between items-center mb-2">
+                                  <span className="font-bold text-indigo-600 uppercase text-xs tracking-wide">
+                                    Categoría: {entityName}
+                                  </span>
+                                  <button 
+                                    onClick={() => {
+                                      const newData = [...editableData];
+                                      newData[i].inserts.splice(j, 1);
+                                      setEditableData(newData);
+                                    }}
+                                    className="text-xs text-red-500 hover:text-red-700 font-bold px-2 py-1 bg-red-50 rounded"
+                                  >
+                                    Eliminar
+                                  </button>
+                                </div>
+                                <ul className="space-y-2">
                                   {keys.map((key) => {
                                     const val = fields[key] || "";
-                                    const isMissing = !val;
+                                    const isMissing = !val && insert.table_name !== "AnimalMedication";
                                     const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
                                     
                                     return (

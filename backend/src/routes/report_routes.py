@@ -64,7 +64,25 @@ async def analyze_voice_report(
                     db.commit() # Guardar aprendizaje
             
             # Mapeo a legacy para el Frontend
-            if std_set.lower() in ["comida", "pis", "caca", "agua"]:
+            if std_set.lower() in ["enfermedad", "diagnóstico", "diagnostico"]:
+                mapped_inserts.append({
+                    "table_name": "AnimalDiagnosis",
+                    "fields": {
+                        "diagnosis_name": val,
+                        "spoken_variant": spk_var
+                    }
+                })
+            elif std_set.lower() in ["medicacion", "medicación", "remedio"]:
+                mapped_inserts.append({
+                    "table_name": "AnimalMedication",
+                    "fields": {
+                        "medication_name": val,
+                        "spoken_variant": spk_var,
+                        "dosage": "No especificada"
+                    }
+                })
+            else:
+                # Por defecto, cualquier otro conjunto se considera un evento de rutina (Comida, Pis, Vomito, etc)
                 mapped_inserts.append({
                     "table_name": "ReportEvent",
                     "fields": {
@@ -73,16 +91,6 @@ async def analyze_voice_report(
                         "spoken_variant": spk_var
                     }
                 })
-            elif std_set.lower() in ["enfermedad"]:
-                mapped_inserts.append({
-                    "table_name": "AnimalDiagnosis",
-                    "fields": {
-                        "diagnosis_name": val,
-                        "spoken_variant": spk_var
-                    }
-                })
-            else:
-                pass
                 
         mapped_extracted_data.append({
             "animal": animal_d.get("animal", animal_d.get("animal_name", animal_name)),
@@ -129,19 +137,32 @@ def analyze_text_report(
                     tag_record.variants += f", {spk_var}"
                     db.commit()
             
-            if std_set.lower() in ["comida", "pis", "caca", "agua"]:
+            if std_set.lower() in ["enfermedad", "diagnóstico", "diagnostico"]:
                 mapped_inserts.append({
-                    "event_type": std_set.capitalize(),
-                    "value": val if val else spk_var,
-                    "severity": 3
+                    "table_name": "AnimalDiagnosis",
+                    "fields": {
+                        "diagnosis_name": val,
+                        "spoken_variant": spk_var
+                    }
                 })
-            elif std_set.lower() in ["enfermedad", "medicacion"]:
+            elif std_set.lower() in ["medicacion", "medicación", "remedio"]:
                 mapped_inserts.append({
-                    "diagnosis": spk_var.capitalize(),
-                    "notes": val if val else ""
+                    "table_name": "AnimalMedication",
+                    "fields": {
+                        "medication_name": val,
+                        "spoken_variant": spk_var,
+                        "dosage": "No especificada"
+                    }
                 })
             else:
-                pass
+                mapped_inserts.append({
+                    "table_name": "ReportEvent",
+                    "fields": {
+                        "event_type_name": std_set,
+                        "value": val,
+                        "spoken_variant": spk_var
+                    }
+                })
             
         mapped_extracted_data.append({
             "animal": animal_d.get("animal", animal_d.get("animal_name", animal_name)),
