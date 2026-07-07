@@ -1,5 +1,14 @@
 import { useEffect, useState } from "react";
 
+const SPECIES_INFO = {
+  1: { name: "Perros", emoji: "🐶" },
+  2: { name: "Gatos", emoji: "🐱" },
+  3: { name: "Conejos", emoji: "🐰" },
+  4: { name: "Loros", emoji: "🦜" },
+  5: { name: "Tortugas", emoji: "🐢" },
+  6: { name: "Erizos", emoji: "🦔" }
+};
+
 export default function AnimalHistory({ animalId = 1 }) { // Hardcoded Theo for demo
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -27,7 +36,7 @@ export default function AnimalHistory({ animalId = 1 }) { // Hardcoded Theo for 
     <div className="max-w-3xl mx-auto p-6 mt-8 bg-white/50 rounded-3xl">
       <div className="flex items-center gap-4 mb-8 pb-6 border-b border-gray-200">
         <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center text-3xl shadow-inner">
-          🐶
+          {SPECIES_INFO[data.animal.species_id]?.emoji || "🐾"}
         </div>
         <div>
           <h2 className="text-3xl font-bold text-gray-900">{data.animal.name}</h2>
