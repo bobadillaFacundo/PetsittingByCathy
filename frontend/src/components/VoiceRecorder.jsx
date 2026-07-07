@@ -1,17 +1,18 @@
 import { useState, useRef, useEffect } from "react";
 
-export default function VoiceRecorder({ onSave }) {
-  const speciesEmoji = {
-    1: "🐶", // Perro
-    2: "🐱", // Gato
-    3: "🦜", // Loro
-    4: "🐰", // Conejo
-    5: "🐢", // Tortuga
-    6: "🦔"  // Erizo
-  };
+const SPECIES_INFO = {
+  1: { name: "Perros", emoji: "🐶" },
+  2: { name: "Gatos", emoji: "🐱" },
+  3: { name: "Conejos", emoji: "🐰" },
+  4: { name: "Loros", emoji: "🦜" },
+  5: { name: "Tortugas", emoji: "🐢" },
+  6: { name: "Erizos", emoji: "🦔" }
+};
 
+export default function VoiceRecorder({ onSave }) {
   const [animals, setAnimals] = useState([]);
   const [selectedAnimal, setSelectedAnimal] = useState(null);
+  const [selectedSpeciesId, setSelectedSpeciesId] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(null);
@@ -150,25 +151,61 @@ export default function VoiceRecorder({ onSave }) {
       
       {!selectedAnimal ? (
         <div className="w-full">
-          <p className="text-center text-gray-600 font-medium mb-4">Paso 1: Selecciona el paciente</p>
-          
-          <div className="flex flex-wrap justify-center gap-3 max-h-64 overflow-y-auto p-2 scrollbar-thin scrollbar-thumb-indigo-200">
-            {animals.map((animal) => (
-              <button
-                key={animal.id}
-                onClick={() => {
-                  setSelectedAnimal(animal);
-                  setSaveSuccess(false);
-                  setAnalysisResult(null);
-                }}
-                className="px-5 py-3 bg-white border-2 border-indigo-50 rounded-xl hover:border-indigo-500 hover:shadow-md transition-all flex items-center gap-3 w-[45%] sm:w-[30%] min-w-[140px]"
-              >
-                <span className="text-2xl">{speciesEmoji[animal.species_id] || "🐾"}</span>
-                <span className="font-bold text-gray-800 text-base truncate">{animal.name}</span>
-              </button>
-            ))}
-            {animals.length === 0 && <p className="text-sm text-gray-500 text-center w-full mt-3">Cargando pacientes...</p>}
-          </div>
+          {!selectedSpeciesId ? (
+             <div className="animate-fade-in-up">
+               <p className="text-center text-gray-600 font-medium mb-4">Paso 1: Selecciona la especie</p>
+               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                 {Object.entries(SPECIES_INFO).map(([id, info]) => {
+                   const numId = parseInt(id);
+                   const count = animals.filter(a => a.species_id === numId).length;
+                   return (
+                     <button
+                       key={id}
+                       onClick={() => setSelectedSpeciesId(numId)}
+                       className="p-4 bg-white border border-gray-200 rounded-xl hover:border-indigo-400 hover:shadow-md transition-all flex flex-col items-center gap-2"
+                     >
+                       <span className="text-4xl">{info.emoji}</span>
+                       <span className="font-bold text-gray-800">{info.name}</span>
+                       <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded-full">{count} pacientes</span>
+                     </button>
+                   );
+                 })}
+               </div>
+             </div>
+          ) : (
+             <div className="animate-fade-in-up">
+               <div className="flex items-center gap-3 mb-4 justify-center relative">
+                 <button 
+                   onClick={() => setSelectedSpeciesId(null)}
+                   className="absolute left-0 p-1.5 bg-gray-100 text-gray-600 rounded-full hover:bg-gray-200 transition"
+                   title="Volver"
+                 >
+                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
+                     <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+                   </svg>
+                 </button>
+                 <p className="text-center text-gray-600 font-medium m-0">Paso 2: Selecciona el paciente</p>
+               </div>
+               
+               <div className="flex flex-wrap justify-center gap-3 max-h-64 overflow-y-auto p-2 scrollbar-thin scrollbar-thumb-indigo-200">
+                 {animals.filter(a => a.species_id === selectedSpeciesId).map((animal) => (
+                   <button
+                     key={animal.id}
+                     onClick={() => {
+                       setSelectedAnimal(animal);
+                       setSaveSuccess(false);
+                       setAnalysisResult(null);
+                     }}
+                     className="px-5 py-3 bg-white border-2 border-indigo-50 rounded-xl hover:border-indigo-500 hover:shadow-md transition-all flex items-center gap-3 w-[45%] sm:w-[30%] min-w-[140px]"
+                   >
+                     <span className="text-2xl">{SPECIES_INFO[animal.species_id]?.emoji || "🐾"}</span>
+                     <span className="font-bold text-gray-800 text-base truncate">{animal.name}</span>
+                   </button>
+                 ))}
+                 {animals.filter(a => a.species_id === selectedSpeciesId).length === 0 && <p className="text-sm text-gray-500 text-center w-full mt-3">No hay pacientes registrados de esta especie.</p>}
+               </div>
+             </div>
+          )}
         </div>
       ) : (
         <div className="flex flex-col items-center w-full animate-fadeIn">
@@ -258,7 +295,7 @@ export default function VoiceRecorder({ onSave }) {
 
                     <div className="mb-6">
                       <div className="flex items-center gap-2 border-b pb-2 mb-3">
-                        <span className="text-xl">{speciesEmoji[selectedAnimal?.species_id] || "🐾"}</span>
+                        <span className="text-xl">{SPECIES_INFO[selectedAnimal?.species_id]?.emoji || "🐾"}</span>
                         <input 
                           type="text"
                           className="font-bold text-lg text-gray-800 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-indigo-500 focus:outline-none transition-colors w-full"
