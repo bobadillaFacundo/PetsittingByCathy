@@ -3,7 +3,7 @@ echo Iniciando el proyecto con vLLM y Whisper...
 
 :: --- Configuración del Backend ---
 echo Iniciando servidor Backend...
-start "backend" cmd /k "cd /d "%~dp0backend" && call venv\Scripts\activate && uvicorn src.main:app --reload"
+start "backend" cmd /k "cd /d "%~dp0backend" && call .venv\Scripts\activate && uvicorn src.main:app --reload"
 
 
 :: --- Configuración del Frontend ---
