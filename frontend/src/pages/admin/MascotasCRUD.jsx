@@ -180,7 +180,7 @@ export default function MascotasCRUD() {
       {/* Grid de Tarjetas (Móvil) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:hidden">
         {mascotas.map((m) => (
-          <div key={m.id} className="bg-white rounded-3xl shadow-sm border border-gray-100 p-5 flex flex-col justify-between hover:shadow-md transition-shadow">
+          <div key={m.id} onClick={() => openModal(m)} className="bg-white rounded-3xl shadow-sm border border-gray-100 p-5 flex flex-col justify-between hover:shadow-md transition-shadow cursor-pointer">
             <div className="flex justify-between items-start mb-4">
               <div>
                 <h3 className="text-xl font-black text-gray-900 tracking-tight">{m.name}</h3>
@@ -205,14 +205,14 @@ export default function MascotasCRUD() {
               </span>
               <div className="flex gap-2">
                 <button 
-                  onClick={() => openModal(m)}
+                  onClick={(e) => { e.stopPropagation(); openModal(m); }}
                   className="p-3 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-all active:scale-95 shadow-sm"
                   title="Editar"
                 >
                   <Pencil size={18} />
                 </button>
                 <button 
-                  onClick={() => handleDelete(m.id, m.name)}
+                  onClick={(e) => { e.stopPropagation(); handleDelete(m.id, m.name); }}
                   className="p-3 text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-all active:scale-95 shadow-sm"
                   title="Dar de baja"
                   disabled={!m.is_active}
@@ -245,7 +245,7 @@ export default function MascotasCRUD() {
           </thead>
           <tbody className="divide-y divide-gray-100">
             {mascotas.map((m) => (
-              <tr key={m.id} className="hover:bg-gray-50/50 transition-colors">
+              <tr key={m.id} onClick={() => openModal(m)} className="hover:bg-gray-50/50 transition-colors cursor-pointer">
                 <td className="px-6 py-4 font-bold text-gray-900">{m.name}</td>
                 <td className="px-6 py-4 text-gray-600">
                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
@@ -268,14 +268,14 @@ export default function MascotasCRUD() {
                 </td>
                 <td className="px-6 py-4 flex justify-end gap-2">
                   <button 
-                    onClick={() => openModal(m)}
+                    onClick={(e) => { e.stopPropagation(); openModal(m); }}
                     className="p-2 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl transition-colors active:scale-95"
                     title="Editar"
                   >
                     <Pencil size={18} />
                   </button>
                   <button 
-                    onClick={() => handleDelete(m.id, m.name)}
+                    onClick={(e) => { e.stopPropagation(); handleDelete(m.id, m.name); }}
                     className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-xl transition-colors active:scale-95"
                     title="Dar de baja"
                     disabled={!m.is_active}
