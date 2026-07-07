@@ -8,8 +8,12 @@ import InstallPrompt from './components/InstallPrompt';
 // Rutas protegidas genéricas (cualquier usuario autenticado)
 function ProtectedRoute({ children }) {
   const token = localStorage.getItem('token');
+  const username = localStorage.getItem('username');
   if (!token) {
     return <Navigate to="/login" replace />;
+  }
+  if (username === 'admin') {
+    return <Navigate to="/admin" replace />;
   }
   return children;
 }
