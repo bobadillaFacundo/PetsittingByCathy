@@ -1,18 +1,25 @@
 import { useState, useEffect } from 'react';
-import { Pencil, Trash2, Plus, X, Save } from 'lucide-react';
+import { Pencil, Trash2, Plus, X, Save, Syringe, FileText, UserCircle, BookHeart } from 'lucide-react';
+import DesparasitacionesTab from './DesparasitacionesTab';
+import LaboratoriosTab from './LaboratoriosTab';
+import LibretaTab from './LibretaTab';
 
 export default function MascotasCRUD() {
   const [mascotas, setMascotas] = useState([]);
   const [speciesList, setSpeciesList] = useState([]);
+  const [breedsList, setBreedsList] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [modalTab, setModalTab] = useState('basic');
   
   const [formData, setFormData] = useState({
     name: '',
     species_id: '',
+    breed_id: '',
     sex: '',
+    is_castrated: false,
     is_active: true
   });
 
@@ -21,6 +28,7 @@ export default function MascotasCRUD() {
   useEffect(() => {
     fetchMascotas();
     fetchSpecies();
+    fetchBreeds();
   }, []);
 
   const fetchMascotas = async () => {
@@ -57,13 +65,29 @@ export default function MascotasCRUD() {
     }
   };
 
+  const fetchBreeds = async () => {
+    try {
+      const res = await fetch(`/api/animals/breeds`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setBreedsList(Array.isArray(data) ? data : []);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const openModal = (mascota = null) => {
     if (mascota) {
       setEditingId(mascota.id);
       setFormData({
         name: mascota.name,
         species_id: mascota.species_id,
+        breed_id: mascota.breed_id || '',
         sex: mascota.sex || '',
+        is_castrated: mascota.is_castrated || false,
         is_active: mascota.is_active
       });
     } else {
@@ -71,10 +95,13 @@ export default function MascotasCRUD() {
       setFormData({
         name: '',
         species_id: speciesList.length > 0 ? speciesList[0].id : '',
+        breed_id: '',
         sex: 'M',
+        is_castrated: false,
         is_active: true
       });
     }
+    setModalTab('basic');
     setIsModalOpen(true);
   };
 
@@ -285,7 +312,37 @@ export default function MascotasCRUD() {
               </button>
             </div>
             
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            {editingId && (
+              <div className="flex border-b border-gray-100 px-2 mt-2">
+                <button 
+                  onClick={() => setModalTab('basic')} 
+                  className={`flex items-center gap-2 px-4 py-3 font-bold text-sm border-b-2 transition-colors ${modalTab === 'basic' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                >
+                  <UserCircle size={18} /> Básicos
+                </button>
+                <button 
+                  onClick={() => setModalTab('libreta')} 
+                  className={`flex items-center gap-2 px-4 py-3 font-bold text-sm border-b-2 transition-colors ${modalTab === 'libreta' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                >
+                  <BookHeart size={18} /> Libreta Sanitaria
+                </button>
+                <button 
+                  onClick={() => setModalTab('deworming')} 
+                  className={`flex items-center gap-2 px-4 py-3 font-bold text-sm border-b-2 transition-colors ${modalTab === 'deworming' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                >
+                  <Syringe size={18} /> Desparasitaciones
+                </button>
+                <button 
+                  onClick={() => setModalTab('labs')} 
+                  className={`flex items-center gap-2 px-4 py-3 font-bold text-sm border-b-2 transition-colors ${modalTab === 'labs' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                >
+                  <FileText size={18} /> Laboratorios
+                </button>
+              </div>
+            )}
+
+            {modalTab === 'basic' && (
+              <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">Nombre</label>
                 <input
@@ -303,12 +360,28 @@ export default function MascotasCRUD() {
                 <select
                   required
                   value={formData.species_id}
-                  onChange={e => setFormData({...formData, species_id: parseInt(e.target.value)})}
+                  onChange={e => setFormData({...formData, species_id: parseInt(e.target.value), breed_id: ''})}
                   className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none bg-gray-50 focus:bg-white text-gray-900"
                 >
                   <option value="">Seleccione una especie</option>
                   {speciesList.map(s => (
                     <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Raza</label>
+                <select
+                  value={formData.breed_id}
+                  onChange={e => setFormData({...formData, breed_id: e.target.value ? parseInt(e.target.value) : null})}
+                  className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none bg-gray-50 focus:bg-white text-gray-900"
+                >
+                  <option value="">Desconocida / Sin raza</option>
+                  {breedsList
+                    .filter(b => b.species_id === formData.species_id)
+                    .map(b => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
                   ))}
                 </select>
               </div>
@@ -324,6 +397,19 @@ export default function MascotasCRUD() {
                   <option value="M">Macho</option>
                   <option value="F">Hembra</option>
                 </select>
+              </div>
+
+              <div className="flex items-center gap-2 mt-2">
+                <input
+                  type="checkbox"
+                  id="isCastrated"
+                  checked={formData.is_castrated}
+                  onChange={e => setFormData({...formData, is_castrated: e.target.checked})}
+                  className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                />
+                <label htmlFor="isCastrated" className="text-sm font-medium text-gray-700">
+                  Animal Castrado
+                </label>
               </div>
 
               <div className="flex items-center gap-2 mt-2">
@@ -355,6 +441,11 @@ export default function MascotasCRUD() {
                 </button>
               </div>
             </form>
+            )}
+
+            {modalTab === 'libreta' && <LibretaTab animalId={editingId} token={token} />}
+            {modalTab === 'deworming' && <DesparasitacionesTab animalId={editingId} token={token} />}
+            {modalTab === 'labs' && <LaboratoriosTab animalId={editingId} token={token} />}
           </div>
         </div>
       )}

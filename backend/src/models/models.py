@@ -36,6 +36,7 @@ class Species(Base):
     name = Column(String, unique=True, index=True, nullable=False)
 
     animals = relationship("Animal", back_populates="species")
+    breeds = relationship("Breed", back_populates="species")
 
 class Veterinarian(Base):
     __tablename__ = "veterinarians"
@@ -46,24 +47,94 @@ class Veterinarian(Base):
 
     animals = relationship("Animal", back_populates="veterinarian")
 
+class Breed(Base):
+    __tablename__ = "breeds"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True, nullable=False)
+    species_id = Column(Integer, ForeignKey("species.id"), nullable=False)
+
+    species = relationship("Species", back_populates="breeds")
+    animals = relationship("Animal", back_populates="breed")
+
 class Animal(Base):
     __tablename__ = "animals"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True, nullable=False)
     species_id = Column(Integer, ForeignKey("species.id"), nullable=False)
+    breed_id = Column(Integer, ForeignKey("breeds.id"), nullable=True)
     veterinarian_id = Column(Integer, ForeignKey("veterinarians.id"), nullable=True)
     birth_date = Column(Date, nullable=True)
     sex = Column(String(1), nullable=True) # M, F, U (Unknown)
+    is_castrated = Column(Boolean, default=False)
     photo_url = Column(String, nullable=True)
     is_active = Column(Boolean, default=True) # Para filtrado de dashboard
 
     species = relationship("Species", back_populates="animals")
+    breed = relationship("Breed", back_populates="animals")
     veterinarian = relationship("Veterinarian", back_populates="animals")
     reports = relationship("Report", back_populates="animal")
     diagnoses = relationship("AnimalDiagnosis", back_populates="animal")
     medications = relationship("AnimalMedication", back_populates="animal")
     observations = relationship("AnimalObservation", back_populates="animal")
     attachments = relationship("Attachment", back_populates="animal")
+    lab_results = relationship("LabResult", back_populates="animal", cascade="all, delete-orphan")
+    internal_dewormings = relationship("InternalDeworming", back_populates="animal", cascade="all, delete-orphan")
+    external_dewormings = relationship("ExternalDeworming", back_populates="animal", cascade="all, delete-orphan")
+    health_record = relationship("HealthRecord", uselist=False, back_populates="animal", cascade="all, delete-orphan")
+
+# ----------------- ENTIDADES DÉBILES (ANIMAL) ----------------- #
+
+class LabResult(Base):
+    __tablename__ = "lab_results"
+    id = Column(Integer, primary_key=True, index=True)
+    animal_id = Column(Integer, ForeignKey("animals.id"), nullable=False)
+    date = Column(Date, default=datetime.utcnow, nullable=False)
+    document_url = Column(String, nullable=False)
+    title = Column(String, nullable=True)
+
+    animal = relationship("Animal", back_populates="lab_results")
+
+class InternalDeworming(Base):
+    __tablename__ = "internal_dewormings"
+    id = Column(Integer, primary_key=True, index=True)
+    animal_id = Column(Integer, ForeignKey("animals.id"), nullable=False)
+    date = Column(Date, default=datetime.utcnow, nullable=False)
+    product_name = Column(String, nullable=False)
+    next_due_date = Column(Date, nullable=True)
+
+    animal = relationship("Animal", back_populates="internal_dewormings")
+
+class ExternalDeworming(Base):
+    __tablename__ = "external_dewormings"
+    id = Column(Integer, primary_key=True, index=True)
+    animal_id = Column(Integer, ForeignKey("animals.id"), nullable=False)
+    date = Column(Date, default=datetime.utcnow, nullable=False)
+    product_name = Column(String, nullable=False)
+    next_due_date = Column(Date, nullable=True)
+
+    animal = relationship("Animal", back_populates="external_dewormings")
+
+class HealthRecord(Base):
+    __tablename__ = "health_records"
+    id = Column(Integer, primary_key=True, index=True)
+    animal_id = Column(Integer, ForeignKey("animals.id"), unique=True, nullable=False)
+    creation_date = Column(Date, default=datetime.utcnow, nullable=False)
+    notes = Column(String, nullable=True)
+
+    animal = relationship("Animal", back_populates="health_record")
+    vaccines = relationship("Vaccine", back_populates="health_record", cascade="all, delete-orphan")
+
+class Vaccine(Base):
+    __tablename__ = "vaccines"
+    id = Column(Integer, primary_key=True, index=True)
+    health_record_id = Column(Integer, ForeignKey("health_records.id"), nullable=False)
+    name = Column(String, nullable=False)
+    date_administered = Column(Date, default=datetime.utcnow, nullable=False)
+    next_due_date = Column(Date, nullable=True)
+    lot_number = Column(String, nullable=True)
+    veterinarian_name = Column(String, nullable=True)
+
+    health_record = relationship("HealthRecord", back_populates="vaccines")
 
 # ----------------- CATÁLOGOS NORMALIZADOS ----------------- #
 

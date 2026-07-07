@@ -21,6 +21,15 @@ def get_species(db: Session = Depends(get_db)):
     species = db.query(Species).all()
     return [{"id": s.id, "name": s.name} for s in species]
 
+@router.get("/breeds")
+def get_breeds(species_id: int = None, db: Session = Depends(get_db)):
+    from src.models.models import Breed
+    query = db.query(Breed)
+    if species_id:
+        query = query.filter(Breed.species_id == species_id)
+    breeds = query.all()
+    return [{"id": b.id, "name": b.name, "species_id": b.species_id} for b in breeds]
+
 @router.get("/", response_model=List[AnimalResponse])
 def get_animals(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     animals = db.query(Animal).offset(skip).limit(limit).all()
@@ -134,3 +143,102 @@ def get_evolution_analysis(animal_id: int, db: Session = Depends(get_db)):
     analysis_result = NLPService.analyze_animal_evolution(animal.name, history_context)
     
     return EvolutionAnalysisResponse(analysis=analysis_result)
+
+from typing import Any
+from src.models.models import InternalDeworming, ExternalDeworming, LabResult, HealthRecord, Vaccine
+
+@router.get("/{animal_id}/health_record")
+def get_health_record(animal_id: int, db: Session = Depends(get_db)):
+    record = db.query(HealthRecord).filter(HealthRecord.animal_id == animal_id).first()
+    if not record:
+        from datetime import datetime
+        record = HealthRecord(animal_id=animal_id, creation_date=datetime.utcnow().date())
+        db.add(record)
+        db.commit()
+        db.refresh(record)
+    return record
+
+@router.get("/{animal_id}/vaccines")
+def get_vaccines(animal_id: int, db: Session = Depends(get_db)):
+    record = db.query(HealthRecord).filter(HealthRecord.animal_id == animal_id).first()
+    if not record:
+        return []
+    vaccines = db.query(Vaccine).filter(Vaccine.health_record_id == record.id).order_by(Vaccine.date_administered.desc()).all()
+    return vaccines
+
+@router.post("/{animal_id}/vaccines")
+def add_vaccine(animal_id: int, data: dict, db: Session = Depends(get_db)):
+    from datetime import datetime
+    record = db.query(HealthRecord).filter(HealthRecord.animal_id == animal_id).first()
+    if not record:
+        record = HealthRecord(animal_id=animal_id, creation_date=datetime.utcnow().date())
+        db.add(record)
+        db.commit()
+        db.refresh(record)
+        
+    vaccine = Vaccine(
+        health_record_id=record.id,
+        name=data['name'],
+        date_administered=datetime.strptime(data['date_administered'], "%Y-%m-%d").date() if data.get('date_administered') else datetime.utcnow().date(),
+        next_due_date=datetime.strptime(data['next_due_date'], "%Y-%m-%d").date() if data.get('next_due_date') else None,
+        lot_number=data.get('lot_number'),
+        veterinarian_name=data.get('veterinarian_name')
+    )
+    db.add(vaccine)
+    db.commit()
+    db.refresh(vaccine)
+    return vaccine
+
+@router.get("/{animal_id}/internal_dewormings")
+def get_internal_dewormings(animal_id: int, db: Session = Depends(get_db)):
+    items = db.query(InternalDeworming).filter(InternalDeworming.animal_id == animal_id).order_by(InternalDeworming.date.desc()).all()
+    return items
+
+@router.post("/{animal_id}/internal_dewormings")
+def add_internal_deworming(animal_id: int, data: dict, db: Session = Depends(get_db)):
+    from datetime import datetime
+    item = InternalDeworming(
+        animal_id=animal_id,
+        date=datetime.strptime(data['date'], "%Y-%m-%d").date() if data.get('date') else datetime.utcnow().date(),
+        product_name=data['product_name'],
+        next_due_date=datetime.strptime(data['next_due_date'], "%Y-%m-%d").date() if data.get('next_due_date') else None
+    )
+    db.add(item)
+    db.commit()
+    return item
+
+@router.get("/{animal_id}/external_dewormings")
+def get_external_dewormings(animal_id: int, db: Session = Depends(get_db)):
+    items = db.query(ExternalDeworming).filter(ExternalDeworming.animal_id == animal_id).order_by(ExternalDeworming.date.desc()).all()
+    return items
+
+@router.post("/{animal_id}/external_dewormings")
+def add_external_deworming(animal_id: int, data: dict, db: Session = Depends(get_db)):
+    from datetime import datetime
+    item = ExternalDeworming(
+        animal_id=animal_id,
+        date=datetime.strptime(data['date'], "%Y-%m-%d").date() if data.get('date') else datetime.utcnow().date(),
+        product_name=data['product_name'],
+        next_due_date=datetime.strptime(data['next_due_date'], "%Y-%m-%d").date() if data.get('next_due_date') else None
+    )
+    db.add(item)
+    db.commit()
+    return item
+
+@router.get("/{animal_id}/lab_results")
+def get_lab_results(animal_id: int, db: Session = Depends(get_db)):
+    items = db.query(LabResult).filter(LabResult.animal_id == animal_id).order_by(LabResult.date.desc()).all()
+    return items
+
+@router.post("/{animal_id}/lab_results")
+def add_lab_result(animal_id: int, data: dict, db: Session = Depends(get_db)):
+    from datetime import datetime
+    item = LabResult(
+        animal_id=animal_id,
+        date=datetime.strptime(data['date'], "%Y-%m-%d").date() if data.get('date') else datetime.utcnow().date(),
+        title=data.get('title'),
+        document_url=data['document_url']
+    )
+    db.add(item)
+    db.commit()
+    return item
