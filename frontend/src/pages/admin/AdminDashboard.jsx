@@ -8,6 +8,7 @@ import MascotasCRUD from './MascotasCRUD';
 import AuditoriaPanel from './AuditoriaPanel';
 import AnalisisPanel from './AnalisisPanel';
 import DiccionarioPanel from './DiccionarioPanel';
+import CatalogsPanel from './CatalogsPanel';
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('diccionario');
@@ -31,6 +32,7 @@ export default function AdminDashboard() {
     { id: 'diccionario', label: 'Diccionario IA', icon: BookOpen },
     { id: 'analisis', label: 'Análisis IA', icon: Activity },
     { id: 'pacientes', label: 'Mascotas', icon: HeartPulse },
+    { id: 'catalogos', label: 'Gestión de Catálogos', icon: Settings },
     { id: 'reportes', label: 'Auditoría Reportes', icon: Database },
     { id: 'usuarios', label: 'Usuarios', icon: Users },
   ];
@@ -105,6 +107,10 @@ export default function AdminDashboard() {
 
             {activeTab === 'pacientes' && (
               <MascotasCRUD />
+            )}
+
+            {activeTab === 'catalogos' && (
+              <CatalogsPanel />
             )}
 
             {activeTab === 'analisis' && (
