@@ -30,6 +30,27 @@ def get_breeds(species_id: int = None, db: Session = Depends(get_db)):
     breeds = query.all()
     return [{"id": b.id, "name": b.name, "species_id": b.species_id} for b in breeds]
 
+from src.models.models import VeterinaryProduct, LaboratoryCatalog, VaccineCatalog
+
+@router.get("/catalogs/laboratories")
+def get_laboratory_catalog(db: Session = Depends(get_db)):
+    return db.query(LaboratoryCatalog).all()
+
+@router.get("/catalogs/products")
+def get_product_catalog(db: Session = Depends(get_db)):
+    return db.query(VeterinaryProduct).all()
+
+@router.get("/catalogs/vaccines")
+def get_vaccine_catalog(db: Session = Depends(get_db)):
+    return db.query(VaccineCatalog).all()
+
+@router.get("/veterinarians")
+def get_veterinarians(db: Session = Depends(get_db)):
+    from src.models.models import Veterinarian
+    vets = db.query(Veterinarian).all()
+    return [{"id": v.id, "name": v.name} for v in vets]
+
+
 @router.get("/", response_model=List[AnimalResponse])
 def get_animals(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     animals = db.query(Animal).offset(skip).limit(limit).all()
@@ -148,18 +169,6 @@ from typing import Any
 from sqlalchemy.orm import joinedload
 from src.models.models import InternalDeworming, ExternalDeworming, LabResult, HealthRecord, Vaccine, VeterinaryProduct, LaboratoryCatalog, VaccineCatalog
 
-@router.get("/catalogs/laboratories")
-def get_laboratory_catalog(db: Session = Depends(get_db)):
-    return db.query(LaboratoryCatalog).all()
-
-@router.get("/catalogs/products")
-def get_product_catalog(db: Session = Depends(get_db)):
-    return db.query(VeterinaryProduct).all()
-
-@router.get("/catalogs/vaccines")
-def get_vaccine_catalog(db: Session = Depends(get_db)):
-    return db.query(VaccineCatalog).all()
-
 @router.get("/{animal_id}/health_record")
 def get_health_record(animal_id: int, db: Session = Depends(get_db)):
     record = db.query(HealthRecord).filter(HealthRecord.animal_id == animal_id).first()
@@ -188,13 +197,22 @@ def add_vaccine(animal_id: int, data: dict, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(record)
         
+    vet_name = data.get('veterinarian_name')
+    if vet_name:
+        from src.models.models import Veterinarian
+        vet = db.query(Veterinarian).filter(Veterinarian.name == vet_name).first()
+        if not vet:
+            vet = Veterinarian(name=vet_name)
+            db.add(vet)
+            db.commit()
+
     vaccine = Vaccine(
         health_record_id=record.id,
         vaccine_id=data['vaccine_id'],
         date_administered=datetime.strptime(data['date_administered'], "%Y-%m-%d").date() if data.get('date_administered') else datetime.utcnow().date(),
         next_due_date=datetime.strptime(data['next_due_date'], "%Y-%m-%d").date() if data.get('next_due_date') else None,
         lot_number=data.get('lot_number'),
-        veterinarian_name=data.get('veterinarian_name')
+        veterinarian_name=vet_name
     )
     db.add(vaccine)
     db.commit()

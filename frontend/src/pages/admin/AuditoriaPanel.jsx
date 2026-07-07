@@ -23,7 +23,9 @@ export default function AuditoriaPanel() {
             "Authorization": `Bearer ${localStorage.getItem("token")}`
           }
         }),
-        fetch('/api/animals/')
+        fetch('/api/animals/', {
+          headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+        })
       ]);
 
       if (reportsRes.ok) {

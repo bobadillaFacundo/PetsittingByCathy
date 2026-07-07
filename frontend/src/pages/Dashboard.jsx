@@ -7,7 +7,9 @@ export default function Dashboard() {
   const [selectedAnimal, setSelectedAnimal] = useState(null);
 
   useEffect(() => {
-    fetch(`/api/dashboard/`)
+    fetch(`/api/dashboard/`, {
+      headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+    })
       .then(res => res.json())
       .then(d => {
         setData(d);

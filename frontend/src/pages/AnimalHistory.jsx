@@ -6,7 +6,9 @@ export default function AnimalHistory({ animalId = 1 }) { // Hardcoded Theo for 
 
   useEffect(() => {
     // LLamada a la API real
-    fetch(`/api/animals/${animalId}/history`)
+    fetch(`/api/animals/${animalId}/history`, {
+      headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+    })
       .then(res => res.json())
       .then(d => {
         setData(d);

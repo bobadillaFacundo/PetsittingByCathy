@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 export default function Login() {
@@ -7,6 +7,12 @@ export default function Login() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('role');
+  }, []);
+
 
   const handleLogin = async (e) => {
     e.preventDefault();
