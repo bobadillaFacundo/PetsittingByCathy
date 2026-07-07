@@ -6,3 +6,5 @@ python-multipart
 requests
 python-dotenv
 faster-whisper
+PyJWT
+bcrypt
