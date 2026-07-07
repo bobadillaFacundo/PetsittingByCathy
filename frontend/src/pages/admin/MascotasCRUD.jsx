@@ -4,6 +4,15 @@ import DesparasitacionesTab from './DesparasitacionesTab';
 import LaboratoriosTab from './LaboratoriosTab';
 import LibretaTab from './LibretaTab';
 
+const SPECIES_INFO = {
+  1: { name: "Perros", emoji: "🐶" },
+  2: { name: "Gatos", emoji: "🐱" },
+  3: { name: "Conejos", emoji: "🐰" },
+  4: { name: "Loros", emoji: "🦜" },
+  5: { name: "Tortugas", emoji: "🐢" },
+  6: { name: "Erizos", emoji: "🦔" }
+};
+
 export default function MascotasCRUD() {
   const [mascotas, setMascotas] = useState([]);
   const [speciesList, setSpeciesList] = useState([]);
@@ -13,6 +22,7 @@ export default function MascotasCRUD() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [modalTab, setModalTab] = useState('basic');
+  const [selectedSpeciesId, setSelectedSpeciesId] = useState(null);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -183,124 +193,165 @@ export default function MascotasCRUD() {
         </button>
       </div>
 
-      {/* Grid de Tarjetas (Móvil) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:hidden">
-        {mascotas.map((m) => (
-          <div key={m.id} onClick={() => openModal(m)} className="bg-white rounded-3xl shadow-sm border border-gray-100 p-5 flex flex-col justify-between hover:shadow-md transition-shadow cursor-pointer">
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <h3 className="text-xl font-black text-gray-900 tracking-tight">{m.name}</h3>
-                <span className="inline-block mt-1 px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700">
-                  {getSpeciesName(m.species_id)}
-                </span>
-              </div>
-              {m.is_active ? (
-                <span className="flex items-center gap-1.5 bg-green-50 text-green-700 px-3 py-1.5 rounded-full text-xs font-bold border border-green-100">
-                  <span className="w-2 h-2 rounded-full bg-green-500"></span> Activo
-                </span>
-              ) : (
-                <span className="flex items-center gap-1.5 bg-red-50 text-red-700 px-3 py-1.5 rounded-full text-xs font-bold border border-red-100">
-                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span> Inactivo
-                </span>
-              )}
-            </div>
-            
-            <div className="flex justify-between items-center mt-2 pt-4 border-t border-gray-50">
-              <span className="text-sm font-bold text-gray-400 uppercase tracking-wider">
-                {m.sex === 'M' ? 'Macho' : m.sex === 'F' ? 'Hembra' : 'No def.'}
-              </span>
-              <div className="flex gap-2">
-                <button 
-                  onClick={(e) => { e.stopPropagation(); openModal(m); }}
-                  className="p-3 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-all active:scale-95 shadow-sm"
-                  title="Editar"
+      {!selectedSpeciesId ? (
+        <div className="p-6 md:p-10">
+          <h2 className="text-2xl font-bold text-gray-800 mb-8 text-center">Selecciona la especie para gestionar</h2>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-w-4xl mx-auto">
+            {speciesList.map((s) => {
+              const count = mascotas.filter(m => m.species_id === s.id).length;
+              const emoji = SPECIES_INFO[s.id]?.emoji || "🐾";
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => setSelectedSpeciesId(s.id)}
+                  className="p-6 bg-white rounded-2xl shadow-sm border border-gray-100 hover:border-indigo-400 hover:shadow-md transition-all flex flex-col items-center gap-3"
                 >
-                  <Pencil size={18} />
+                  <span className="text-5xl">{emoji}</span>
+                  <span className="text-xl font-bold text-gray-800">{s.name}</span>
+                  <span className="text-sm font-medium text-gray-500 bg-gray-100 px-3 py-1 rounded-full">{count} pacientes</span>
                 </button>
-                <button 
-                  onClick={(e) => { e.stopPropagation(); handleDelete(m.id, m.name); }}
-                  className="p-3 text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-all active:scale-95 shadow-sm"
-                  title="Dar de baja"
-                  disabled={!m.is_active}
-                >
-                  <Trash2 size={18} />
-                </button>
-              </div>
-            </div>
+              );
+            })}
           </div>
-        ))}
-        {mascotas.length === 0 && (
-          <div className="col-span-full bg-white rounded-3xl p-12 text-center text-gray-500 border border-dashed border-gray-200">
-            <span className="text-4xl mb-4 block">🐶</span>
-            <p className="font-medium text-lg">No hay mascotas registradas.</p>
+        </div>
+      ) : (
+        <div className="animate-fade-in-up">
+          <div className="p-4 border-b border-gray-100 bg-gray-50/30 flex items-center gap-4">
+            <button 
+              onClick={() => setSelectedSpeciesId(null)}
+              className="p-2 bg-white border border-gray-200 text-gray-600 rounded-full hover:bg-gray-100 transition shadow-sm"
+              title="Volver"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+              </svg>
+            </button>
+            <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+              <span className="text-2xl">{SPECIES_INFO[selectedSpeciesId]?.emoji || "🐾"}</span>
+              Pacientes: {speciesList.find(s => s.id === selectedSpeciesId)?.name || 'Desconocida'}
+            </h2>
           </div>
-        )}
-      </div>
 
-      {/* Tabla (Desktop) */}
-      <div className="hidden md:block overflow-x-auto bg-white rounded-2xl shadow-sm border border-gray-200">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-gray-50 text-gray-500 text-sm border-b border-gray-100">
-              <th className="px-6 py-4 font-medium">Nombre</th>
-              <th className="px-6 py-4 font-medium">Especie</th>
-              <th className="px-6 py-4 font-medium">Sexo</th>
-              <th className="px-6 py-4 font-medium">Estado</th>
-              <th className="px-6 py-4 font-medium text-right">Acciones</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {mascotas.map((m) => (
-              <tr key={m.id} onClick={() => openModal(m)} className="hover:bg-gray-50/50 transition-colors cursor-pointer">
-                <td className="px-6 py-4 font-bold text-gray-900">{m.name}</td>
-                <td className="px-6 py-4 text-gray-600">
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
-                    {getSpeciesName(m.species_id)}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-gray-600 text-sm font-medium">
-                  {m.sex === 'M' ? 'Macho' : m.sex === 'F' ? 'Hembra' : 'No definido'}
-                </td>
-                <td className="px-6 py-4">
+          {/* Grid de Tarjetas (Móvil) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:hidden p-4">
+            {mascotas.filter(m => m.species_id === selectedSpeciesId).map((m) => (
+              <div key={m.id} onClick={() => openModal(m)} className="bg-white rounded-3xl shadow-sm border border-gray-100 p-5 flex flex-col justify-between hover:shadow-md transition-shadow cursor-pointer">
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h3 className="text-xl font-black text-gray-900 tracking-tight">{m.name}</h3>
+                    <span className="inline-block mt-1 px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700">
+                      {getSpeciesName(m.species_id)}
+                    </span>
+                  </div>
                   {m.is_active ? (
-                    <span className="inline-flex items-center gap-1.5 text-xs text-green-700 font-bold bg-green-50 px-2 py-1 rounded-full border border-green-100">
+                    <span className="flex items-center gap-1.5 bg-green-50 text-green-700 px-3 py-1.5 rounded-full text-xs font-bold border border-green-100">
                       <span className="w-2 h-2 rounded-full bg-green-500"></span> Activo
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 text-xs text-red-700 font-bold bg-red-50 px-2 py-1 rounded-full border border-red-100">
-                      <span className="w-2 h-2 rounded-full bg-red-500"></span> Inactivo
+                    <span className="flex items-center gap-1.5 bg-red-50 text-red-700 px-3 py-1.5 rounded-full text-xs font-bold border border-red-100">
+                      <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span> Inactivo
                     </span>
                   )}
-                </td>
-                <td className="px-6 py-4 flex justify-end gap-2">
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); openModal(m); }}
-                    className="p-2 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl transition-colors active:scale-95"
-                    title="Editar"
-                  >
-                    <Pencil size={18} />
-                  </button>
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); handleDelete(m.id, m.name); }}
-                    className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-xl transition-colors active:scale-95"
-                    title="Dar de baja"
-                    disabled={!m.is_active}
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                </td>
-              </tr>
+                </div>
+                
+                <div className="flex justify-between items-center mt-2 pt-4 border-t border-gray-50">
+                  <span className="text-sm font-bold text-gray-400 uppercase tracking-wider">
+                    {m.sex === 'M' ? 'Macho' : m.sex === 'F' ? 'Hembra' : 'No def.'}
+                  </span>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); openModal(m); }}
+                      className="p-3 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-all active:scale-95 shadow-sm"
+                      title="Editar"
+                    >
+                      <Pencil size={18} />
+                    </button>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleDelete(m.id, m.name); }}
+                      className="p-3 text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-all active:scale-95 shadow-sm"
+                      title="Dar de baja"
+                      disabled={!m.is_active}
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                </div>
+              </div>
             ))}
-            {mascotas.length === 0 && (
-              <tr>
-                <td colSpan="5" className="text-center py-12 text-gray-500">
-                  No hay mascotas registradas.
-                </td>
-              </tr>
+            {mascotas.filter(m => m.species_id === selectedSpeciesId).length === 0 && (
+              <div className="col-span-full bg-gray-50 rounded-3xl p-12 text-center text-gray-500 border border-dashed border-gray-200">
+                <span className="text-4xl mb-4 block">🐾</span>
+                <p className="font-medium text-lg">No hay mascotas registradas para esta especie.</p>
+              </div>
             )}
-          </tbody>
-        </table>
-      </div>
+          </div>
+
+          {/* Tabla (Desktop) */}
+          <div className="hidden md:block overflow-x-auto bg-white rounded-b-2xl">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-gray-50 text-gray-500 text-sm border-y border-gray-100">
+                  <th className="px-6 py-4 font-medium">Nombre</th>
+                  <th className="px-6 py-4 font-medium">Especie</th>
+                  <th className="px-6 py-4 font-medium">Sexo</th>
+                  <th className="px-6 py-4 font-medium">Estado</th>
+                  <th className="px-6 py-4 font-medium text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {mascotas.filter(m => m.species_id === selectedSpeciesId).map((m) => (
+                  <tr key={m.id} onClick={() => openModal(m)} className="hover:bg-gray-50/50 transition-colors cursor-pointer">
+                    <td className="px-6 py-4 font-bold text-gray-900">{m.name}</td>
+                    <td className="px-6 py-4 text-gray-600">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                        {getSpeciesName(m.species_id)}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-gray-600 text-sm font-medium">
+                      {m.sex === 'M' ? 'Macho' : m.sex === 'F' ? 'Hembra' : 'No definido'}
+                    </td>
+                    <td className="px-6 py-4">
+                      {m.is_active ? (
+                        <span className="inline-flex items-center gap-1.5 text-xs text-green-700 font-bold bg-green-50 px-2 py-1 rounded-full border border-green-100">
+                          <span className="w-2 h-2 rounded-full bg-green-500"></span> Activo
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 text-xs text-red-700 font-bold bg-red-50 px-2 py-1 rounded-full border border-red-100">
+                          <span className="w-2 h-2 rounded-full bg-red-500"></span> Inactivo
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 flex justify-end gap-2">
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); openModal(m); }}
+                        className="p-2 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl transition-colors active:scale-95"
+                        title="Editar"
+                      >
+                        <Pencil size={18} />
+                      </button>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); handleDelete(m.id, m.name); }}
+                        className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-xl transition-colors active:scale-95"
+                        title="Dar de baja"
+                        disabled={!m.is_active}
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {mascotas.filter(m => m.species_id === selectedSpeciesId).length === 0 && (
+                  <tr>
+                    <td colSpan="5" className="text-center py-12 text-gray-500">
+                      No hay mascotas registradas para esta especie.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Modal / Formulario */}
       {isModalOpen && (
