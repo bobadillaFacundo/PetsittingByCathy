@@ -37,6 +37,7 @@ erDiagram
     
     diagnosis_catalog ||--o{ animal_diagnoses : "catálogo de"
     medication_catalog ||--o{ animal_medications : "catálogo de"
+    vaccine_catalog ||--o{ vaccines : "catálogo de"
     event_types ||--o{ report_events : "tipo de"
     animal_medications ||--o{ report_medications : "dosis reportada de"
 ```
@@ -91,7 +92,7 @@ A continuación, se detalla cada tabla con sus respectivos campos y tipos de dat
 #### `vaccines` (Historial de Vacunas)
 - `id` (Integer, PK)
 - `health_record_id` (Integer, FK -> `health_records.id`)
-- `name` (String) - Nombre de la vacuna (ej. Séxtuple, Antirrábica).
+- `vaccine_id` (Integer, FK -> `vaccine_catalog.id`) - Referencia al catálogo de vacunas.
 - `date_administered` (Date) - Fecha de aplicación.
 - `next_due_date` (Date, Opcional) - Fecha del próximo refuerzo.
 - `lot_number` (String, Opcional) - Número de lote de la vacuna.
@@ -141,6 +142,10 @@ Tablas de eventos y medicaciones administradas en un reporte específico.
 #### `laboratory_catalog` (Catálogo de Tipos de Estudios)
 - `id` (Integer, PK)
 - `name` (String) - Nombre del estudio (ej. Hemograma Completo, Ecografía).
+
+#### `vaccine_catalog` (Catálogo de Vacunas)
+- `id` (Integer, PK)
+- `name` (String) - Nombre de la vacuna (ej. Séxtuple, Antirrábica).
 
 #### `diagnosis_catalog` (Diagnósticos), `medication_catalog` (Medicamentos), `event_types` (Tipos de Eventos)
 Catálogos fijos para mantener la normalización de la BDD.
