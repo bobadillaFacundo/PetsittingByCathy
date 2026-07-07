@@ -1,10 +1,20 @@
 import { useState, useEffect } from 'react';
 import { Activity, Play, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
 
+const SPECIES_INFO = {
+  1: { name: "Perros", emoji: "🐶" },
+  2: { name: "Gatos", emoji: "🐱" },
+  3: { name: "Conejos", emoji: "🐰" },
+  4: { name: "Loros", emoji: "🦜" },
+  5: { name: "Tortugas", emoji: "🐢" },
+  6: { name: "Erizos", emoji: "🦔" }
+};
+
 export default function AnalisisPanel() {
   const [animals, setAnimals] = useState([]);
   const [loadingAnimals, setLoadingAnimals] = useState(true);
   const [analyses, setAnalyses] = useState({}); // { animal_id: { loading: boolean, data: string, error: string } }
+  const [selectedSpeciesId, setSelectedSpeciesId] = useState(null);
   
   const token = localStorage.getItem('token');
 
@@ -76,11 +86,14 @@ export default function AnalisisPanel() {
           </p>
         </div>
         <button
-          onClick={generateAll}
-          disabled={loadingAnimals || animals.length === 0}
+          onClick={() => {
+            const list = selectedSpeciesId ? animals.filter(a => a.species_id === selectedSpeciesId) : animals;
+            generateAll(list);
+          }}
+          disabled={loadingAnimals || animals.length === 0 || (selectedSpeciesId && animals.filter(a => a.species_id === selectedSpeciesId).length === 0)}
           className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50"
         >
-          <Play size={16} /> Generar Todos
+          <Play size={16} /> Generar {selectedSpeciesId ? "para especie" : "Todos"}
         </button>
       </div>
 
@@ -92,59 +105,103 @@ export default function AnalisisPanel() {
         <div className="text-center py-12 text-gray-500 bg-gray-50 rounded-xl border border-gray-200">
           No hay mascotas activas para analizar.
         </div>
+      ) : !selectedSpeciesId ? (
+        <div className="p-4 md:p-6 animate-fade-in-up">
+          <h2 className="text-xl font-bold text-gray-800 mb-6 text-center">Selecciona la especie para analizar</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 max-w-3xl mx-auto">
+            {Object.entries(SPECIES_INFO).map(([id, info]) => {
+              const numId = parseInt(id);
+              const count = animals.filter(a => a.species_id === numId).length;
+              return (
+                <button
+                  key={id}
+                  onClick={() => setSelectedSpeciesId(numId)}
+                  className="p-5 bg-white rounded-2xl shadow-sm border border-gray-100 hover:border-indigo-400 hover:shadow-md transition-all flex flex-col items-center gap-3"
+                >
+                  <span className="text-4xl">{info.emoji}</span>
+                  <span className="text-lg font-bold text-gray-800">{info.name}</span>
+                  <span className="text-sm font-medium text-gray-500 bg-gray-100 px-3 py-1 rounded-full">{count} pacientes</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {animals.map((animal) => {
-            const state = analyses[animal.id] || { loading: false, data: null, error: null };
-            
-            return (
-              <div key={animal.id} className="border border-gray-200 rounded-xl p-5 hover:border-indigo-200 transition-colors bg-gray-50/50">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-lg shrink-0">
-                      {animal.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-gray-900 leading-tight">{animal.name}</h4>
-                      <span className="text-xs text-gray-500 font-medium">ID: {animal.id}</span>
-                    </div>
-                  </div>
-                  
-                  {!state.data && !state.loading && (
-                    <button
-                      onClick={() => generateAnalysis(animal.id)}
-                      className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 hover:text-indigo-600 transition-colors"
-                    >
-                      Analizar
-                    </button>
-                  )}
-                </div>
+        <div className="animate-fade-in-up">
+          <div className="flex items-center gap-4 mb-6 bg-gray-50/50 p-4 rounded-xl border border-gray-100">
+             <button 
+               onClick={() => setSelectedSpeciesId(null)}
+               className="p-2 bg-white text-gray-600 rounded-full hover:bg-gray-100 border border-gray-200 transition shadow-sm"
+               title="Volver"
+             >
+               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
+                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+               </svg>
+             </button>
+             <h4 className="text-lg font-bold text-gray-800 flex items-center gap-2 m-0">
+                <span className="text-3xl">{SPECIES_INFO[selectedSpeciesId].emoji}</span>
+                Pacientes: {SPECIES_INFO[selectedSpeciesId].name}
+             </h4>
+          </div>
 
-                <div className="mt-2 min-h-[60px]">
-                  {state.loading ? (
-                    <div className="flex items-center gap-2 text-indigo-600 text-sm font-medium py-3">
-                      <RefreshCw className="animate-spin" size={16} />
-                      <span className="animate-pulse">Analizando historial con IA...</span>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {animals.filter(a => a.species_id === selectedSpeciesId).map((animal) => {
+              const state = analyses[animal.id] || { loading: false, data: null, error: null };
+              
+              return (
+                <div key={animal.id} className="border border-gray-200 rounded-xl p-5 hover:border-indigo-200 transition-colors bg-white shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-700 font-bold text-lg shrink-0 border border-indigo-100">
+                        {SPECIES_INFO[selectedSpeciesId].emoji}
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-gray-900 leading-tight">{animal.name}</h4>
+                        <span className="text-xs text-gray-500 font-medium">ID: {animal.id}</span>
+                      </div>
                     </div>
-                  ) : state.error ? (
-                    <div className="flex gap-2 text-red-600 text-sm bg-red-50 p-3 rounded-lg border border-red-100">
-                      <AlertCircle size={16} className="shrink-0 mt-0.5" />
-                      <p>{state.error}</p>
-                    </div>
-                  ) : state.data ? (
-                    <div className="text-sm text-gray-700 bg-white p-4 rounded-lg border border-indigo-100 shadow-sm relative">
-                      <CheckCircle2 size={16} className="text-emerald-500 absolute top-3 right-3" />
-                      <p className="pr-6 whitespace-pre-wrap">{state.data}</p>
-                    </div>
-                  ) : (
-                    <div className="text-sm text-gray-400 italic text-center py-3">
-                      Haz clic en Analizar para evaluar su evolución.
-                    </div>
-                  )}
+                    
+                    {!state.data && !state.loading && (
+                      <button
+                        onClick={() => generateAnalysis(animal.id)}
+                        className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 hover:text-indigo-600 transition-colors"
+                      >
+                        Analizar
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="mt-2 min-h-[60px]">
+                    {state.loading ? (
+                      <div className="flex items-center gap-2 text-indigo-600 text-sm font-medium py-3">
+                        <RefreshCw className="animate-spin" size={16} />
+                        <span className="animate-pulse">Analizando historial con IA...</span>
+                      </div>
+                    ) : state.error ? (
+                      <div className="flex gap-2 text-red-600 text-sm bg-red-50 p-3 rounded-lg border border-red-100">
+                        <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                        <p>{state.error}</p>
+                      </div>
+                    ) : state.data ? (
+                      <div className="text-sm text-gray-700 bg-gray-50/50 p-4 rounded-lg border border-indigo-100 shadow-sm relative">
+                        <CheckCircle2 size={16} className="text-emerald-500 absolute top-3 right-3 bg-white rounded-full" />
+                        <p className="pr-6 whitespace-pre-wrap">{state.data}</p>
+                      </div>
+                    ) : (
+                      <div className="text-sm text-gray-400 italic text-center py-3">
+                        Haz clic en Analizar para evaluar su evolución.
+                      </div>
+                    )}
+                  </div>
                 </div>
+              );
+            })}
+            {animals.filter(a => a.species_id === selectedSpeciesId).length === 0 && (
+              <div className="col-span-full text-center py-12 text-gray-500 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                No hay pacientes registrados para esta especie.
               </div>
-            );
-          })}
+            )}
+          </div>
         </div>
       )}
     </div>
