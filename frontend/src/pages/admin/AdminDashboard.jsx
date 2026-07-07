@@ -11,7 +11,8 @@ import DiccionarioPanel from './DiccionarioPanel';
 import CatalogsPanel from './CatalogsPanel';
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState('diccionario');
+  const username = localStorage.getItem('username');
+  const [activeTab, setActiveTab] = useState(username === 'admin' ? 'pacientes' : 'diccionario');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const navigate = useNavigate();
 
@@ -29,12 +30,16 @@ export default function AdminDashboard() {
   };
 
   const navItems = [
-    { id: 'diccionario', label: 'Diccionario IA', icon: BookOpen },
-    { id: 'analisis', label: 'Análisis IA', icon: Activity },
+    ...(username !== 'admin' ? [
+      { id: 'diccionario', label: 'Diccionario IA', icon: BookOpen },
+      { id: 'analisis', label: 'Análisis IA', icon: Activity },
+    ] : []),
     { id: 'pacientes', label: 'Mascotas', icon: HeartPulse },
     { id: 'catalogos', label: 'Gestión de Catálogos', icon: Settings },
-    { id: 'reportes', label: 'Auditoría Reportes', icon: Database },
-    { id: 'usuarios', label: 'Usuarios', icon: Users },
+    ...(username !== 'admin' ? [
+      { id: 'reportes', label: 'Auditoría Reportes', icon: Database },
+      { id: 'usuarios', label: 'Usuarios', icon: Users },
+    ] : []),
   ];
 
   return (
