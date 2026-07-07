@@ -131,13 +131,14 @@ class Vaccine(Base):
     __tablename__ = "vaccines"
     id = Column(Integer, primary_key=True, index=True)
     health_record_id = Column(Integer, ForeignKey("health_records.id"), nullable=False)
-    name = Column(String, nullable=False)
+    vaccine_id = Column(Integer, ForeignKey("vaccine_catalog.id"), nullable=False)
     date_administered = Column(Date, default=datetime.utcnow, nullable=False)
     next_due_date = Column(Date, nullable=True)
     lot_number = Column(String, nullable=True)
     veterinarian_name = Column(String, nullable=True)
 
     health_record = relationship("HealthRecord", back_populates="vaccines")
+    vaccine_catalog = relationship("VaccineCatalog")
 
 # ----------------- CATÁLOGOS NORMALIZADOS ----------------- #
 
@@ -149,6 +150,11 @@ class VeterinaryProduct(Base):
 
 class LaboratoryCatalog(Base):
     __tablename__ = "laboratory_catalog"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+
+class VaccineCatalog(Base):
+    __tablename__ = "vaccine_catalog"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
 

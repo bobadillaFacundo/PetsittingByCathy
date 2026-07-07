@@ -144,7 +144,9 @@ def get_evolution_analysis(animal_id: int, db: Session = Depends(get_db)):
     
     return EvolutionAnalysisResponse(analysis=analysis_result)
 
-from src.models.models import InternalDeworming, ExternalDeworming, LabResult, HealthRecord, Vaccine, VeterinaryProduct, LaboratoryCatalog
+from typing import Any
+from sqlalchemy.orm import joinedload
+from src.models.models import InternalDeworming, ExternalDeworming, LabResult, HealthRecord, Vaccine, VeterinaryProduct, LaboratoryCatalog, VaccineCatalog
 
 @router.get("/catalogs/laboratories")
 def get_laboratory_catalog(db: Session = Depends(get_db)):
@@ -153,6 +155,10 @@ def get_laboratory_catalog(db: Session = Depends(get_db)):
 @router.get("/catalogs/products")
 def get_product_catalog(db: Session = Depends(get_db)):
     return db.query(VeterinaryProduct).all()
+
+@router.get("/catalogs/vaccines")
+def get_vaccine_catalog(db: Session = Depends(get_db)):
+    return db.query(VaccineCatalog).all()
 
 @router.get("/{animal_id}/health_record")
 def get_health_record(animal_id: int, db: Session = Depends(get_db)):
@@ -170,8 +176,7 @@ def get_vaccines(animal_id: int, db: Session = Depends(get_db)):
     record = db.query(HealthRecord).filter(HealthRecord.animal_id == animal_id).first()
     if not record:
         return []
-    vaccines = db.query(Vaccine).filter(Vaccine.health_record_id == record.id).order_by(Vaccine.date_administered.desc()).all()
-    return vaccines
+    return db.query(Vaccine).options(joinedload(Vaccine.vaccine_catalog)).filter(Vaccine.health_record_id == record.id).order_by(Vaccine.date_administered.desc()).all()
 
 @router.post("/{animal_id}/vaccines")
 def add_vaccine(animal_id: int, data: dict, db: Session = Depends(get_db)):
@@ -185,7 +190,7 @@ def add_vaccine(animal_id: int, data: dict, db: Session = Depends(get_db)):
         
     vaccine = Vaccine(
         health_record_id=record.id,
-        name=data['name'],
+        vaccine_id=data['vaccine_id'],
         date_administered=datetime.strptime(data['date_administered'], "%Y-%m-%d").date() if data.get('date_administered') else datetime.utcnow().date(),
         next_due_date=datetime.strptime(data['next_due_date'], "%Y-%m-%d").date() if data.get('next_due_date') else None,
         lot_number=data.get('lot_number'),

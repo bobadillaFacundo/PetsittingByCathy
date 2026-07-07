@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [
     react(), 
     tailwindcss(),
-    VitePWA({
+    /* VitePWA({
       registerType: 'autoUpdate',
       devOptions: {
         enabled: true,
@@ -40,7 +40,7 @@ export default defineConfig({
           }
         ]
       }
-    })
+    }) */
   ],
   server: {
     host: '0.0.0.0', // Permite conexiones en red local

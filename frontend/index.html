@@ -14,6 +14,28 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Desregistrar todos los Service Workers viejos para forzar recarga limpia
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          for (let registration of registrations) {
+            registration.unregister().then(function() {
+              console.log('Service Worker desregistrado exitosamente');
+            });
+          }
+          if (registrations.length > 0) {
+            // Limpiar cachés viejas
+            caches.keys().then(function(names) {
+              for (let name of names) {
+                caches.delete(name);
+              }
+            });
+            console.log('Cachés limpiadas. Recargando...');
+            window.location.reload();
+          }
+        });
+      }
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

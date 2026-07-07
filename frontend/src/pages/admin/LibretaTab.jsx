@@ -3,21 +3,24 @@ import { Plus, Shield, ShieldAlert, CheckCircle } from 'lucide-react';
 
 export default function LibretaTab({ animalId, token }) {
   const [vaccines, setVaccines] = useState([]);
+  const [catalogs, setCatalogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newVaccine, setNewVaccine] = useState({
-    name: '',
+    vaccine_id: '',
     date_administered: '',
     next_due_date: '',
     lot_number: '',
     veterinarian_name: ''
   });
 
-  const fetchVaccines = async () => {
+  const fetchData = async () => {
     try {
-      const res = await fetch(`/api/animals/${animalId}/vaccines`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) setVaccines(await res.json());
+      const [resVac, resCat] = await Promise.all([
+        fetch(`/api/animals/${animalId}/vaccines`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch(`/api/animals/catalogs/vaccines`, { headers: { 'Authorization': `Bearer ${token}` } })
+      ]);
+      if (resVac.ok) setVaccines(await resVac.json());
+      if (resCat.ok) setCatalogs(await resCat.json());
     } catch (err) {
       console.error(err);
     } finally {
@@ -26,11 +29,11 @@ export default function LibretaTab({ animalId, token }) {
   };
 
   useEffect(() => {
-    fetchVaccines();
+    fetchData();
   }, [animalId]);
 
   const handleAdd = async () => {
-    if (!newVaccine.name) return alert("El nombre de la vacuna es obligatorio.");
+    if (!newVaccine.vaccine_id) return alert("El nombre de la vacuna es obligatorio.");
     try {
       const res = await fetch(`/api/animals/${animalId}/vaccines`, {
         method: 'POST',
@@ -41,8 +44,8 @@ export default function LibretaTab({ animalId, token }) {
         body: JSON.stringify(newVaccine)
       });
       if (res.ok) {
-        setNewVaccine({ name: '', date_administered: '', next_due_date: '', lot_number: '', veterinarian_name: '' });
-        fetchVaccines();
+        setNewVaccine({ vaccine_id: '', date_administered: '', next_due_date: '', lot_number: '', veterinarian_name: '' });
+        fetchData();
       } else {
         alert("Error al guardar la vacuna");
       }
@@ -68,7 +71,10 @@ export default function LibretaTab({ animalId, token }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Vacuna (ej. Séxtuple, Antirrábica)</label>
-            <input type="text" value={newVaccine.name} onChange={e => setNewVaccine({...newVaccine, name: e.target.value})} className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-900" />
+            <select value={newVaccine.vaccine_id} onChange={e => setNewVaccine({...newVaccine, vaccine_id: e.target.value})} className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-900 bg-white">
+              <option value="">Seleccione una vacuna...</option>
+              {catalogs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Nº de Lote (opcional)</label>
@@ -110,7 +116,7 @@ export default function LibretaTab({ animalId, token }) {
                   {expired ? <ShieldAlert size={20} /> : <CheckCircle size={20} />}
                 </div>
                 <div className="flex-1">
-                  <h5 className="font-bold text-gray-900 text-sm">{v.name}</h5>
+                  <h5 className="font-bold text-gray-900 text-sm">{v.vaccine_catalog?.name || 'Vacuna'}</h5>
                   <p className="text-xs text-gray-500">Aplicada: {v.date_administered} {v.veterinarian_name && `por ${v.veterinarian_name}`}</p>
                   {v.lot_number && <p className="text-[10px] text-gray-400 mt-0.5">Lote: {v.lot_number}</p>}
                 </div>

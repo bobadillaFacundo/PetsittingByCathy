@@ -102,7 +102,7 @@ export default function DesparasitacionesTab({ animalId, token }) {
           {internas.map(item => (
             <li key={item.id} className="bg-white border border-gray-100 p-3 rounded-lg flex justify-between items-center shadow-sm">
               <div>
-                <p className="font-bold text-gray-800 text-sm">{item.product_name}</p>
+                <p className="font-bold text-gray-800 text-sm">{item.product?.name || 'Producto Desconocido'}</p>
                 <p className="text-xs text-gray-500">Realizado: {item.date}</p>
               </div>
               {item.next_due_date && (
@@ -152,7 +152,7 @@ export default function DesparasitacionesTab({ animalId, token }) {
           {externas.map(item => (
             <li key={item.id} className="bg-white border border-gray-100 p-3 rounded-lg flex justify-between items-center shadow-sm">
               <div>
-                <p className="font-bold text-gray-800 text-sm">{item.product_name}</p>
+                <p className="font-bold text-gray-800 text-sm">{item.product?.name || 'Producto Desconocido'}</p>
                 <p className="text-xs text-gray-500">Realizado: {item.date}</p>
               </div>
               {item.next_due_date && (
