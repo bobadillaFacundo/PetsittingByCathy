@@ -3,16 +3,22 @@ import { Plus, FileText, Link as LinkIcon } from 'lucide-react';
 
 export default function LaboratoriosTab({ animalId, token }) {
   const [labs, setLabs] = useState([]);
+  const [catalogs, setCatalogs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [newLab, setNewLab] = useState({ date: '', title: '' });
+  const [newLab, setNewLab] = useState({ date: '', laboratory_id: '' });
   const [selectedFile, setSelectedFile] = useState(null);
 
   const fetchLabs = async () => {
     try {
-      const res = await fetch(`/api/animals/${animalId}/lab_results`, {
+      const resLabs = await fetch(`/api/animals/${animalId}/lab_results`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (res.ok) setLabs(await res.json());
+      if (resLabs.ok) setLabs(await resLabs.json());
+
+      const resCat = await fetch(`/api/animals/catalogs/laboratories`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (resCat.ok) setCatalogs(await resCat.json());
     } catch (err) {
       console.error(err);
     } finally {
@@ -26,14 +32,15 @@ export default function LaboratoriosTab({ animalId, token }) {
 
   const handleAdd = async () => {
     if (!selectedFile) return alert("Debes seleccionar un archivo PDF o imagen.");
+    if (!newLab.laboratory_id) return alert("Debes seleccionar el tipo de estudio.");
     
     const formData = new FormData();
     formData.append("file", selectedFile);
-    if (newLab.title) formData.append("title", newLab.title);
+    formData.append("laboratory_id", newLab.laboratory_id);
     if (newLab.date) formData.append("date", newLab.date);
 
     try {
-      const res = await fetch(`/api/animals/${animalId}/lab_results/upload`, {
+      const res = await fetch(`/api/animals/${animalId}/lab_results/upload?laboratory_id=${newLab.laboratory_id}&date=${newLab.date}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -41,7 +48,7 @@ export default function LaboratoriosTab({ animalId, token }) {
         body: formData
       });
       if (res.ok) {
-        setNewLab({ date: '', title: '' });
+        setNewLab({ date: '', laboratory_id: '' });
         setSelectedFile(null);
         // Reseteamos el input file
         const fileInput = document.getElementById('labFileInput');
@@ -67,8 +74,11 @@ export default function LaboratoriosTab({ animalId, token }) {
             <input type="date" value={newLab.date} onChange={e => setNewLab({...newLab, date: e.target.value})} className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-900" />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Título / Estudio</label>
-            <input type="text" placeholder="Ej. Análisis de Sangre" value={newLab.title} onChange={e => setNewLab({...newLab, title: e.target.value})} className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-900" />
+            <label className="block text-xs font-medium text-gray-600 mb-1">Tipo de Estudio</label>
+            <select value={newLab.laboratory_id} onChange={e => setNewLab({...newLab, laboratory_id: e.target.value})} className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-900 bg-white">
+              <option value="">Seleccione un estudio...</option>
+              {catalogs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
           </div>
         </div>
           <div>
@@ -90,7 +100,7 @@ export default function LaboratoriosTab({ animalId, token }) {
                 <FileText size={20} />
               </div>
               <div className="flex-1">
-                <h5 className="font-bold text-gray-900 text-sm">{lab.title || 'Estudio de laboratorio'}</h5>
+                <h5 className="font-bold text-gray-900 text-sm">{lab.laboratory?.name || 'Estudio de laboratorio'}</h5>
                 <p className="text-xs text-gray-500">Fecha: {lab.date}</p>
               </div>
               <a href={lab.document_url.startsWith('http') ? lab.document_url : `http://127.0.0.1:8000${lab.document_url}`} target="_blank" rel="noreferrer" className="text-blue-600 bg-blue-50 hover:bg-blue-100 p-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors">

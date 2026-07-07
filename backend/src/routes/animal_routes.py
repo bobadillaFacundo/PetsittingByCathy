@@ -144,8 +144,15 @@ def get_evolution_analysis(animal_id: int, db: Session = Depends(get_db)):
     
     return EvolutionAnalysisResponse(analysis=analysis_result)
 
-from typing import Any
-from src.models.models import InternalDeworming, ExternalDeworming, LabResult, HealthRecord, Vaccine
+from src.models.models import InternalDeworming, ExternalDeworming, LabResult, HealthRecord, Vaccine, VeterinaryProduct, LaboratoryCatalog
+
+@router.get("/catalogs/laboratories")
+def get_laboratory_catalog(db: Session = Depends(get_db)):
+    return db.query(LaboratoryCatalog).all()
+
+@router.get("/catalogs/products")
+def get_product_catalog(db: Session = Depends(get_db)):
+    return db.query(VeterinaryProduct).all()
 
 @router.get("/{animal_id}/health_record")
 def get_health_record(animal_id: int, db: Session = Depends(get_db)):
@@ -189,9 +196,11 @@ def add_vaccine(animal_id: int, data: dict, db: Session = Depends(get_db)):
     db.refresh(vaccine)
     return vaccine
 
+from sqlalchemy.orm import joinedload
+
 @router.get("/{animal_id}/internal_dewormings")
 def get_internal_dewormings(animal_id: int, db: Session = Depends(get_db)):
-    items = db.query(InternalDeworming).filter(InternalDeworming.animal_id == animal_id).order_by(InternalDeworming.date.desc()).all()
+    items = db.query(InternalDeworming).options(joinedload(InternalDeworming.product)).filter(InternalDeworming.animal_id == animal_id).order_by(InternalDeworming.date.desc()).all()
     return items
 
 @router.post("/{animal_id}/internal_dewormings")
@@ -200,7 +209,7 @@ def add_internal_deworming(animal_id: int, data: dict, db: Session = Depends(get
     item = InternalDeworming(
         animal_id=animal_id,
         date=datetime.strptime(data['date'], "%Y-%m-%d").date() if data.get('date') else datetime.utcnow().date(),
-        product_name=data['product_name'],
+        product_id=data['product_id'],
         next_due_date=datetime.strptime(data['next_due_date'], "%Y-%m-%d").date() if data.get('next_due_date') else None
     )
     db.add(item)
@@ -209,7 +218,7 @@ def add_internal_deworming(animal_id: int, data: dict, db: Session = Depends(get
 
 @router.get("/{animal_id}/external_dewormings")
 def get_external_dewormings(animal_id: int, db: Session = Depends(get_db)):
-    items = db.query(ExternalDeworming).filter(ExternalDeworming.animal_id == animal_id).order_by(ExternalDeworming.date.desc()).all()
+    items = db.query(ExternalDeworming).options(joinedload(ExternalDeworming.product)).filter(ExternalDeworming.animal_id == animal_id).order_by(ExternalDeworming.date.desc()).all()
     return items
 
 @router.post("/{animal_id}/external_dewormings")
@@ -218,7 +227,7 @@ def add_external_deworming(animal_id: int, data: dict, db: Session = Depends(get
     item = ExternalDeworming(
         animal_id=animal_id,
         date=datetime.strptime(data['date'], "%Y-%m-%d").date() if data.get('date') else datetime.utcnow().date(),
-        product_name=data['product_name'],
+        product_id=data['product_id'],
         next_due_date=datetime.strptime(data['next_due_date'], "%Y-%m-%d").date() if data.get('next_due_date') else None
     )
     db.add(item)
@@ -227,7 +236,7 @@ def add_external_deworming(animal_id: int, data: dict, db: Session = Depends(get
 
 @router.get("/{animal_id}/lab_results")
 def get_lab_results(animal_id: int, db: Session = Depends(get_db)):
-    items = db.query(LabResult).filter(LabResult.animal_id == animal_id).order_by(LabResult.date.desc()).all()
+    items = db.query(LabResult).options(joinedload(LabResult.laboratory)).filter(LabResult.animal_id == animal_id).order_by(LabResult.date.desc()).all()
     return items
 
 @router.post("/{animal_id}/lab_results")
@@ -248,7 +257,7 @@ import os
 import uuid
 
 @router.post("/{animal_id}/lab_results/upload")
-def upload_lab_result(animal_id: int, file: UploadFile = File(...), title: str = None, date: str = None, db: Session = Depends(get_db)):
+def upload_lab_result(animal_id: int, laboratory_id: int, file: UploadFile = File(...), date: str = None, db: Session = Depends(get_db)):
     from datetime import datetime
     
     # Save file
@@ -267,7 +276,7 @@ def upload_lab_result(animal_id: int, file: UploadFile = File(...), title: str =
     item = LabResult(
         animal_id=animal_id,
         date=datetime.strptime(date, "%Y-%m-%d").date() if date else datetime.utcnow().date(),
-        title=title or file.filename,
+        laboratory_id=laboratory_id,
         document_url=document_url
     )
     db.add(item)

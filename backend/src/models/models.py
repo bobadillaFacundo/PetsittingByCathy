@@ -88,31 +88,34 @@ class LabResult(Base):
     __tablename__ = "lab_results"
     id = Column(Integer, primary_key=True, index=True)
     animal_id = Column(Integer, ForeignKey("animals.id"), nullable=False)
+    laboratory_id = Column(Integer, ForeignKey("laboratory_catalog.id"), nullable=False)
     date = Column(Date, default=datetime.utcnow, nullable=False)
     document_url = Column(String, nullable=False)
-    title = Column(String, nullable=True)
 
     animal = relationship("Animal", back_populates="lab_results")
+    laboratory = relationship("LaboratoryCatalog")
 
 class InternalDeworming(Base):
     __tablename__ = "internal_dewormings"
     id = Column(Integer, primary_key=True, index=True)
     animal_id = Column(Integer, ForeignKey("animals.id"), nullable=False)
+    product_id = Column(Integer, ForeignKey("veterinary_products.id"), nullable=False)
     date = Column(Date, default=datetime.utcnow, nullable=False)
-    product_name = Column(String, nullable=False)
     next_due_date = Column(Date, nullable=True)
 
     animal = relationship("Animal", back_populates="internal_dewormings")
+    product = relationship("VeterinaryProduct")
 
 class ExternalDeworming(Base):
     __tablename__ = "external_dewormings"
     id = Column(Integer, primary_key=True, index=True)
     animal_id = Column(Integer, ForeignKey("animals.id"), nullable=False)
+    product_id = Column(Integer, ForeignKey("veterinary_products.id"), nullable=False)
     date = Column(Date, default=datetime.utcnow, nullable=False)
-    product_name = Column(String, nullable=False)
     next_due_date = Column(Date, nullable=True)
 
     animal = relationship("Animal", back_populates="external_dewormings")
+    product = relationship("VeterinaryProduct")
 
 class HealthRecord(Base):
     __tablename__ = "health_records"
@@ -137,6 +140,17 @@ class Vaccine(Base):
     health_record = relationship("HealthRecord", back_populates="vaccines")
 
 # ----------------- CATÁLOGOS NORMALIZADOS ----------------- #
+
+class VeterinaryProduct(Base):
+    __tablename__ = "veterinary_products"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    type = Column(String, nullable=False) # 'INTERNAL' or 'EXTERNAL'
+
+class LaboratoryCatalog(Base):
+    __tablename__ = "laboratory_catalog"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
 
 class DiagnosisCatalog(Base):
     __tablename__ = "diagnosis_catalog"

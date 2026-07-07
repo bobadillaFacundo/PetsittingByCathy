@@ -5,19 +5,28 @@ export default function DesparasitacionesTab({ animalId, token }) {
   const [internas, setInternas] = useState([]);
   const [externas, setExternas] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [catalogs, setCatalogs] = useState({ internal: [], external: [] });
 
   // Form states
-  const [newInterna, setNewInterna] = useState({ date: '', product_name: '', next_due_date: '' });
-  const [newExterna, setNewExterna] = useState({ date: '', product_name: '', next_due_date: '' });
+  const [newInterna, setNewInterna] = useState({ date: '', product_id: '', next_due_date: '' });
+  const [newExterna, setNewExterna] = useState({ date: '', product_id: '', next_due_date: '' });
 
-  const fetchDewormings = async () => {
+  const fetchData = async () => {
     try {
-      const [intRes, extRes] = await Promise.all([
+      const [resInt, resExt, resCat] = await Promise.all([
         fetch(`/api/animals/${animalId}/internal_dewormings`, { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch(`/api/animals/${animalId}/external_dewormings`, { headers: { 'Authorization': `Bearer ${token}` } })
+        fetch(`/api/animals/${animalId}/external_dewormings`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch(`/api/animals/catalogs/products`, { headers: { 'Authorization': `Bearer ${token}` } })
       ]);
-      if (intRes.ok) setInternas(await intRes.json());
-      if (extRes.ok) setExternas(await extRes.json());
+      if (resInt.ok) setInternas(await resInt.json());
+      if (resExt.ok) setExternas(await resExt.json());
+      if (resCat.ok) {
+        const products = await resCat.json();
+        setCatalogs({
+          internal: products.filter(p => p.type === 'INTERNAL'),
+          external: products.filter(p => p.type === 'EXTERNAL')
+        });
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -26,11 +35,11 @@ export default function DesparasitacionesTab({ animalId, token }) {
   };
 
   useEffect(() => {
-    fetchDewormings();
+    fetchData();
   }, [animalId]);
 
-  const handleAdd = async (type, data, resetForm) => {
-    if (!data.product_name) return alert("El nombre del producto es obligatorio.");
+  const handleAdd = async (type, data, setter) => {
+    if (!data.product_id) return alert("Debes seleccionar un producto.");
     const url = type === 'interna' 
       ? `/api/animals/${animalId}/internal_dewormings`
       : `/api/animals/${animalId}/external_dewormings`;
@@ -45,8 +54,8 @@ export default function DesparasitacionesTab({ animalId, token }) {
         body: JSON.stringify(data)
       });
       if (res.ok) {
-        resetForm({ date: '', product_name: '', next_due_date: '' });
-        fetchDewormings();
+        setter({ date: '', product_id: '', next_due_date: '' });
+        fetchData();
       } else {
         alert("Error al guardar la desparasitación");
       }
@@ -78,7 +87,10 @@ export default function DesparasitacionesTab({ animalId, token }) {
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Producto</label>
             <div className="flex gap-2">
-              <input type="text" placeholder="Ej. Drontal" value={newInterna.product_name} onChange={e => setNewInterna({...newInterna, product_name: e.target.value})} className="flex-1 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-900" />
+              <select value={newInterna.product_id} onChange={e => setNewInterna({...newInterna, product_id: e.target.value})} className="flex-1 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-900 bg-white">
+                <option value="">Seleccione un producto...</option>
+                {catalogs.internal.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
               <button onClick={() => handleAdd('interna', newInterna, setNewInterna)} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1">
                 <Plus size={16} /> Añadir
               </button>
@@ -125,7 +137,10 @@ export default function DesparasitacionesTab({ animalId, token }) {
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Producto</label>
             <div className="flex gap-2">
-              <input type="text" placeholder="Ej. Nexgard, Bravecto" value={newExterna.product_name} onChange={e => setNewExterna({...newExterna, product_name: e.target.value})} className="flex-1 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-900" />
+              <select value={newExterna.product_id} onChange={e => setNewExterna({...newExterna, product_id: e.target.value})} className="flex-1 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-900 bg-white">
+                <option value="">Seleccione un producto...</option>
+                {catalogs.external.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
               <button onClick={() => handleAdd('externa', newExterna, setNewExterna)} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1">
                 <Plus size={16} /> Añadir
               </button>

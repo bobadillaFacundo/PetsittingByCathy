@@ -1,16 +1,29 @@
 # Esquema de Base de Datos - Guardería Canina
 
-Este documento describe la estructura y el modelo Entidad-Relación (ER) de la base de datos del sistema de la Guardería Canina.
+Este documento describe la estructura y el modelo Entidad-Relación (ER) de la base de datos del sistema de la Guardería Canina, incluyendo las actualizaciones de perfiles clínicos avanzados.
 
 ## Diagrama Entidad-Relación (ER)
 
-El siguiente diagrama muestra las relaciones principales entre las entidades del sistema (Usuarios, Animales, Reportes, Catálogos, etc.).
+El siguiente diagrama muestra las relaciones principales entre las entidades del sistema (Usuarios, Animales, Reportes, Catálogos, Historial Clínico, etc.).
 
 ```mermaid
 erDiagram
     users ||--o{ reports : "crea"
     species ||--o{ animals : "clasifica a"
+    species ||--o{ breeds : "tiene"
+    breeds ||--o{ animals : "pertenece a"
     veterinarians ||--o{ animals : "atiende a"
+    
+    animals ||--o| health_records : "tiene libreta"
+    health_records ||--o{ vaccines : "registra"
+    
+    animals ||--o{ internal_dewormings : "historial de"
+    animals ||--o{ external_dewormings : "historial de"
+    veterinary_products ||--o{ internal_dewormings : "producto usado"
+    veterinary_products ||--o{ external_dewormings : "producto usado"
+    
+    animals ||--o{ lab_results : "estudios de"
+    laboratory_catalog ||--o{ lab_results : "tipo de estudio"
     
     animals ||--o{ reports : "tiene"
     animals ||--o{ animal_diagnoses : "tiene"
@@ -44,6 +57,11 @@ A continuación, se detalla cada tabla con sus respectivos campos y tipos de dat
 - `id` (Integer, PK)
 - `name` (String, Unique) - Nombre de la especie (ej. Perro, Gato).
 
+#### `breeds` (Razas de animales)
+- `id` (Integer, PK)
+- `name` (String) - Nombre de la raza (ej. Caniche, Siamés).
+- `species_id` (Integer, FK -> `species.id`) - Especie a la que pertenece la raza.
+
 #### `veterinarians` (Veterinarios asignados)
 - `id` (Integer, PK)
 - `name` (String) - Nombre del veterinario.
@@ -54,93 +72,78 @@ A continuación, se detalla cada tabla con sus respectivos campos y tipos de dat
 - `id` (Integer, PK)
 - `name` (String) - Nombre del animal.
 - `species_id` (Integer, FK -> `species.id`)
+- `breed_id` (Integer, FK -> `breeds.id`, Opcional) - Raza del animal.
 - `veterinarian_id` (Integer, FK -> `veterinarians.id`, Opcional)
 - `birth_date` (Date, Opcional) - Fecha de nacimiento.
 - `sex` (String, Opcional) - Sexo ('M', 'F', 'U').
+- `is_castrated` (Boolean) - Si el animal está castrado.
 - `photo_url` (String, Opcional) - URL de la foto de perfil.
 - `is_active` (Boolean) - Si el animal está activo en el sistema.
 
-### 2. Reportes Diarios
+### 2. Historial Clínico Avanzado (Entidades Débiles)
+
+#### `health_records` (Libreta Sanitaria)
+- `id` (Integer, PK)
+- `animal_id` (Integer, FK -> `animals.id`, Unique) - Relación 1 a 1 con el paciente.
+- `creation_date` (Date) - Fecha en que se creó la libreta.
+- `notes` (String, Opcional) - Notas generales de la libreta.
+
+#### `vaccines` (Historial de Vacunas)
+- `id` (Integer, PK)
+- `health_record_id` (Integer, FK -> `health_records.id`)
+- `name` (String) - Nombre de la vacuna (ej. Séxtuple, Antirrábica).
+- `date_administered` (Date) - Fecha de aplicación.
+- `next_due_date` (Date, Opcional) - Fecha del próximo refuerzo.
+- `lot_number` (String, Opcional) - Número de lote de la vacuna.
+- `veterinarian_name` (String, Opcional) - Veterinario que firmó o aplicó.
+
+#### `internal_dewormings` (Desparasitaciones Internas)
+- `id` (Integer, PK)
+- `animal_id` (Integer, FK -> `animals.id`)
+- `product_id` (Integer, FK -> `veterinary_products.id`) - Referencia al catálogo de productos.
+- `date` (Date) - Fecha de aplicación.
+- `next_due_date` (Date, Opcional) - Fecha de la próxima dosis.
+
+#### `external_dewormings` (Desparasitaciones Externas)
+- `id` (Integer, PK)
+- `animal_id` (Integer, FK -> `animals.id`)
+- `product_id` (Integer, FK -> `veterinary_products.id`) - Referencia al catálogo de productos.
+- `date` (Date) - Fecha de aplicación.
+- `next_due_date` (Date, Opcional) - Fecha de la próxima dosis.
+
+#### `lab_results` (Estudios de Laboratorio)
+- `id` (Integer, PK)
+- `animal_id` (Integer, FK -> `animals.id`)
+- `laboratory_id` (Integer, FK -> `laboratory_catalog.id`) - Referencia al catálogo de tipos de estudios.
+- `date` (Date) - Fecha del estudio.
+- `document_url` (String) - URL física del PDF o imagen alojada en `/uploads/labs`.
+
+### 3. Reportes Diarios
 
 #### `reports` (Reportes generales de estado)
 - `id` (Integer, PK)
 - `created_at` (DateTime) - Fecha y hora de creación.
 - `user_id` (Integer, FK -> `users.id`) - Usuario que creó el reporte.
 - `animal_id` (Integer, FK -> `animals.id`) - Animal al que pertenece el reporte.
-- `audio_transcript` (Text, Opcional) - Texto base transcrito por la IA del audio original.
-- `weight` (Float, Opcional) - Peso registrado en el momento del reporte.
+- `audio_transcript` (Text, Opcional) - Texto transcrito.
+- `weight` (Float, Opcional) - Peso.
 
-#### `report_events` (Eventos o síntomas rutinarios en el reporte)
+#### `report_events` y `report_medications`
+Tablas de eventos y medicaciones administradas en un reporte específico.
+
+### 4. Catálogos Normalizados
+
+#### `veterinary_products` (Catálogo de Productos de Desparasitación)
 - `id` (Integer, PK)
-- `report_id` (Integer, FK -> `reports.id`)
-- `event_type_id` (Integer, FK -> `event_types.id`) - Tipo de evento (agua, pis, caca, etc.).
-- `value` (String, Opcional) - Valor descriptivo (ej. "blanda", "normal").
-- `severity` (Integer, Opcional) - Escala de severidad (1 a 5).
+- `name` (String) - Nombre comercial (ej. Drontal, Bravecto).
+- `type` (String) - 'INTERNAL' o 'EXTERNAL'.
 
-#### `report_medications` (Medicaciones administradas en un reporte)
+#### `laboratory_catalog` (Catálogo de Tipos de Estudios)
 - `id` (Integer, PK)
-- `report_id` (Integer, FK -> `reports.id`)
-- `animal_medication_id` (Integer, FK -> `animal_medications.id`) - Referencia a la medicación asignada al animal.
-- `time_administered` (DateTime) - Hora exacta de administración.
-- `notes` (String, Opcional) - Notas adicionales sobre la toma.
+- `name` (String) - Nombre del estudio (ej. Hemograma Completo, Ecografía).
 
-### 3. Catálogos Normalizados
-
-#### `diagnosis_catalog` (Catálogo de Diagnósticos)
-- `id` (Integer, PK)
-- `name` (String, Unique) - Nombre de la enfermedad/condición.
-
-#### `medication_catalog` (Catálogo de Medicamentos)
-- `id` (Integer, PK)
-- `name` (String, Unique) - Nombre comercial del medicamento.
-- `active_principle` (String, Opcional) - Droga o principio activo.
-
-#### `event_types` (Tipos de Eventos Rutinarios)
-- `id` (Integer, PK)
-- `name` (String, Unique) - Nombre del evento (ej. comida, pis, vómito).
-
-### 4. Tablas Intermedias / Historiales Clínicos
-
-#### `animal_diagnoses` (Diagnósticos asignados a un animal)
-- `id` (Integer, PK)
-- `animal_id` (Integer, FK -> `animals.id`)
-- `diagnosis_id` (Integer, FK -> `diagnosis_catalog.id`)
-- `date_diagnosed` (Date, Opcional) - Fecha en la que se diagnosticó.
-
-#### `animal_medications` (Tratamientos/Medicaciones asignados a un animal)
-- `id` (Integer, PK)
-- `animal_id` (Integer, FK -> `animals.id`)
-- `medication_id` (Integer, FK -> `medication_catalog.id`)
-- `dosage` (String) - Dosis recetada.
-- `frequency` (String) - Frecuencia de toma (ej. "cada 12h").
-- `is_current` (Boolean) - Si el tratamiento sigue activo.
-
-#### `animal_observations` (Observaciones o Alertas permanentes)
-- `id` (Integer, PK)
-- `animal_id` (Integer, FK -> `animals.id`)
-- `observation` (Text) - Descripción de la observación.
-- `created_at` (DateTime) - Fecha de creación.
+#### `diagnosis_catalog` (Diagnósticos), `medication_catalog` (Medicamentos), `event_types` (Tipos de Eventos)
+Catálogos fijos para mantener la normalización de la BDD.
 
 ### 5. Configuración del Sistema de IA
-
-#### `data_dictionary` (Diccionario de Datos para la Inteligencia Artificial - Legacy)
-- `id` (Integer, PK)
-- `table_name` (String, Unique) - Nombre de la tabla destino en BD.
-- `entity_name` (String) - Nombre representativo de la categoría.
-- `synonyms` (String) - Palabras clave para que la IA detecte de qué se habla.
-- `fields_config` (String/JSON) - Esquema JSON con los campos requeridos para extraer.
-
-#### `tag_sets` (Diccionario Auto-Incremental de IA)
-- `id` (Integer, PK)
-- `name` (String, Unique) - Nombre del conjunto semántico (Comida, Agua, Pis, Caca, Enfermedad).
-- `variants` (Text) - Lista separada por comas de sinónimos y modismos. **Este campo se auto-incrementa** a medida que la IA aprende palabras nuevas de los usuarios.
-
-### 6. Multimedia
-
-#### `attachments` (Archivos Adjuntos)
-- `id` (Integer, PK)
-- `animal_id` (Integer, FK -> `animals.id`)
-- `report_id` (Integer, FK -> `reports.id`, Opcional)
-- `file_type` (String) - Tipo de archivo (image, video, lab_result).
-- `file_url` (String) - Ruta o URL donde se aloja el archivo.
-- `uploaded_at` (DateTime) - Fecha de subida.
+Las tablas `data_dictionary` y `tag_sets` (Diccionario Auto-Incremental) manejan el motor semántico NLP del sistema.
