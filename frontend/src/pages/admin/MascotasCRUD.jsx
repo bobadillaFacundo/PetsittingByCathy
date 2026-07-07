@@ -113,6 +113,10 @@ export default function MascotasCRUD() {
     
     const method = editingId ? 'PUT' : 'POST';
 
+    // Convert empty strings to null for optional integer fields
+    const payload = { ...formData };
+    if (payload.breed_id === '') payload.breed_id = null;
+
     try {
       const res = await fetch(url, {
         method,
@@ -120,17 +124,19 @@ export default function MascotasCRUD() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(payload)
       });
 
       if (res.ok) {
         setIsModalOpen(false);
         fetchMascotas();
       } else {
-        alert("Error al guardar la mascota. Asegúrate de ser administrador.");
+        const errorText = await res.text();
+        alert(`Error al guardar la mascota: ${errorText}`);
       }
     } catch (err) {
       console.error(err);
+      alert("Ocurrió un error al conectar con el servidor.");
     }
   };
 
