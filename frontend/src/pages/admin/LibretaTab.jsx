@@ -68,29 +68,29 @@ export default function LibretaTab({ animalId, token }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Vacuna (ej. Séxtuple, Antirrábica)</label>
-            <input type="text" value={newVaccine.name} onChange={e => setNewVaccine({...newVaccine, name: e.target.value})} className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200" />
+            <input type="text" value={newVaccine.name} onChange={e => setNewVaccine({...newVaccine, name: e.target.value})} className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-900" />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Nº de Lote (opcional)</label>
-            <input type="text" value={newVaccine.lot_number} onChange={e => setNewVaccine({...newVaccine, lot_number: e.target.value})} className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200" />
+            <input type="text" value={newVaccine.lot_number} onChange={e => setNewVaccine({...newVaccine, lot_number: e.target.value})} className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-900" />
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Fecha de Aplicación</label>
-            <input type="date" value={newVaccine.date_administered} onChange={e => setNewVaccine({...newVaccine, date_administered: e.target.value})} className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200" />
+            <input type="date" value={newVaccine.date_administered} onChange={e => setNewVaccine({...newVaccine, date_administered: e.target.value})} className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-900" />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Próxima Dosis / Vencimiento</label>
-            <input type="date" value={newVaccine.next_due_date} onChange={e => setNewVaccine({...newVaccine, next_due_date: e.target.value})} className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200" />
+            <input type="date" value={newVaccine.next_due_date} onChange={e => setNewVaccine({...newVaccine, next_due_date: e.target.value})} className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-900" />
           </div>
         </div>
 
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">Veterinario que aplicó</label>
           <div className="flex gap-2">
-            <input type="text" value={newVaccine.veterinarian_name} onChange={e => setNewVaccine({...newVaccine, veterinarian_name: e.target.value})} className="flex-1 text-sm px-3 py-1.5 rounded-lg border border-gray-200" placeholder="Dr. / Dra." />
+            <input type="text" value={newVaccine.veterinarian_name} onChange={e => setNewVaccine({...newVaccine, veterinarian_name: e.target.value})} className="flex-1 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-900" placeholder="Dr. / Dra." />
             <button onClick={handleAdd} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1">
               <Plus size={16} /> Añadir
             </button>

@@ -242,3 +242,34 @@ def add_lab_result(animal_id: int, data: dict, db: Session = Depends(get_db)):
     db.add(item)
     db.commit()
     return item
+
+from fastapi import UploadFile, File
+import os
+import uuid
+
+@router.post("/{animal_id}/lab_results/upload")
+def upload_lab_result(animal_id: int, file: UploadFile = File(...), title: str = None, date: str = None, db: Session = Depends(get_db)):
+    from datetime import datetime
+    
+    # Save file
+    uploads_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "uploads", "labs")
+    os.makedirs(uploads_dir, exist_ok=True)
+    
+    file_ext = os.path.splitext(file.filename)[1]
+    filename = f"{uuid.uuid4()}{file_ext}"
+    file_path = os.path.join(uploads_dir, filename)
+    
+    with open(file_path, "wb") as f:
+        f.write(file.file.read())
+        
+    document_url = f"/uploads/labs/{filename}"
+    
+    item = LabResult(
+        animal_id=animal_id,
+        date=datetime.strptime(date, "%Y-%m-%d").date() if date else datetime.utcnow().date(),
+        title=title or file.filename,
+        document_url=document_url
+    )
+    db.add(item)
+    db.commit()
+    return item

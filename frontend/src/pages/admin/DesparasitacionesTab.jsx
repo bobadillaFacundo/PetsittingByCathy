@@ -68,17 +68,17 @@ export default function DesparasitacionesTab({ animalId, token }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Fecha</label>
-              <input type="date" value={newInterna.date} onChange={e => setNewInterna({...newInterna, date: e.target.value})} className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200" />
+              <input type="date" value={newInterna.date} onChange={e => setNewInterna({...newInterna, date: e.target.value})} className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-900" />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Próxima Dosis</label>
-              <input type="date" value={newInterna.next_due_date} onChange={e => setNewInterna({...newInterna, next_due_date: e.target.value})} className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200" />
+              <input type="date" value={newInterna.next_due_date} onChange={e => setNewInterna({...newInterna, next_due_date: e.target.value})} className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-900" />
             </div>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Producto</label>
             <div className="flex gap-2">
-              <input type="text" placeholder="Ej. Drontal" value={newInterna.product_name} onChange={e => setNewInterna({...newInterna, product_name: e.target.value})} className="flex-1 text-sm px-3 py-1.5 rounded-lg border border-gray-200" />
+              <input type="text" placeholder="Ej. Drontal" value={newInterna.product_name} onChange={e => setNewInterna({...newInterna, product_name: e.target.value})} className="flex-1 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-900" />
               <button onClick={() => handleAdd('interna', newInterna, setNewInterna)} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1">
                 <Plus size={16} /> Añadir
               </button>
@@ -115,17 +115,17 @@ export default function DesparasitacionesTab({ animalId, token }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Fecha</label>
-              <input type="date" value={newExterna.date} onChange={e => setNewExterna({...newExterna, date: e.target.value})} className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200" />
+              <input type="date" value={newExterna.date} onChange={e => setNewExterna({...newExterna, date: e.target.value})} className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-900" />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Próxima Dosis</label>
-              <input type="date" value={newExterna.next_due_date} onChange={e => setNewExterna({...newExterna, next_due_date: e.target.value})} className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200" />
+              <input type="date" value={newExterna.next_due_date} onChange={e => setNewExterna({...newExterna, next_due_date: e.target.value})} className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-900" />
             </div>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Producto</label>
             <div className="flex gap-2">
-              <input type="text" placeholder="Ej. Nexgard, Bravecto" value={newExterna.product_name} onChange={e => setNewExterna({...newExterna, product_name: e.target.value})} className="flex-1 text-sm px-3 py-1.5 rounded-lg border border-gray-200" />
+              <input type="text" placeholder="Ej. Nexgard, Bravecto" value={newExterna.product_name} onChange={e => setNewExterna({...newExterna, product_name: e.target.value})} className="flex-1 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-900" />
               <button onClick={() => handleAdd('externa', newExterna, setNewExterna)} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1">
                 <Plus size={16} /> Añadir
               </button>

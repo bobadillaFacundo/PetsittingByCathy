@@ -349,9 +349,9 @@ export default function MascotasCRUD() {
                   type="text"
                   required
                   value={formData.name}
-                  onChange={e => setFormData({...formData, name: e.target.value})}
-                  className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none bg-gray-50 focus:bg-white text-gray-900"
-                  placeholder="Ej. Firulais"
+                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                  className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-gray-900"
+                  placeholder="Nombre de la mascota"
                 />
               </div>
 
@@ -360,8 +360,8 @@ export default function MascotasCRUD() {
                 <select
                   required
                   value={formData.species_id}
-                  onChange={e => setFormData({...formData, species_id: parseInt(e.target.value), breed_id: ''})}
-                  className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none bg-gray-50 focus:bg-white text-gray-900"
+                  onChange={(e) => setFormData({...formData, species_id: parseInt(e.target.value), breed_id: ''})}
+                  className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-gray-900"
                 >
                   <option value="">Seleccione una especie</option>
                   {speciesList.map(s => (
@@ -374,8 +374,8 @@ export default function MascotasCRUD() {
                 <label className="block text-sm font-bold text-gray-700 mb-1">Raza</label>
                 <select
                   value={formData.breed_id}
-                  onChange={e => setFormData({...formData, breed_id: e.target.value ? parseInt(e.target.value) : null})}
-                  className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none bg-gray-50 focus:bg-white text-gray-900"
+                  onChange={(e) => setFormData({...formData, breed_id: e.target.value ? parseInt(e.target.value) : null})}
+                  className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-gray-900"
                 >
                   <option value="">Desconocida / Sin raza</option>
                   {breedsList
@@ -390,8 +390,8 @@ export default function MascotasCRUD() {
                 <label className="block text-sm font-bold text-gray-700 mb-1">Sexo</label>
                 <select
                   value={formData.sex}
-                  onChange={e => setFormData({...formData, sex: e.target.value})}
-                  className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none bg-gray-50 focus:bg-white text-gray-900"
+                  onChange={(e) => setFormData({...formData, sex: e.target.value})}
+                  className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-gray-900"
                 >
                   <option value="">No definido</option>
                   <option value="M">Macho</option>
