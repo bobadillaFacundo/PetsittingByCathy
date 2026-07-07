@@ -12,7 +12,8 @@ import CatalogsPanel from './CatalogsPanel';
 
 export default function AdminDashboard() {
   const username = localStorage.getItem('username');
-  const [activeTab, setActiveTab] = useState(username === 'admin' ? 'pacientes' : 'diccionario');
+  const isSuperAdmin = username === 'cathy';
+  const [activeTab, setActiveTab] = useState(isSuperAdmin ? 'diccionario' : 'pacientes');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const navigate = useNavigate();
 
@@ -30,13 +31,13 @@ export default function AdminDashboard() {
   };
 
   const navItems = [
-    ...(username !== 'admin' ? [
+    ...(isSuperAdmin ? [
       { id: 'diccionario', label: 'Diccionario IA', icon: BookOpen },
       { id: 'analisis', label: 'Análisis IA', icon: Activity },
     ] : []),
     { id: 'pacientes', label: 'Mascotas', icon: HeartPulse },
     { id: 'catalogos', label: 'Gestión de Catálogos', icon: Settings },
-    ...(username !== 'admin' ? [
+    ...(isSuperAdmin ? [
       { id: 'reportes', label: 'Auditoría Reportes', icon: Database },
       { id: 'usuarios', label: 'Usuarios', icon: Users },
     ] : []),
