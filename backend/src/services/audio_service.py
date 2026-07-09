@@ -92,18 +92,25 @@ class NLPService:
         return response.json()["choices"][0]["message"]["content"]
 
     @staticmethod
-    def generate_clinical_history(animal_name: str, reports_data: list) -> str:
-        """Genera un resumen clínico detallado basado en reportes usando el LLM."""
+    def generate_clinical_history(animal_name: str, reports_data: list, lab_results_data: list = None) -> str:
+        """Genera un resumen clínico detallado basado en reportes y laboratorios usando el LLM."""
         context_text = "\n".join(reports_data)
+        lab_text = ""
+        if lab_results_data:
+            lab_text = "\nTambién se proporcionan resultados de estudios de laboratorio (texto extraído de PDFs adjuntos):\n" + "\n".join(lab_results_data)
+            
         prompt = f"""
 Eres un veterinario jefe redactando una Historia Clínica formal para el paciente '{animal_name}'.
-A continuación, se te proporcionan todos los reportes diarios y eventos del paciente en el período solicitado.
+A continuación, se te proporcionan todos los reportes diarios y eventos del paciente en el período solicitado.{lab_text}
+
 Tu tarea es analizar esta información y redactar un resumen clínico profesional, organizado y fácil de leer.
+Si hay laboratorios, asegúrate de correlacionar la evolución clínica de los reportes con los resultados numéricos o diagnósticos del laboratorio.
 
 Debes incluir (si hay información disponible):
 - Evolución general del estado de ánimo y apetito.
 - Resumen de signos vitales o eventos fisiológicos (orina, heces, vómitos).
 - Evolución de enfermedades o síntomas registrados.
+- Hallazgos relevantes de los estudios de laboratorio (si se proveen).
 - Adherencia a medicación (si aplica).
 - Conclusión veterinaria.
 

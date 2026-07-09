@@ -354,8 +354,38 @@ def export_pdf(
         
     if not reports_data:
         reports_data.append("No hay reportes en este período.")
+
+    from src.models.models import LabResult
+    from sqlalchemy.orm import joinedload
+    import pypdf
+
+    labs = db.query(LabResult).options(joinedload(LabResult.laboratory)).filter(
+        LabResult.animal_id == animal_id, 
+        LabResult.date >= threshold_date.date()
+    ).all()
+
+    lab_results_data = []
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    for lab in labs:
+        doc_url = lab.document_url
+        if not doc_url: continue
+        # doc_url: "/uploads/labs/filename.pdf"
+        file_name = os.path.basename(doc_url)
+        file_path = os.path.join(base_dir, "uploads", "labs", file_name)
         
-    history_text = NLPService.generate_clinical_history(animal.name, reports_data)
+        extracted_text = ""
+        if os.path.exists(file_path) and file_path.endswith(".pdf"):
+            try:
+                reader = pypdf.PdfReader(file_path)
+                text_pages = [page.extract_text() for page in reader.pages if page.extract_text()]
+                extracted_text = "\n".join(text_pages)
+            except Exception as e:
+                extracted_text = f"[Error leyendo PDF: {e}]"
+                
+        if extracted_text:
+            lab_results_data.append(f"Estudio: {lab.laboratory.name if lab.laboratory else 'Laboratorio'} - Fecha: {lab.date}\nContenido PDF:\n{extracted_text}\n---")
+        
+    history_text = NLPService.generate_clinical_history(animal.name, reports_data, lab_results_data)
     
     # Construir PDF
     pdf = FPDF()
