@@ -30,12 +30,68 @@ def get_dashboard(db: Session = Depends(get_db)):
     normal_animals = [a for a in animals if getattr(a, 'severity', 'normal') == 'normal']
     observation_animals = [a for a in animals if getattr(a, 'severity', 'normal') in ['observation', 'critical']]
 
-    # 3. Alertas: Se devuelven vacías porque ahora las alertas vienen del endpoint /weather
-    # Se dejan vacías para retrocompatibilidad rápida si aún no se generó el clima
+    # 3. Alertas de Vacunas y Desparasitaciones (próximos 15 días o vencidas)
+    alerts_list = []
+    from src.models.models import Vaccine, InternalDeworming, ExternalDeworming, HealthRecord, VaccineCatalog, VeterinaryProduct
+    from sqlalchemy.orm import joinedload
+    
+    threshold_date = datetime.utcnow().date() + timedelta(days=15)
+    
+    # Vacunas
+    expiring_vaccines = db.query(Vaccine).join(HealthRecord).filter(
+        Vaccine.next_due_date <= threshold_date
+    ).all()
+    for v in expiring_vaccines:
+        hr = db.query(HealthRecord).filter(HealthRecord.id == v.health_record_id).first()
+        if hr:
+            animal = db.query(Animal).filter(Animal.id == hr.animal_id, Animal.is_active == True).first()
+            if animal:
+                days_left = (v.next_due_date - datetime.utcnow().date()).days
+                msg = f"Vacuna vence en {days_left} días" if days_left >= 0 else f"Vacuna VENCIDA hace {-days_left} días"
+                alerts_list.append(AlertDTO(
+                    animal_id=animal.id,
+                    animal_name=animal.name,
+                    message=msg,
+                    severity="high" if days_left < 0 else "medium"
+                ))
+                
+    # Desparasitaciones Internas
+    expiring_internal = db.query(InternalDeworming).filter(
+        InternalDeworming.next_due_date <= threshold_date
+    ).all()
+    for de in expiring_internal:
+        animal = db.query(Animal).filter(Animal.id == de.animal_id, Animal.is_active == True).first()
+        if animal:
+            days_left = (de.next_due_date - datetime.utcnow().date()).days
+            msg = f"Desparasitación Interna vence en {days_left} días" if days_left >= 0 else f"Desparasitación Interna VENCIDA hace {-days_left} días"
+            alerts_list.append(AlertDTO(
+                animal_id=animal.id,
+                animal_name=animal.name,
+                message=msg,
+                severity="high" if days_left < 0 else "medium"
+            ))
+
+    # Desparasitaciones Externas
+    expiring_external = db.query(ExternalDeworming).filter(
+        ExternalDeworming.next_due_date <= threshold_date
+    ).all()
+    for de in expiring_external:
+        animal = db.query(Animal).filter(Animal.id == de.animal_id, Animal.is_active == True).first()
+        if animal:
+            days_left = (de.next_due_date - datetime.utcnow().date()).days
+            msg = f"Desparasitación Externa vence en {days_left} días" if days_left >= 0 else f"Desparasitación Externa VENCIDA hace {-days_left} días"
+            alerts_list.append(AlertDTO(
+                animal_id=animal.id,
+                animal_name=animal.name,
+                message=msg,
+                severity="high" if days_left < 0 else "medium"
+            ))
+
+    # 4. Retornar
     return DashboardResponse(
         normal_animals=normal_animals,
         observation_animals=observation_animals,
-        alerts=[]
+        alerts=alerts_list
     )
 
 @router.get("/weather")

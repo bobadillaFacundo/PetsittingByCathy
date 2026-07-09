@@ -20,11 +20,15 @@ export default function VoiceRecorder({ onSave }) {
   const [editableTranscript, setEditableTranscript] = useState("");
   const [currentStep, setCurrentStep] = useState(0);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [pendingReports, setPendingReports] = useState(0);
   
   const mediaRecorder = useRef(null);
   const audioChunks = useRef([]);
 
   useEffect(() => {
+    checkPending();
+    window.addEventListener('online', checkPending);
+    
     fetch(`/api/animals/?t=${Date.now()}`, {
       headers: { 
         "Authorization": `Bearer ${localStorage.getItem("token")}`,
@@ -34,6 +38,8 @@ export default function VoiceRecorder({ onSave }) {
       .then(res => res.json())
       .then(data => setAnimals(data))
       .catch(err => console.error("Error fetching animals:", err));
+      
+    return () => window.removeEventListener('online', checkPending);
   }, []);
 
   const startRecording = async () => {
@@ -108,7 +114,87 @@ export default function VoiceRecorder({ onSave }) {
       setCurrentStep(0);
     } catch (error) {
       console.error("Error analizando el audio:", error);
-      alert("Hubo un error procesando el reporte. Por favor, intenta de nuevo.");
+      if (!navigator.onLine || error.message.includes("Failed to fetch") || error.message.includes("NetworkError")) {
+        // Save offline
+        try {
+          const { set } = await import('idb-keyval');
+          const key = `offline_report_${Date.now()}`;
+          await set(key, { animal_name: selectedAnimal.name, audioBlob });
+          alert("Estás sin conexión o hubo un error de red. El reporte se ha guardado en el celular y podrás sincronizarlo luego.");
+          checkPending();
+          setSaveSuccess(true);
+          setSelectedAnimal(null);
+        } catch(idbErr) {
+          console.error("No se pudo guardar localmente:", idbErr);
+          alert("Error crítico: no hay conexión y el dispositivo no permite guardar el reporte localmente.");
+        }
+      } else {
+        alert("Hubo un error procesando el reporte. Por favor, intenta de nuevo.");
+      }
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const checkPending = async () => {
+    try {
+      const { keys } = await import('idb-keyval');
+      const k = await keys();
+      const pending = k.filter(key => key.toString().startsWith('offline_report_')).length;
+      setPendingReports(pending);
+    } catch (err) {
+      console.error("Error checking pending reports", err);
+    }
+  };
+
+  const syncOfflineReports = async () => {
+    if (!navigator.onLine) {
+      alert("Sigues sin conexión. Conéctate a una red primero.");
+      return;
+    }
+    
+    setIsProcessing(true);
+    try {
+      const { keys, get, del } = await import('idb-keyval');
+      const allKeys = await keys();
+      const offlineKeys = allKeys.filter(k => k.toString().startsWith('offline_report_'));
+      
+      let successCount = 0;
+      
+      for (const key of offlineKeys) {
+        const item = await get(key);
+        const formData = new FormData();
+        formData.append("audio_file", item.audioBlob, "reporte_offline.webm");
+        formData.append("animal_name", item.animal_name);
+        
+        try {
+          const response = await fetch(`/api/reports/analyze-and-confirm-batch`, {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` },
+            body: formData,
+          });
+          
+          if (response.ok) {
+            await del(key);
+            successCount++;
+          } else {
+            console.error(`Failed to sync ${key}`);
+          }
+        } catch (err) {
+          console.error(`Network error syncing ${key}`, err);
+        }
+      }
+      
+      if (successCount > 0) {
+        alert(`¡Se sincronizaron ${successCount} reportes correctamente!`);
+      } else {
+        alert("No se pudo sincronizar ningún reporte. Revisa la conexión o contacta a soporte.");
+      }
+      
+      checkPending();
+      if (onSave) onSave();
+    } catch (err) {
+      console.error("Error en sincronización", err);
     } finally {
       setIsProcessing(false);
     }
@@ -151,6 +237,25 @@ export default function VoiceRecorder({ onSave }) {
   return (
     <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-8 flex flex-col items-center relative">
       <h2 className="text-xl font-semibold mb-4 text-gray-800">Reporte Diario Dinámico</h2>
+      
+      {pendingReports > 0 && (
+        <div className="bg-yellow-50 w-full p-4 mb-6 rounded-xl border border-yellow-200 flex flex-col sm:flex-row justify-between items-center gap-4 animate-fade-in-up">
+          <div className="flex items-center gap-3 text-yellow-800">
+            <span className="text-2xl">⚠️</span>
+            <div>
+              <p className="font-bold text-sm">Modo Sin Conexión Activo</p>
+              <p className="text-xs">Tienes {pendingReports} {pendingReports === 1 ? 'reporte pendiente' : 'reportes pendientes'} de enviar a la IA.</p>
+            </div>
+          </div>
+          <button 
+            onClick={syncOfflineReports} 
+            disabled={isProcessing}
+            className="w-full sm:w-auto bg-yellow-500 text-white px-5 py-2 rounded-lg hover:bg-yellow-600 font-bold transition disabled:opacity-50"
+          >
+            {isProcessing ? "Enviando..." : "Sincronizar Ahora"}
+          </button>
+        </div>
+      )}
       
       {!selectedAnimal ? (
         <div className="w-full">

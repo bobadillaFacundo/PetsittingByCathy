@@ -83,6 +83,20 @@ class Animal(Base):
     internal_dewormings = relationship("InternalDeworming", back_populates="animal", cascade="all, delete-orphan")
     external_dewormings = relationship("ExternalDeworming", back_populates="animal", cascade="all, delete-orphan")
     health_record = relationship("HealthRecord", uselist=False, back_populates="animal", cascade="all, delete-orphan")
+    reservations = relationship("Reservation", back_populates="animal", cascade="all, delete-orphan")
+
+# ----------------- GESTIÓN DE RESERVAS ----------------- #
+
+class Reservation(Base):
+    __tablename__ = "reservations"
+    id = Column(Integer, primary_key=True, index=True)
+    animal_id = Column(Integer, ForeignKey("animals.id"), nullable=False)
+    start_date = Column(DateTime, nullable=False)
+    end_date = Column(DateTime, nullable=False)
+    status = Column(String, default="Pendiente") # Pendiente, Confirmada, Ingresada, Finalizada, Cancelada
+    notes = Column(Text, nullable=True)
+
+    animal = relationship("Animal", back_populates="reservations")
 
 # ----------------- ENTIDADES DÉBILES (ANIMAL) ----------------- #
 

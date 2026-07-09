@@ -13,6 +13,8 @@ export default function AnimalHistory({ animalId = 1 }) { // Hardcoded Theo for 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const [exportingPDF, setExportingPDF] = useState(false);
+
   useEffect(() => {
     // LLamada a la API real
     fetch(`/api/animals/${animalId}/history`, {
@@ -29,19 +31,63 @@ export default function AnimalHistory({ animalId = 1 }) { // Hardcoded Theo for 
       });
   }, [animalId]);
 
+  const downloadPDF = async (range) => {
+    setExportingPDF(true);
+    try {
+      const res = await fetch(`/api/reports/export-pdf/${animalId}?range=${range}`, {
+        headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+      });
+      if (!res.ok) throw new Error("Error generating PDF");
+      
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `historia_clinica_${data.animal.name}_${range}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+      alert("Hubo un error generando el PDF. Asegúrate de tener reportes registrados.");
+    } finally {
+      setExportingPDF(false);
+    }
+  };
+
   if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse font-medium">Cargando historial clínico...</div>;
   if (!data || !data.animal) return <div className="p-8 text-center text-red-500 font-medium">No se encontró historial para este animal.</div>;
 
+  const role = localStorage.getItem('role');
+  const isAdmin = role === 'admin';
+
   return (
     <div className="max-w-3xl mx-auto p-6 mt-8 bg-white/50 rounded-3xl">
-      <div className="flex items-center gap-4 mb-8 pb-6 border-b border-gray-200">
-        <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center text-3xl shadow-inner">
-          {SPECIES_INFO[data.animal.species_id]?.emoji || "🐾"}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 pb-6 border-b border-gray-200">
+        <div className="flex items-center gap-4">
+          <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center text-3xl shadow-inner">
+            {SPECIES_INFO[data.animal.species_id]?.emoji || "🐾"}
+          </div>
+          <div>
+            <h2 className="text-3xl font-bold text-gray-900">{data.animal.name}</h2>
+            <p className="text-gray-500 font-medium">Historial Clínico Cronológico</p>
+          </div>
         </div>
-        <div>
-          <h2 className="text-3xl font-bold text-gray-900">{data.animal.name}</h2>
-          <p className="text-gray-500 font-medium">Historial Clínico Cronológico</p>
-        </div>
+        
+        {isAdmin && (
+          <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center gap-2">
+            <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">Exportar Historia con IA</span>
+            {exportingPDF ? (
+              <div className="text-sm font-medium text-indigo-600 animate-pulse py-1.5 px-4 bg-indigo-50 rounded-lg">Generando documento inteligente...</div>
+            ) : (
+              <div className="flex gap-2">
+                <button onClick={() => downloadPDF('1month')} className="px-3 py-1.5 bg-gray-50 hover:bg-indigo-50 hover:text-indigo-700 text-gray-700 text-sm font-bold rounded-lg border transition">1 Mes</button>
+                <button onClick={() => downloadPDF('3months')} className="px-3 py-1.5 bg-gray-50 hover:bg-indigo-50 hover:text-indigo-700 text-gray-700 text-sm font-bold rounded-lg border transition">3 Meses</button>
+                <button onClick={() => downloadPDF('1year')} className="px-3 py-1.5 bg-gray-50 hover:bg-indigo-50 hover:text-indigo-700 text-gray-700 text-sm font-bold rounded-lg border transition">1 Año</button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="relative border-l-2 border-indigo-200 pl-6 ml-4 space-y-8 pb-4">

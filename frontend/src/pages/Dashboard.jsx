@@ -66,6 +66,26 @@ export default function Dashboard() {
   return (
     <div className="max-w-5xl mx-auto space-y-8">
       
+      {/* ALERTAS DE SALUD (Vacunas y Desparasitación) */}
+      {data.alerts && data.alerts.length > 0 && (
+        <div className="bg-yellow-50 border border-yellow-200 p-6 rounded-2xl shadow-sm animate-fade-in-up">
+          <h2 className="text-xl font-bold text-yellow-800 flex items-center gap-2 mb-4">
+            ⚠️ Alertas de Salud y Vacunación
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {data.alerts.map((alert, idx) => (
+              <div key={idx} className={`p-4 rounded-xl border flex items-start gap-3 ${alert.severity === 'high' ? 'bg-red-50 border-red-200 text-red-900' : 'bg-white border-yellow-200 text-yellow-900'}`}>
+                <div className="text-2xl mt-0.5">{alert.severity === 'high' ? '🚨' : '💉'}</div>
+                <div>
+                  <div className="font-bold leading-tight">{alert.animal_name}</div>
+                  <div className="text-sm opacity-90 mt-1 leading-snug">{alert.message}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* EL CLIMA GLOBAL */}
       <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100 p-6 rounded-2xl shadow-sm">
         <div className="flex justify-between items-start mb-4">

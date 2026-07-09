@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Users, Activity, BookOpen, LogOut, Settings, 
-  Menu, X, Home, Database, HeartPulse
+  Menu, X, Home, Database, HeartPulse, FileText
 } from 'lucide-react';
 import MascotasCRUD from './MascotasCRUD';
 import AuditoriaPanel from './AuditoriaPanel';
@@ -10,6 +10,7 @@ import AnalisisPanel from './AnalisisPanel';
 import DiccionarioPanel from './DiccionarioPanel';
 import CatalogsPanel from './CatalogsPanel';
 import UsuariosPanel from './UsuariosPanel';
+import ExportacionPanel from './ExportacionPanel';
 
 export default function AdminDashboard() {
   const username = localStorage.getItem('username');
@@ -38,6 +39,7 @@ export default function AdminDashboard() {
     ] : []),
     { id: 'pacientes', label: 'Mascotas', icon: HeartPulse },
     { id: 'catalogos', label: 'Gestión de Catálogos', icon: Settings },
+    { id: 'exportar', label: 'Exportar Historias', icon: FileText },
     ...(isSuperAdmin ? [
       { id: 'reportes', label: 'Auditoría Reportes', icon: Database },
       { id: 'usuarios', label: 'Usuarios', icon: Users },
@@ -120,6 +122,10 @@ export default function AdminDashboard() {
 
             {activeTab === 'catalogos' && (
               <CatalogsPanel />
+            )}
+
+            {activeTab === 'exportar' && (
+              <ExportacionPanel />
             )}
 
             {activeTab === 'analisis' && (

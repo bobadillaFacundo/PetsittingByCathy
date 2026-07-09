@@ -92,6 +92,38 @@ class NLPService:
         return response.json()["choices"][0]["message"]["content"]
 
     @staticmethod
+    def generate_clinical_history(animal_name: str, reports_data: list) -> str:
+        """Genera un resumen clínico detallado basado en reportes usando el LLM."""
+        context_text = "\n".join(reports_data)
+        prompt = f"""
+Eres un veterinario jefe redactando una Historia Clínica formal para el paciente '{animal_name}'.
+A continuación, se te proporcionan todos los reportes diarios y eventos del paciente en el período solicitado.
+Tu tarea es analizar esta información y redactar un resumen clínico profesional, organizado y fácil de leer.
+
+Debes incluir (si hay información disponible):
+- Evolución general del estado de ánimo y apetito.
+- Resumen de signos vitales o eventos fisiológicos (orina, heces, vómitos).
+- Evolución de enfermedades o síntomas registrados.
+- Adherencia a medicación (si aplica).
+- Conclusión veterinaria.
+
+Usa texto plano con sangrías y saltos de línea claros. NO uses símbolos de Markdown (como asteriscos, negritas o numerales).
+
+Reportes del período:
+{context_text}
+"""
+        messages = [
+            {"role": "system", "content": "Eres un asistente de redacción médica veterinaria avanzado."},
+            {"role": "user", "content": prompt}
+        ]
+        
+        try:
+            return NLPService._call_llm(messages, json_format=False)
+        except Exception as e:
+            print(f"Error generando historia clínica: {e}")
+            return f"## Historia Clínica: {animal_name}\n\n*Ocurrió un error al generar el resumen con IA. Por favor, intente de nuevo.*"
+
+    @staticmethod
     def extract_events_from_transcript(transcript: str, dictionaries: list, animal_name: str, tag_sets: list) -> Dict[str, Any]:
         # Construir configuración de etiquetas
         tags_instructions = ""

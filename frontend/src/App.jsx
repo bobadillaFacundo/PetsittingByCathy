@@ -29,6 +29,8 @@ function AdminRoute({ children }) {
 
 import { useState } from 'react';
 
+import CalendarioPanel from './pages/admin/CalendarioPanel';
+
 function MainApp() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const role = localStorage.getItem('role');
@@ -72,7 +74,7 @@ function MainApp() {
                 : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
             }`}
           >
-            📊 Tablero de Pacientes
+            📊 Tablero
           </button>
           <button 
             onClick={() => setActiveTab('report')}
@@ -82,7 +84,17 @@ function MainApp() {
                 : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
             }`}
           >
-            🎙️ Nuevo Reporte Dinámico
+            🎙️ Nuevo Reporte
+          </button>
+          <button 
+            onClick={() => setActiveTab('calendario')}
+            className={`px-6 py-2 font-bold rounded-full transition-colors flex items-center gap-2 ${
+              activeTab === 'calendario' 
+                ? 'bg-indigo-600 text-white shadow-md' 
+                : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+            }`}
+          >
+            📅 Calendario
           </button>
         </div>
 
@@ -97,6 +109,12 @@ function MainApp() {
         {activeTab === 'dashboard' && (
           <section className="animate-fade-in-up">
             <Dashboard />
+          </section>
+        )}
+
+        {activeTab === 'calendario' && (
+          <section className="animate-fade-in-up">
+            <CalendarioPanel />
           </section>
         )}
 

@@ -20,7 +20,27 @@ class TextAnalyzeRequest(BaseModel):
     animal_name: str
     text: str
 
-from src.auth import get_current_user, get_current_user
+from src.auth import get_current_user
+
+@router.post("/analyze-and-confirm-batch")
+async def analyze_and_confirm_batch(
+    animal_name: str = Form(...),
+    audio_file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    # 1. Analizar el audio (reutilizando la lógica existente)
+    analysis_result = await analyze_voice_report(animal_name, audio_file, db, current_user)
+    
+    # 2. Construir el payload para confirmar (auto-confirmación)
+    confirm_request = ReportConfirmRequest(
+        user_id=current_user.id,
+        transcript=analysis_result["transcript"],
+        extracted_data=analysis_result["extracted_data"]
+    )
+    
+    # 3. Confirmar y guardar en BD
+    return confirm_report(confirm_request, db, current_user)
 
 @router.post("/analyze-voice")
 async def analyze_voice_report(
@@ -300,3 +320,64 @@ def get_all_reports(limit: int = 100, db: Session = Depends(get_db), current_adm
         })
         
     return history
+
+from fastapi.responses import FileResponse
+from fpdf import FPDF
+import tempfile
+import os
+
+@router.get("/export-pdf/{animal_id}")
+def export_pdf(
+    animal_id: int,
+    range: str = "1month",
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    from datetime import datetime, timedelta
+    
+    animal = db.query(Animal).filter(Animal.id == animal_id).first()
+    if not animal:
+        raise HTTPException(status_code=404, detail="Animal no encontrado")
+        
+    days = 30
+    if range == "3months": days = 90
+    if range == "1year": days = 365
+    
+    threshold_date = datetime.utcnow() - timedelta(days=days)
+    
+    reports = db.query(Report).filter(Report.animal_id == animal_id, Report.created_at >= threshold_date).order_by(Report.created_at.asc()).all()
+    
+    reports_data = []
+    for r in reports:
+        dt = r.created_at.strftime("%Y-%m-%d %H:%M")
+        reports_data.append(f"[{dt}] {r.audio_transcript}")
+        
+    if not reports_data:
+        reports_data.append("No hay reportes en este período.")
+        
+    history_text = NLPService.generate_clinical_history(animal.name, reports_data)
+    
+    # Construir PDF
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", size=12)
+    
+    pdf.set_font("Helvetica", 'B', 16)
+    pdf.cell(200, 10, text=f"Historia Clinica: {animal.name}", new_x="LMARGIN", new_y="NEXT", align='C')
+    pdf.set_font("Helvetica", size=10)
+    pdf.cell(200, 10, text=f"Generado el {datetime.utcnow().strftime('%Y-%m-%d')} - Periodo evaluado: ultimos {days} dias", new_x="LMARGIN", new_y="NEXT", align='C')
+    pdf.ln(10)
+    
+    pdf.set_font("Helvetica", size=12)
+    
+    # fpdf2 text rendering
+    # Para evitar problemas con caracteres especiales que la fuente por defecto no soporte
+    safe_text = history_text.encode('latin-1', 'replace').decode('latin-1')
+    pdf.multi_cell(0, 10, text=safe_text)
+    
+    fd, path = tempfile.mkstemp(suffix=".pdf")
+    os.close(fd)
+    
+    pdf.output(path)
+    
+    return FileResponse(path, media_type='application/pdf', filename=f"historia_{animal.name}.pdf")
