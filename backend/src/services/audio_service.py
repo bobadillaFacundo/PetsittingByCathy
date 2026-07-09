@@ -110,6 +110,10 @@ Reglas CRÍTICAS Y OBLIGATORIAS (PENALIZACIÓN SI NO SE CUMPLEN):
    - "standard_set": El nombre exacto del conjunto (Debe coincidir con uno de los conjuntos conocidos).
    - "spoken_variant": El verbo o acción exacta que dijo el usuario (por ejemplo: "morfó", "garcó", "vomitó").
    - "value": El valor, cantidad, estado o descripción. MUY IMPORTANTE: Si es negativo (ej. "no hizo caca", "no comió"), el valor debe ser "no" o "nada". Si es positivo, pon el estado (ej: "todo", "normal", "blanda", "con sangre", "mitad"). Nunca dejes el valor vacío si hay contexto.
+6. Evalúa la urgencia médica global de este reporte para el paciente y asígnala al campo "severity". Solo puedes usar estos valores exactos:
+   - "normal": Si todos los reportes indican que comió, hizo pis y no hay anomalías importantes.
+   - "observation": Si hay síntomas leves o algo inusual que requiere atención sin ser crítico (ej: caca blanda, no comió una vez, poco ánimo).
+   - "critical": Si hay síntomas graves (ej: vómito repetido, sangre, convulsiones, dolor extremo). ¡No seas exagerado, usa critical solo si es una emergencia real!
 
 Conjuntos conocidos permitidos:
 {tags_instructions}
@@ -122,6 +126,7 @@ Respuesta:
   "data": [
     {{
       "animal": "{animal_name}",
+      "severity": "observation",
       "inserts": [
         {{"standard_set": "Comida", "spoken_variant": "morfó", "value": "todo"}},
         {{"standard_set": "Agua", "spoken_variant": "tomó agua", "value": "normal"}},
@@ -204,3 +209,59 @@ REGLAS CRÍTICAS:
         except Exception as e:
             print(f"Error con LLM (evolución): {e}")
             return "Ocurrió un error al generar el análisis. Revisa los logs de la aplicación."
+
+    @staticmethod
+    def generate_global_weather_report(reports_data: list):
+        """Genera un reporte del 'Clima' global y alertas inteligentes basado en los reportes recientes."""
+        reports_text = ""
+        for r in reports_data:
+            reports_text += f"- Mascota: {r['animal']} | Reporte: {r['transcript']} | Fecha: {r['date']}\n"
+
+        prompt = f"""Eres el asistente jefe de una guardería veterinaria.
+Lee los siguientes reportes de las últimas 24 horas y genera el "Clima de Hoy".
+
+Reglas estrictas:
+1. Redacta un párrafo general resumiendo el estado de la guardería (ej: "Día tranquilo, la mayoría comió bien, pero hay algunas alertas en observación"). Usa emojis de clima (☀️, ⛅, ⛈️).
+2. Extrae alertas reales SOLO si hay síntomas que requieran atención (no exageres, si un animal no hizo caca un día no es crítico, pero si vomitó sangre sí).
+3. Responde ÚNICAMENTE en formato JSON válido, sin texto adicional, con la siguiente estructura:
+{{
+  "weather": "Párrafo del clima aquí...",
+  "alerts": [
+    {{
+      "animal_name": "Nombre",
+      "message": "Mensaje corto de la alerta médica o de comportamiento",
+      "severity": "medium" o "high"
+    }}
+  ]
+}}
+
+Reportes de las últimas 24 horas:
+{reports_text}
+"""
+        payload = {
+            "model": VLLM_MODEL,
+            "messages": [
+                {"role": "system", "content": "Eres un asistente JSON de uso veterinario que no alucina."},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.0,
+            "max_tokens": 800,
+            "response_format": {"type": "json_object"}
+        }
+
+        try:
+            response = requests.post(
+                VLLM_URL,
+                json=payload,
+                headers={"Content-Type": "application/json"},
+                timeout=30
+            )
+            response.raise_for_status()
+            ai_text = response.json()["choices"][0]["message"]["content"]
+            return json.loads(ai_text)
+        except Exception as e:
+            print(f"Error generando clima: {e}")
+            return {
+                "weather": "No se pudo generar el clima por un error de conexión con la IA.",
+                "alerts": []
+            }

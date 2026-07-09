@@ -13,10 +13,12 @@ const SPECIES_INFO = {
 export default function Dashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [weatherData, setWeatherData] = useState(null);
+  const [loadingWeather, setLoadingWeather] = useState(false);
   const [selectedAnimal, setSelectedAnimal] = useState(null);
   const [selectedSpeciesId, setSelectedSpeciesId] = useState(null);
 
-  useEffect(() => {
+  const fetchData = () => {
     fetch(`/api/dashboard/`, {
       headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
     })
@@ -29,7 +31,28 @@ export default function Dashboard() {
         console.error(err);
         setLoading(false);
       });
+  };
+
+  useEffect(() => {
+    fetchData();
   }, []);
+
+  const fetchWeather = async () => {
+    setLoadingWeather(true);
+    try {
+      const res = await fetch(`/api/dashboard/weather`, {
+        headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+      });
+      const d = await res.json();
+      setWeatherData(d);
+      // Refresh the dashboard data so animals change visually from green to yellow/red
+      fetchData();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingWeather(false);
+    }
+  };
 
   if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse font-medium">Cargando tablero...</div>;
   if (!data) return <div className="p-8 text-center text-red-500 font-medium">Error al cargar datos del tablero.</div>;
@@ -40,34 +63,59 @@ export default function Dashboard() {
   return (
     <div className="max-w-5xl mx-auto space-y-8">
       
-      {/* SECCIÓN ALERTAS */}
-      {data.alerts.length > 0 && (
-        <div className="bg-red-50 border-l-4 border-red-500 p-6 rounded-2xl shadow-sm">
-          <h2 className="text-xl font-bold text-red-800 mb-4 flex items-center gap-2">
-            ⚠️ Alertas Automáticas
+      {/* EL CLIMA GLOBAL */}
+      <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100 p-6 rounded-2xl shadow-sm">
+        <div className="flex justify-between items-start mb-4">
+          <h2 className="text-xl font-bold text-indigo-900 flex items-center gap-2">
+            🌤️ El Clima de Hoy
           </h2>
-          <div className="space-y-3">
-            {data.alerts.map((alert, idx) => (
-              <div key={idx} className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-red-100">
-                <div>
-                  <span className="font-bold text-gray-900">{alert.animal_name}</span>
-                  <p className="text-sm text-gray-600">{alert.message}</p>
-                </div>
-                <button 
-                  onClick={() => {
-                    // Si hacemos click en alerta, opcionalmente podríamos seleccionar la especie también
-                    // pero vamos a mostrar la ficha directamente.
-                    setSelectedAnimal(alert.animal_id);
-                  }}
-                  className="px-4 py-2 bg-red-100 text-red-700 text-sm font-semibold rounded-lg hover:bg-red-200 transition"
-                >
-                  Ver Ficha
-                </button>
-              </div>
-            ))}
-          </div>
+          <button 
+            onClick={fetchWeather}
+            disabled={loadingWeather}
+            className="px-4 py-2 bg-indigo-600 text-white font-semibold text-sm rounded-xl hover:bg-indigo-700 transition disabled:opacity-50 flex items-center gap-2"
+          >
+            {loadingWeather ? "Analizando reportes..." : "Analizar Clima"}
+          </button>
         </div>
-      )}
+        
+        {loadingWeather ? (
+          <div className="animate-pulse text-indigo-600 bg-white/60 p-4 rounded-xl border border-indigo-50 text-sm font-medium">
+            La Inteligencia Artificial está leyendo los reportes de las últimas 48 horas...
+          </div>
+        ) : weatherData ? (
+          <div className="space-y-4">
+            <div className="text-gray-800 font-medium bg-white/60 p-4 rounded-xl border border-indigo-50">
+              {weatherData.weather}
+            </div>
+            {weatherData.alerts && weatherData.alerts.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <h3 className="font-bold text-red-800 text-sm flex items-center gap-1">⚠️ Alertas Inteligentes Detectadas</h3>
+                {weatherData.alerts.map((alert, idx) => (
+                  <div key={idx} className="flex justify-between items-center bg-red-50 p-3 rounded-lg border border-red-100">
+                    <div>
+                      <span className="font-bold text-gray-900">{alert.animal_name}</span>
+                      <p className="text-sm text-gray-600">{alert.message}</p>
+                    </div>
+                    {alert.animal_id && (
+                      <button 
+                        onClick={() => setSelectedAnimal(alert.animal_id)}
+                        className="px-3 py-1.5 bg-white text-red-600 text-xs font-bold rounded-lg border border-red-200 hover:bg-red-50 transition"
+                      >
+                        Ficha
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="text-indigo-400 text-sm font-medium italic">
+            Presiona "Analizar Clima" para obtener un resumen inteligente.
+          </div>
+        )}
+      </div>
+
 
       {!selectedSpeciesId ? (
         /* VISTA 1: SELECCIÓN DE ESPECIE */

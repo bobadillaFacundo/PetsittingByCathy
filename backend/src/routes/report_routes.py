@@ -193,6 +193,11 @@ def confirm_report(
         if not animal:
             continue
         
+        # Update severity if provided by NLP
+        severity_from_nlp = animal_data.get("severity")
+        if severity_from_nlp in ["normal", "observation", "critical"]:
+            animal.severity = severity_from_nlp
+        
         # Crear Reporte general
         report = Report(
             user_id=current_user.id,
@@ -248,7 +253,7 @@ def confirm_report(
                 db.add(animal_obs)
                 
         db.commit()
-        saved_reports.append({"animal": animal_name, "report_id": report.id})
+        saved_reports.append({"animal": animal_name, "report_id": report.id, "severity_assigned": severity_from_nlp})
         
     return {"status": "success", "message": "Reportes guardados correctamente"}
 

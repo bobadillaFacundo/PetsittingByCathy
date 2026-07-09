@@ -16,6 +16,12 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
             detail="Usuario o contraseña incorrectos",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    if not getattr(user, 'is_active', True):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="La cuenta de usuario está desactivada",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     
     access_token = create_access_token(data={"sub": user.name})
     return {"access_token": access_token, "token_type": "bearer", "role": user.role, "name": user.name}

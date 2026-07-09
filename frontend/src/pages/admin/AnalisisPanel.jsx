@@ -65,13 +65,18 @@ export default function AnalisisPanel() {
     }
   };
 
+  const [isGeneratingAll, setIsGeneratingAll] = useState(false);
+
   const generateAll = async (animalList = animals) => {
+    setIsGeneratingAll(true);
     // Lanzar todas las peticiones en paralelo para que sea más rápido
     const promises = animalList.map(animal => {
       // Solo lanzamos si no está cargando ni tiene datos
       return generateAnalysis(animal.id);
     });
     await Promise.all(promises);
+    setIsGeneratingAll(false);
+    alert("✅ ¡Análisis múltiple completado!");
   };
 
   return (
@@ -90,10 +95,14 @@ export default function AnalisisPanel() {
             const list = selectedSpeciesId ? animals.filter(a => a.species_id === selectedSpeciesId) : animals;
             generateAll(list);
           }}
-          disabled={loadingAnimals || animals.length === 0 || (selectedSpeciesId && animals.filter(a => a.species_id === selectedSpeciesId).length === 0)}
+          disabled={isGeneratingAll || loadingAnimals || animals.length === 0 || (selectedSpeciesId && animals.filter(a => a.species_id === selectedSpeciesId).length === 0)}
           className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50"
         >
-          <Play size={16} /> Generar {selectedSpeciesId ? "para especie" : "Todos"}
+          {isGeneratingAll ? (
+            <><RefreshCw size={16} className="animate-spin" /> Procesando IA...</>
+          ) : (
+            <><Play size={16} /> Generar {selectedSpeciesId ? "para especie" : "Todos"}</>
+          )}
         </button>
       </div>
 

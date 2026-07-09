@@ -27,6 +27,7 @@ class User(Base):
     name = Column(String, unique=True, index=True, nullable=False)
     role = Column(String, default="user") # admin, user
     password_hash = Column(String, nullable=False) # Para autenticación
+    is_active = Column(Boolean, default=True)
 
     reports = relationship("Report", back_populates="user")
 
@@ -68,6 +69,7 @@ class Animal(Base):
     is_castrated = Column(Boolean, default=False)
     photo_url = Column(String, nullable=True)
     is_active = Column(Boolean, default=True) # Para filtrado de dashboard
+    severity = Column(String, default="normal") # normal, observation, critical
 
     species = relationship("Species", back_populates="animals")
     breed = relationship("Breed", back_populates="animals")

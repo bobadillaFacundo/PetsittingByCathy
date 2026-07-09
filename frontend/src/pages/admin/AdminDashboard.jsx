@@ -9,6 +9,7 @@ import AuditoriaPanel from './AuditoriaPanel';
 import AnalisisPanel from './AnalisisPanel';
 import DiccionarioPanel from './DiccionarioPanel';
 import CatalogsPanel from './CatalogsPanel';
+import UsuariosPanel from './UsuariosPanel';
 
 export default function AdminDashboard() {
   const username = localStorage.getItem('username');
@@ -130,16 +131,7 @@ export default function AdminDashboard() {
             )}
             
             {activeTab === 'usuarios' && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-                <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2 mb-2">
-                  <Users className="text-indigo-600" /> Usuarios
-                </h3>
-                <p className="text-sm text-gray-500 mb-6">Cuidadores y Administradores.</p>
-                
-                <div className="bg-gray-50 border border-gray-200 rounded-xl p-8 text-center text-gray-500">
-                  Próximamente: Gestión de cuentas.
-                </div>
-              </div>
+              <UsuariosPanel />
             )}
 
           </div>
