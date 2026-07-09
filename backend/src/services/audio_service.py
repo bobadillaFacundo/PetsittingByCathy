@@ -25,7 +25,7 @@ GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 # vLLM Local (OpenAI compatible en WSL)
 VLLM_MODEL = "Qwen/Qwen2.5-1.5B-Instruct-AWQ"
-VLLM_URL = "http://localhost:8701/v1/chat/completions"
+VLLM_URL = "http://100.82.178.56:8010/v1/chat/completions"
 
 
 class AudioService:

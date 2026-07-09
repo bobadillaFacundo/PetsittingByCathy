@@ -8,3 +8,6 @@ python-dotenv
 faster-whisper
 PyJWT
 bcrypt
+psycopg2-binary
+qdrant-client
+fastembed
