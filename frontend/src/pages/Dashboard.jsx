@@ -19,8 +19,11 @@ export default function Dashboard() {
   const [selectedSpeciesId, setSelectedSpeciesId] = useState(null);
 
   const fetchData = () => {
-    fetch(`/api/dashboard/`, {
-      headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+    fetch(`/api/dashboard/?t=${Date.now()}`, {
+      headers: { 
+        "Authorization": `Bearer ${localStorage.getItem("token")}`,
+        "Cache-Control": "no-cache"
+      }
     })
       .then(res => res.json())
       .then(d => {

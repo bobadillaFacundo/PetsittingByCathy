@@ -25,8 +25,11 @@ export default function VoiceRecorder({ onSave }) {
   const audioChunks = useRef([]);
 
   useEffect(() => {
-    fetch(`/api/animals/`, {
-      headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+    fetch(`/api/animals/?t=${Date.now()}`, {
+      headers: { 
+        "Authorization": `Bearer ${localStorage.getItem("token")}`,
+        "Cache-Control": "no-cache"
+      }
     })
       .then(res => res.json())
       .then(data => setAnimals(data))

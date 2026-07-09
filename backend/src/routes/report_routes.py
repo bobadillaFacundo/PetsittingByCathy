@@ -193,10 +193,26 @@ def confirm_report(
         if not animal:
             continue
         
-        # Update severity if provided by NLP
+        # Auto-calculate immediate severity based on inserts
+        calculated_severity = "normal"
+        for insert in animal_data.get("inserts", []):
+            if insert.get("table_name") == "ReportEvent":
+                etype = insert.get("fields", {}).get("event_type_name", "").lower()
+                val = insert.get("fields", {}).get("value", "").lower()
+                if any(k in etype for k in ["enfermedad", "medicación", "medicacion"]):
+                    calculated_severity = "critical"
+                elif any(k in val for k in ["no", "nada", "sangre", "líquido", "diarrea", "vomit", "herida"]):
+                    calculated_severity = "critical"
+                elif any(k in val for k in ["poco", "blanda", "mitad", "observación", "observacion"]):
+                    if calculated_severity != "critical":
+                        calculated_severity = "observation"
+                        
+        # Update severity if provided by NLP or fallback to calculation
         severity_from_nlp = animal_data.get("severity")
         if severity_from_nlp in ["normal", "observation", "critical"]:
             animal.severity = severity_from_nlp
+        else:
+            animal.severity = calculated_severity
         
         # Crear Reporte general
         report = Report(

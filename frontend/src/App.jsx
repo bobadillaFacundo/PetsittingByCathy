@@ -14,10 +14,24 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
+// Rutas exclusivas de administrador
+function AdminRoute({ children }) {
+  const token = localStorage.getItem('token');
+  const role = localStorage.getItem('role');
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+  if (role !== 'admin') {
+    return <Navigate to="/" replace />;
+  }
+  return children;
+}
+
 import { useState } from 'react';
 
 function MainApp() {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const role = localStorage.getItem('role');
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
@@ -26,12 +40,14 @@ function MainApp() {
           <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain" /> Gestor Guarderia
         </h1>
         <div className="flex gap-4">
-          <button 
-            onClick={() => window.location.href = '/admin'}
-            className="px-4 py-2 bg-indigo-100 text-indigo-700 font-bold rounded-lg hover:bg-indigo-200 transition-colors"
-          >
-            Ajustes / Panel
-          </button>
+          {role === 'admin' && (
+            <button 
+              onClick={() => window.location.href = '/admin'}
+              className="px-4 py-2 bg-indigo-100 text-indigo-700 font-bold rounded-lg hover:bg-indigo-200 transition-colors"
+            >
+              Ajustes / Panel
+            </button>
+          )}
           <button 
             onClick={() => {
               localStorage.removeItem('token');
@@ -60,7 +76,7 @@ function MainApp() {
           </button>
           <button 
             onClick={() => setActiveTab('report')}
-            className={`px-6 py-2 font-bold rounded-full transition-colors ${
+            className={`px-6 py-2 font-bold rounded-full transition-colors flex items-center gap-2 ${
               activeTab === 'report' 
                 ? 'bg-indigo-600 text-white shadow-md' 
                 : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
@@ -108,9 +124,9 @@ function App() {
         <Route 
           path="/admin/*" 
           element={
-            <ProtectedRoute>
+            <AdminRoute>
               <AdminDashboard />
-            </ProtectedRoute>
+            </AdminRoute>
           } 
         />
         

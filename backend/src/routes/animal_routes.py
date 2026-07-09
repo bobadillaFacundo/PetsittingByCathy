@@ -52,8 +52,8 @@ def get_veterinarians(db: Session = Depends(get_db)):
 
 
 @router.get("/", response_model=List[AnimalResponse])
-def get_animals(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    animals = db.query(Animal).offset(skip).limit(limit).all()
+def get_animals(skip: int = 0, limit: int = 1000, db: Session = Depends(get_db)):
+    animals = db.query(Animal).filter(Animal.is_active == True).offset(skip).limit(limit).all()
     return animals
 
 @router.get("/{animal_id}", response_model=AnimalResponse)
