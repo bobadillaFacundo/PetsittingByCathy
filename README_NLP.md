@@ -63,3 +63,13 @@ El backend empaqueta los datos de Qwen, los transforma al formato *Legacy* (mape
 1. **Asistente (Wizard):** El Frontend renderiza la interfaz paso a paso. Muestra la frase limpia (`cleaned_text`) para que el usuario pueda corregirla si lo desea, y dedica una pantalla ("Paso X") por cada síntoma detectado.
 2. **Confirmación:** Al llegar al final de la lista de síntomas, el usuario presiona "Confirmar e Insertar".
 3. **Guardado (Endpoint `/confirm`):** La estructura JSON final se envía de nuevo a FastAPI, el cual itera sobre cada `insert` y guarda físicamente la información en las tablas relacionales correctas (`Report`, `ReportEvent`, `AnimalDiagnosis`, `AnimalObservation`), normalizando de esta manera un audio desordenado en historiales clínicos perfectos.
+
+---
+
+### Fase 5: Analítica Predictiva y Resumen (El Clima de la Guardería)
+
+Además del procesamiento individual de cada audio, la IA actúa como un supervisor analítico global:
+- A través del botón **"Analizar Clima"** en el Panel de Auditoría, el sistema recupera todos los reportes de las **últimas 48 horas**.
+- Se envían estos reportes a la IA bajo un **Prompt de Estricta Objetividad**, con la instrucción explícita de *"no ser creativo ni alarmar sin motivo"*.
+- La IA cruza los datos y genera un resumen clínico neutral (ej. "Día rutinario, a excepción de Kira que presentó heces blandas"). 
+- El sistema también emite `alerts` estructuradas para cualquier animal que haya requerido observación, las cuales se pintan de colores en el frontend según su severidad (Ambar para observación, Rojo para Crítico).
