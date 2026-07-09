@@ -83,9 +83,9 @@ export default function LaboratoriosTab({ animalId, token }) {
         </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Subir Archivo PDF o Imagen</label>
-            <div className="flex gap-2">
-              <input type="file" id="labFileInput" accept=".pdf,image/*" onChange={e => setSelectedFile(e.target.files[0])} className="flex-1 text-sm file:mr-4 file:py-1.5 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 border border-gray-200 rounded-lg p-1 text-gray-900" />
-              <button onClick={handleAdd} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1">
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input type="file" id="labFileInput" accept=".pdf,image/*" onChange={e => setSelectedFile(e.target.files[0])} className="flex-1 text-sm file:mr-4 file:py-1.5 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 border border-gray-200 rounded-lg p-1 text-gray-900 w-full" />
+              <button onClick={handleAdd} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-1 w-full sm:w-auto">
                 <Plus size={16} /> Subir
               </button>
             </div>
