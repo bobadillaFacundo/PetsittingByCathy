@@ -260,25 +260,26 @@ def confirm_report(
 @router.get("/all")
 def get_all_reports(limit: int = 100, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
     from src.dtos.animal_dto import ReportHistoryDTO, EventDTO
-    reports = db.query(Report).order_by(Report.created_at.desc()).limit(limit).all()
+    from sqlalchemy.orm import joinedload
+    
+    reports = db.query(Report).options(
+        joinedload(Report.user),
+        joinedload(Report.animal),
+        joinedload(Report.events).joinedload(ReportEvent.event_type)
+    ).order_by(Report.created_at.desc()).limit(limit).all()
     
     history = []
     for r in reports:
-        events = db.query(ReportEvent).filter(ReportEvent.report_id == r.id).all()
-        user = db.query(User).filter(User.id == r.user_id).first()
-        animal = db.query(Animal).filter(Animal.id == r.animal_id).first()
-        
         event_dtos = []
-        for e in events:
-            etype = db.query(EventType).filter(EventType.id == e.event_type_id).first()
-            event_dtos.append(EventDTO(type=etype.name if etype else "Desconocido", value=e.value))
+        for e in r.events:
+            event_dtos.append(EventDTO(type=e.event_type.name if e.event_type else "Desconocido", value=e.value))
             
         history.append({
             "id": r.id,
             "created_at": r.created_at,
             "transcript": r.audio_transcript,
-            "user_name": user.name if user else "Desconocido",
-            "animal_name": animal.name if animal else "Desconocido",
+            "user_name": r.user.name if r.user else "Desconocido",
+            "animal_name": r.animal.name if r.animal else "Desconocido",
             "events": event_dtos
         })
         
