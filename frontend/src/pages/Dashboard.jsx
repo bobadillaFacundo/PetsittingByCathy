@@ -4,8 +4,8 @@ import AnimalHistory from "./AnimalHistory";
 const SPECIES_INFO = {
   1: { name: "Perros", emoji: "🐶" },
   2: { name: "Gatos", emoji: "🐱" },
-  3: { name: "Conejos", emoji: "🐰" },
-  4: { name: "Loros", emoji: "🦜" },
+  3: { name: "Loros", emoji: "🦜" },
+  4: { name: "Conejos", emoji: "🐰" },
   5: { name: "Tortugas", emoji: "🐢" },
   6: { name: "Erizos", emoji: "🦔" }
 };
