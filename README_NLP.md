@@ -28,31 +28,28 @@ En el **Backend (FastAPI)**, interviene `faster-whisper`:
 
 Aquí entra en juego el Modelo de Lenguaje (LLM) **Qwen 2.5 1.5B Instruct (AWQ)**, que se ejecuta en el servidor de **vLLM** dentro de WSL para aceleración por GPU.
 
-1. **Construcción del Prompt:** 
-   El servidor FastAPI extrae de la base de datos (Tabla `TagSet`) los 5 conjuntos de etiquetas permitidos:
-   - `Comida`
-   - `Agua`
-   - `Pis`
-   - `Caca`
-   - `Enfermedad`
+1. **Construcción del Prompt y Restricciones:** 
+   El servidor FastAPI extrae de la base de datos (Tabla `TagSet`) los conjuntos de etiquetas permitidos (ej. `Comida`, `Agua`, `Pis`, `Caca`, `Enfermedad`, `Medicación`, `Conducta`).
    
-   También extrae las variantes conocidas para cada conjunto (ej. "morfó", "peste").
+   También extrae las variantes conocidas para cada conjunto (ej. "morfó", "diarrea").
+   El Prompt prohíbe **estrictamente** a la IA inventar categorías nuevas (por ejemplo, clasificar como "Vómito" en lugar de asignarlo a "Enfermedad" con valor "vómito").
 
 2. **Ejecución del LLM (Chain of Thought):**
    A Qwen se le ordena ignorar ruidos, saludos o charlas innecesarias. 
    Su salida JSON contiene dos cosas vitales:
    - `cleaned_text`: Una versión resumida y perfecta de lo que el usuario quiso decir, descartando tartamudeos.
-   - `inserts`: Un arreglo de objetos clasificando cada síntoma. Por cada uno, extrae el conjunto (`standard_set`), la palabra exacta usada (`spoken_variant`) y el valor o severidad (`value`).
+   - `inserts`: Un arreglo de objetos clasificando cada evento. Por cada uno, extrae el conjunto (`standard_set`), la palabra exacta usada (`spoken_variant`) y el valor o severidad (`value`).
 
 ---
 
-### Fase 3: Auto-Aprendizaje de Diccionarios (Backend)
+### Fase 3: Auto-Aprendizaje de Diccionarios y Gestión (Admin Panel)
 
 Una vez que FastAPI recibe el JSON estructurado de Qwen, realiza un cruce con la tabla `TagSet`.
 
 - **Auto-Incremento:** El sistema revisa la palabra que capturó Qwen (el `spoken_variant`, por ejemplo: "se atragantó").
 - Si el usuario dice que "se atragantó" pertenece a "Comida", pero el sistema nunca antes había escuchado esa palabra, **la inserta automáticamente en la lista de variantes** de la base de datos.
 - Gracias a esto, el vocabulario del sistema crece orgánicamente con el uso (modismos argentinos, lunfardo, etc.), volviendo al prompt de la IA más robusto para futuros análisis.
+- **Gestión Manual:** El administrador tiene acceso a la pestaña **"Diccionarios IA"** en su panel de control, donde puede auditar todo lo que la IA ha aprendido, borrar clasificaciones erróneas o precargar palabras nuevas manualmente.
 
 ---
 

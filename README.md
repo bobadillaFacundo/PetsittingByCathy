@@ -14,8 +14,9 @@ Bienvenido al repositorio principal del sistema **Petsitting by Cathy**, una pla
 
 3. **📊 Dashboard de Inteligencia de Negocios (BI) & Auditoría:**
    - **El Clima de la Guardería:** Una Inteligencia Artificial lee todos los reportes de las últimas 48 horas y genera un informe global sintetizado, alertando sobre anomalías o brotes de síntomas en la manada.
-   - **Gráficos Interactivos en Tiempo Real:** Gráficos de barras y pastel que permiten hacer clics para cruzar datos y filtrar información al instante.
-   - **Feed de Auditoría por Día:** Historial completo del día a día, agrupado automáticamente con separadores visuales y filtros de fecha precisos.
+   - **Gráficos Interactivos en Tiempo Real:** Los gráficos de Mascotas y Síntomas se sincronizan al hacer clic; tocar una barra de una mascota filtra inmediatamente todo el panel (gráficos de pastel e historial clínico).
+   - **Historial Clínico Inteligente:** La lista de eventos (feed de auditoría) asigna colores semánticos (Rojo, Amarillo, Verde) automáticamente basándose en diccionarios de palabras clave negativas (ej. "nada", "sangre") y de observación (ej. "poco", "blanda"), priorizando siempre la "Enfermedad" y "Medicación" como críticas.
+   - **Gestión de Diccionarios IA:** Un panel administrativo exclusivo permite auditar, crear y editar el vocabulario orgánico que la IA ha ido aprendiendo, permitiendo corregir clasificaciones erróneas o potenciar su entendimiento sin tocar el código fuente.
 
 4. **🗄️ Esquema Relacional de Alta Complejidad:**
    Estructura normalizada para historiales médicos, desparasitaciones, libretas sanitarias y reportes diarios.
