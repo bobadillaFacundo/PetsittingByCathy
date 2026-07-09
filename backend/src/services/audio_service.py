@@ -103,19 +103,17 @@ class NLPService:
 ERES UN EXTRACTOR DE DATOS ESTRICTO. Extrae la información del reporte veterinario para el paciente "{animal_name}" en formato JSON.
 Reglas CRÍTICAS Y OBLIGATORIAS (PENALIZACIÓN SI NO SE CUMPLEN):
 1. SOLO extrae eventos que se mencionaron EXPLÍCITAMENTE. NO INFIERAS, NO ASUMAS, NO INVENTES.
-2. ESTRICTAMENTE PROHIBIDO agregar "Enfermedad" o "Medicacion" a menos que se diga explícitamente (ej: "está enfermo", "vomitó", "le di remedio"). Una revisión normal NO es enfermedad.
-3. NO DUPLIQUES EVENTOS. Cada conjunto (ej. Comida, Pis, Enfermedad) debe aparecer MÁXIMO UNA VEZ por paciente.
-4. Todo el reporte corresponde exclusivamente a "{animal_name}".
-5. Para cada evento extraído, debes indicar:
-   - "standard_set": El nombre exacto del conjunto (Debe coincidir con uno de los conjuntos conocidos).
+2. Todo el reporte corresponde exclusivamente a "{animal_name}".
+3. Para cada evento extraído, debes indicar:
+   - "standard_set": ESTRICTAMENTE UNO DE LOS CONJUNTOS CONOCIDOS LISTADOS ABAJO. ¡PROHIBIDO inventar nombres nuevos! Si es un síntoma o problema general y no hay conjunto específico, usa "Enfermedad" u "Observación".
    - "spoken_variant": El verbo o acción exacta que dijo el usuario (por ejemplo: "morfó", "garcó", "vomitó").
-   - "value": El valor, cantidad, estado o descripción. MUY IMPORTANTE: Si es negativo (ej. "no hizo caca", "no comió"), el valor debe ser "no" o "nada". Si es positivo, pon el estado (ej: "todo", "normal", "blanda", "con sangre", "mitad"). Nunca dejes el valor vacío si hay contexto.
-6. Evalúa la urgencia médica global de este reporte para el paciente y asígnala al campo "severity". Solo puedes usar estos valores exactos:
-   - "normal": Si todos los reportes indican que comió, hizo pis y no hay anomalías importantes.
-   - "observation": Si hay síntomas leves o algo inusual que requiere atención sin ser crítico (ej: caca blanda, no comió una vez, poco ánimo).
-   - "critical": Si hay síntomas graves (ej: vómito repetido, sangre, convulsiones, dolor extremo). ¡No seas exagerado, usa critical solo si es una emergencia real!
+   - "value": El valor, cantidad, estado o descripción. MUY IMPORTANTE: Si es negativo (ej. "no hizo caca"), el valor debe ser "no" o "nada". Si es positivo, pon el estado (ej: "todo", "normal", "blanda", "sangre", "mitad").
+4. Evalúa la urgencia médica global de este reporte para el paciente y asígnala al campo "severity". Solo puedes usar estos valores exactos:
+   - "normal": Si comió, hizo pis y no hay anomalías.
+   - "observation": Si hay síntomas leves o inusuales (ej: caca blanda, no comió, poco ánimo).
+   - "critical": Si hay síntomas graves (ej: vómito repetido, sangre). ¡No seas exagerado, usa critical solo si es emergencia real!
 
-Conjuntos conocidos permitidos:
+Conjuntos conocidos permitidos (USAR ESTRICTAMENTE SOLO ESTOS NOMBRES):
 {tags_instructions}
 
 EJEMPLO (solo formato, NO copiar los datos):
@@ -131,7 +129,7 @@ Respuesta:
         {{"standard_set": "Comida", "spoken_variant": "morfó", "value": "todo"}},
         {{"standard_set": "Agua", "spoken_variant": "tomó agua", "value": "normal"}},
         {{"standard_set": "Caca", "spoken_variant": "hizo caca", "value": "no"}},
-        {{"standard_set": "Vomito", "spoken_variant": "vomitó", "value": "amarillo"}}
+        {{"standard_set": "Enfermedad", "spoken_variant": "vomitó", "value": "amarillo"}}
       ]
     }}
   ]

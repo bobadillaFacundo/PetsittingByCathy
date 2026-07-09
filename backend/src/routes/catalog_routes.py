@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from src.database.session import get_db
-from src.models.models import Species, Breed, LaboratoryCatalog, VaccineCatalog, VeterinaryProduct, Veterinarian
+from src.models.models import Species, Breed, LaboratoryCatalog, VaccineCatalog, VeterinaryProduct, Veterinarian, TagSet
 from src.dtos import catalog_dto
 from src.auth import get_current_user
 
@@ -189,6 +189,36 @@ def update_veterinarian(item_id: int, data: catalog_dto.VeterinarianUpdate, db: 
 @router.delete("/veterinarians/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_veterinarian(item_id: int, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
     item = db.query(Veterinarian).filter(Veterinarian.id == item_id).first()
+    if not item: raise HTTPException(status_code=404, detail="Item not found")
+    db.delete(item)
+    db.commit()
+    return None
+
+# --- TAGSETS (AI DICTIONARIES) ---
+@router.get("/tagsets", response_model=list[catalog_dto.TagSetResponse])
+def get_tagsets(db: Session = Depends(get_db)):
+    return db.query(TagSet).all()
+
+@router.post("/tagsets", response_model=catalog_dto.TagSetResponse)
+def create_tagset(data: catalog_dto.TagSetCreate, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
+    new_item = TagSet(name=data.name, variants=data.variants)
+    db.add(new_item)
+    db.commit()
+    db.refresh(new_item)
+    return new_item
+
+@router.put("/tagsets/{item_id}", response_model=catalog_dto.TagSetResponse)
+def update_tagset(item_id: int, data: catalog_dto.TagSetUpdate, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
+    item = db.query(TagSet).filter(TagSet.id == item_id).first()
+    if not item: raise HTTPException(status_code=404, detail="Item not found")
+    item.variants = data.variants
+    db.commit()
+    db.refresh(item)
+    return item
+
+@router.delete("/tagsets/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_tagset(item_id: int, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
+    item = db.query(TagSet).filter(TagSet.id == item_id).first()
     if not item: raise HTTPException(status_code=404, detail="Item not found")
     db.delete(item)
     db.commit()

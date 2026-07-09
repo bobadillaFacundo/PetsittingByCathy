@@ -67,3 +67,19 @@ class VeterinarianResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+# TagSet (AI Dictionaries)
+class TagSetCreate(BaseModel):
+    name: str
+    variants: str
+
+class TagSetUpdate(BaseModel):
+    variants: str
+
+class TagSetResponse(BaseModel):
+    id: int
+    name: str
+    variants: str
+
+    class Config:
+        from_attributes = True

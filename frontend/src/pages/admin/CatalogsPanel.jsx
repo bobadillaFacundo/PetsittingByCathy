@@ -22,6 +22,7 @@ export default function CatalogsPanel() {
     { id: 'vaccines', label: 'Vacunas' },
     { id: 'products', label: 'Productos Vet.' },
     { id: 'veterinarians', label: 'Veterinarios' },
+    { id: 'tagsets', label: 'Diccionarios IA' },
   ];
 
   return (
@@ -119,6 +120,21 @@ export default function CatalogsPanel() {
               { key: 'name', label: 'Nombre', required: true },
               { key: 'phone', label: 'Teléfono' },
               { key: 'email', label: 'Email' }
+            ]}
+          />
+        )}
+
+        {activeCatalog === 'tagsets' && (
+          <CatalogCRUD
+            title="Diccionarios IA (TagSets)"
+            endpoint="/api/catalogs/tagsets"
+            columns={[
+              { key: 'name', label: 'Conjunto' },
+              { key: 'variants', label: 'Variantes / Palabras clave' }
+            ]}
+            formFields={[
+              { key: 'name', label: 'Nombre de Conjunto (Ej: Alerta Verde, Comida)', required: true },
+              { key: 'variants', label: 'Variantes (separadas por coma)', required: true }
             ]}
           />
         )}

@@ -7,13 +7,32 @@ export default function AuditoriaPanel() {
   const [reports, setReports] = useState([]);
   const [mascotas, setMascotas] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  
+
   const [selectedAnimal, setSelectedAnimal] = useState('');
   const [filterAnimal, setFilterAnimal] = useState('Todas');
+  const [filterSymptom, setFilterSymptom] = useState('Todos');
   const [filterDateStart, setFilterDateStart] = useState('');
   const [filterDateEnd, setFilterDateEnd] = useState('');
   const [weatherData, setWeatherData] = useState(null);
   const [loadingWeather, setLoadingWeather] = useState(false);
+  const getEventBadgeStyle = (e) => {
+    const type = e.type.toLowerCase();
+    const value = (e.value || '').toLowerCase();
+    
+    if (['enfermedad', 'medicación', 'medicacion'].some(k => type.includes(k))) {
+      return 'bg-red-50 text-red-700 border-red-200';
+    }
+    
+    if (['no', 'nada', 'sangre', 'líquido', 'diarrea', 'vomit'].some(v => value.includes(v))) {
+      return 'bg-red-50 text-red-700 border-red-200';
+    }
+    
+    if (['poco', 'blanda', 'mitad', 'observación', 'observacion'].some(v => value.includes(v))) {
+      return 'bg-amber-50 text-amber-700 border-amber-200';
+    }
+    
+    return 'bg-emerald-50 text-emerald-700 border-emerald-100';
+  };
 
   const fetchWeather = async () => {
     setLoadingWeather(true);
@@ -57,6 +76,7 @@ export default function AuditoriaPanel() {
         const animalsData = await animalsRes.json();
         setMascotas(animalsData);
       }
+
     } catch (err) {
       console.error(err);
     } finally {
@@ -71,6 +91,22 @@ export default function AuditoriaPanel() {
   const filteredReports = useMemo(() => {
     return reports.filter(r => {
       const matchAnimal = filterAnimal === 'Todas' || r.animal_name === filterAnimal;
+      let matchSymptom = filterSymptom === 'Todos';
+      if (!matchSymptom) {
+        matchSymptom = r.events.some(e => {
+          const type = e.type.toLowerCase();
+          const value = (e.value || "").toLowerCase();
+          const isRoutine = ['comida', 'agua', 'pis', 'caca'].includes(type);
+          const isAnomaly = ['enfermedad', 'medicación', 'medicacion'].some(k => type.includes(k)) || 
+                            ['no', 'nada', 'poco', 'blanda', 'sangre', 'diarrea', 'vomit', 'líquido', 'herida'].some(v => value.includes(v));
+          if (!isRoutine || isAnomaly) {
+            const chartName = isRoutine ? `Problema con ${e.type}` : e.type;
+            return chartName === filterSymptom;
+          }
+          return false;
+        });
+      }
+
       let matchDate = true;
       const reportDate = r.created_at.split('T')[0];
       if (filterDateStart && filterDateEnd) {
@@ -80,9 +116,9 @@ export default function AuditoriaPanel() {
       } else if (filterDateEnd) {
         matchDate = reportDate <= filterDateEnd;
       }
-      return matchAnimal && matchDate;
+      return matchAnimal && matchSymptom && matchDate;
     });
-  }, [reports, filterAnimal, filterDateStart, filterDateEnd]);
+  }, [reports, filterAnimal, filterSymptom, filterDateStart, filterDateEnd]);
 
   const recentReportsGlobal = useMemo(() => {
     const fortyEightHoursAgo = new Date();
@@ -112,10 +148,28 @@ export default function AuditoriaPanel() {
   const chartDataMascotas = useMemo(() => {
     const counts = {};
     recentReportsGlobal.forEach(r => {
-      counts[r.animal_name] = (counts[r.animal_name] || 0) + 1;
+      let hasSymptom = filterSymptom === 'Todos';
+      if (!hasSymptom) {
+        hasSymptom = r.events.some(e => {
+          const type = e.type.toLowerCase();
+          const value = (e.value || "").toLowerCase();
+          const isRoutine = ['comida', 'agua', 'pis', 'caca'].includes(type);
+          const isAnomaly = ['enfermedad', 'medicación', 'medicacion'].some(k => type.includes(k)) || 
+                            ['no', 'nada', 'poco', 'blanda', 'sangre', 'diarrea', 'vomit', 'líquido', 'herida'].some(v => value.includes(v));
+          if (!isRoutine || isAnomaly) {
+            const chartName = isRoutine ? `Problema con ${e.type}` : e.type;
+            return chartName === filterSymptom;
+          }
+          return false;
+        });
+      }
+      if (hasSymptom) {
+        const petName = r.animal_name.trim();
+        counts[petName] = 1;
+      }
     });
     return Object.keys(counts).map(name => ({ name, Reportes: counts[name] })).sort((a, b) => b.Reportes - a.Reportes);
-  }, [recentReportsGlobal]);
+  }, [recentReportsGlobal, filterSymptom]);
 
   const chartDataSintomas = useMemo(() => {
     const counts = {};
@@ -124,14 +178,16 @@ export default function AuditoriaPanel() {
         const type = e.type.toLowerCase();
         const value = (e.value || "").toLowerCase();
         const isRoutine = ['comida', 'agua', 'pis', 'caca'].includes(type);
-        const isAnomaly = ['no', 'nada', 'poco', 'blanda', 'sangre', 'diarrea', 'vomit', 'líquido'].some(k => value.includes(k));
+        const isAnomaly = ['enfermedad', 'medicación', 'medicacion'].some(k => type.includes(k)) || 
+                          ['no', 'nada', 'poco', 'blanda', 'sangre', 'diarrea', 'vomit', 'líquido', 'herida'].some(v => value.includes(v));
         if (!isRoutine || isAnomaly) {
-            const chartName = isRoutine ? `Problema con ${e.type}` : e.type;
-            counts[chartName] = (counts[chartName] || 0) + 1;
+          const chartName = isRoutine ? `Problema con ${e.type}` : e.type;
+          if (!counts[chartName]) counts[chartName] = new Set();
+          counts[chartName].add(r.animal_name.trim());
         }
       });
     });
-    return Object.keys(counts).map(name => ({ name, value: counts[name] })).sort((a, b) => b.value - a.value);
+    return Object.keys(counts).map(name => ({ name, value: counts[name].size })).sort((a, b) => b.value - a.value);
   }, [recentReportsFiltered]);
 
 
@@ -179,15 +235,15 @@ export default function AuditoriaPanel() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
           <h3 className="text-lg font-bold text-gray-800 mb-4">Reportes por Mascota</h3>
           {chartDataMascotas.length > 0 ? (
-            <div className="h-64">
+            <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartDataMascotas}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
                   <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#6b7280' }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 12, fill: '#6b7280' }} axisLine={false} tickLine={false} allowDecimals={false} />
                   <RechartsTooltip cursor={{ fill: '#f3f4f6' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                  <Bar 
-                    dataKey="Reportes" 
+                  <Bar
+                    dataKey="Reportes"
                     radius={[4, 4, 0, 0]}
                     onClick={(data) => {
                       if (filterAnimal === data.name) {
@@ -199,9 +255,9 @@ export default function AuditoriaPanel() {
                     className="cursor-pointer transition-all"
                   >
                     {chartDataMascotas.map((entry, index) => (
-                      <Cell 
-                        key={`cell-${index}`} 
-                        fill={filterAnimal === 'Todas' || filterAnimal === entry.name ? '#4f46e5' : '#c7d2fe'} 
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={filterAnimal === 'Todas' || filterAnimal === entry.name ? '#4f46e5' : '#c7d2fe'}
                         className="hover:opacity-80 transition-opacity"
                       />
                     ))}
@@ -214,7 +270,39 @@ export default function AuditoriaPanel() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
           <h3 className="text-lg font-bold text-gray-800 mb-4">Distribución de Síntomas</h3>
           {chartDataSintomas.length > 0 ? (
-            <div className="h-64"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={chartDataSintomas} dataKey="value" cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5}>{chartDataSintomas.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><RechartsTooltip /><Legend /></PieChart></ResponsiveContainer></div>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={chartDataSintomas}
+                    dataKey="value"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={5}
+                    onClick={(data) => {
+                      if (filterSymptom === data.name) {
+                        setFilterSymptom('Todos');
+                      } else {
+                        setFilterSymptom(data.name);
+                      }
+                    }}
+                    className="cursor-pointer transition-all"
+                  >
+                    {chartDataSintomas.map((entry, i) => (
+                      <Cell
+                        key={i}
+                        fill={filterSymptom === 'Todos' || filterSymptom === entry.name ? COLORS[i % COLORS.length] : '#f3f4f6'}
+                        className="hover:opacity-80 transition-opacity"
+                      />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                  <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
           ) : <div className="h-64 flex items-center justify-center text-gray-400">Sin datos</div>}
         </div>
       </div>
@@ -223,13 +311,22 @@ export default function AuditoriaPanel() {
         <div className="p-6 border-b border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gray-50/50">
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-black text-gray-900">Historial de Auditoría</h2>
-            {filterAnimal !== 'Todas' && (
-              <span className="bg-indigo-100 text-indigo-700 text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wide">
-                {filterAnimal}
-              </span>
+            {(filterAnimal !== 'Todas' || filterSymptom !== 'Todos') && (
+              <div className="flex gap-2">
+                {filterAnimal !== 'Todas' && (
+                  <span className="bg-indigo-100 text-indigo-700 text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wide">
+                    {filterAnimal}
+                  </span>
+                )}
+                {filterSymptom !== 'Todos' && (
+                  <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wide">
+                    {filterSymptom}
+                  </span>
+                )}
+              </div>
             )}
           </div>
-          
+
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full md:w-auto">
             <span className="text-sm font-bold text-gray-600 hidden sm:inline">Desde:</span>
             <input type="date" value={filterDateStart} onChange={(e) => setFilterDateStart(e.target.value)} className="w-full sm:w-auto px-3 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-gray-900 font-medium uppercase text-sm" />
@@ -250,7 +347,7 @@ export default function AuditoriaPanel() {
                   <h3 className="font-black text-indigo-900">{dateStr}</h3>
                   <div className="flex-1 h-px bg-gray-200"></div>
                 </div>
-                
+
                 {/* Desktop view (table) */}
                 <div className="hidden md:block overflow-x-auto border border-gray-100 rounded-xl">
                   <table className="w-full text-left border-collapse">
@@ -278,11 +375,7 @@ export default function AuditoriaPanel() {
                           <td className="px-6 py-4">
                             <div className="flex flex-wrap gap-1.5">
                               {r.events.map((e, idx) => (
-                                <span key={idx} className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold border ${
-                                  ['Enfermedad', 'Vomito', 'Problema con'].some(k => e.type.includes(k)) || ['no', 'nada', 'blanda', 'sangre'].some(v => (e.value || '').toLowerCase().includes(v))
-                                    ? 'bg-amber-50 text-amber-700 border-amber-200' 
-                                    : 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                                }`}>
+                                <span key={idx} className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold border ${getEventBadgeStyle(e)}`}>
                                   <CheckCircle2 size={12} /> {e.type}: {e.value || 'Sí'}
                                 </span>
                               ))}
@@ -316,24 +409,20 @@ export default function AuditoriaPanel() {
                           </div>
                         </div>
                       </div>
-                      
+
                       <div className="bg-gray-50 p-4 rounded-2xl mb-4 text-sm text-gray-700 italic border border-gray-100 relative">
                         "{r.transcript}"
                       </div>
 
                       <div className="flex flex-wrap gap-1.5 mb-3">
                         {r.events.map((e, idx) => (
-                          <span key={idx} className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border ${
-                            ['Enfermedad', 'Vomito', 'Problema con'].some(k => e.type.includes(k)) || ['no', 'nada', 'blanda', 'sangre'].some(v => (e.value || '').toLowerCase().includes(v))
-                              ? 'bg-amber-50 text-amber-700 border-amber-200' 
-                              : 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                          }`}>
+                          <span key={idx} className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border ${getEventBadgeStyle(e)}`}>
                             <CheckCircle2 size={12} /> {e.type}: {e.value || 'Sí'}
                           </span>
                         ))}
                         {r.events.length === 0 && <span className="text-xs font-medium text-gray-400">Sin hallazgos</span>}
                       </div>
-                      
+
                       <div className="flex justify-between items-center pt-3 border-t border-gray-50 mt-auto">
                         <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Autor</span>
                         <span className="text-xs font-bold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-lg">{r.user_name}</span>

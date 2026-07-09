@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, X } from 'lucide-react';
 
-export default function CatalogCRUD({ title, endpoint, columns, formFields }) {
+export default function CatalogCRUD({ title, endpoint, columns, formFields, hideCreate, hideDelete }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -95,9 +95,11 @@ export default function CatalogCRUD({ title, endpoint, columns, formFields }) {
     <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
       <div className="flex justify-between items-center mb-6">
         <h3 className="text-xl font-bold text-gray-900">{title}</h3>
-        <button onClick={() => openModal()} className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-indigo-700">
-          <Plus size={16} /> Nuevo
-        </button>
+        {!hideCreate && (
+          <button onClick={() => openModal()} className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-indigo-700">
+            <Plus size={16} /> Nuevo
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -127,9 +129,11 @@ export default function CatalogCRUD({ title, endpoint, columns, formFields }) {
                     <button onClick={() => openModal(item)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">
                       <Edit2 size={16} />
                     </button>
-                    <button onClick={() => handleDelete(item.id, item.name)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg">
-                      <Trash2 size={16} />
-                    </button>
+                    {!hideDelete && (
+                      <button onClick={() => handleDelete(item.id, item.name)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg">
+                        <Trash2 size={16} />
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
