@@ -24,7 +24,7 @@ GROQ_MODEL = "llama-3.1-8b-instant"
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 # vLLM Local (OpenAI compatible en WSL)
-VLLM_MODEL = "Qwen/Qwen2.5-1.5B-Instruct-AWQ"
+VLLM_MODEL = "Qwen/Qwen2.5-7B-Instruct-AWQ"
 VLLM_URL = "http://100.82.178.56:8010/v1/chat/completions"
 
 
@@ -67,7 +67,7 @@ class NLPService:
     @staticmethod
     def _call_llm(messages: list, json_format: bool = False) -> str:
         """Llama al LLM (Groq si hay API Key, si no vLLM local)."""
-        is_groq = bool(GROQ_API_KEY)
+        is_groq = False
         
         headers = {
             "Content-Type": "application/json"
