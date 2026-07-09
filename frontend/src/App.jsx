@@ -8,31 +8,17 @@ import InstallPrompt from './components/InstallPrompt';
 // Rutas protegidas genéricas (cualquier usuario autenticado)
 function ProtectedRoute({ children }) {
   const token = localStorage.getItem('token');
-  const username = localStorage.getItem('username');
   if (!token) {
     return <Navigate to="/login" replace />;
-  }
-  if (username === 'admin') {
-    return <Navigate to="/admin" replace />;
   }
   return children;
 }
 
-// Ruta protegida para administradores
-function AdminRoute({ children }) {
-  const token = localStorage.getItem('token');
-  const role = localStorage.getItem('role');
-  
-  if (!token) {
-    return <Navigate to="/login" replace />;
-  }
-  if (role !== 'admin') {
-    return <Navigate to="/" replace />;
-  }
-  return children;
-}
+import { useState } from 'react';
 
 function MainApp() {
+  const [activeTab, setActiveTab] = useState('dashboard');
+
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
       <nav className="bg-white shadow-sm px-8 py-4 mb-8 sticky top-0 z-10 flex justify-between items-center">
@@ -40,14 +26,12 @@ function MainApp() {
           <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain" /> Gestor Guarderia
         </h1>
         <div className="flex gap-4">
-          {localStorage.getItem('role') === 'admin' && (
-            <button 
-              onClick={() => window.location.href = '/admin'}
-              className="px-4 py-2 bg-indigo-100 text-indigo-700 font-bold rounded-lg hover:bg-indigo-200 transition-colors"
-            >
-              Panel Admin
-            </button>
-          )}
+          <button 
+            onClick={() => window.location.href = '/admin'}
+            className="px-4 py-2 bg-indigo-100 text-indigo-700 font-bold rounded-lg hover:bg-indigo-200 transition-colors"
+          >
+            Ajustes / Panel
+          </button>
           <button 
             onClick={() => {
               localStorage.removeItem('token');
@@ -60,15 +44,46 @@ function MainApp() {
           </button>
         </div>
       </nav>
-      <main className="px-4 pb-12 max-w-6xl mx-auto space-y-12">
+      <main className="px-4 pb-12 max-w-6xl mx-auto space-y-8">
+        
+        {/* Navegación por Pestañas */}
+        <div className="flex justify-center gap-4 border-b border-gray-200 pb-4">
+          <button 
+            onClick={() => setActiveTab('dashboard')}
+            className={`px-6 py-2 font-bold rounded-full transition-colors ${
+              activeTab === 'dashboard' 
+                ? 'bg-indigo-600 text-white shadow-md' 
+                : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+            }`}
+          >
+            📊 Tablero de Pacientes
+          </button>
+          <button 
+            onClick={() => setActiveTab('report')}
+            className={`px-6 py-2 font-bold rounded-full transition-colors ${
+              activeTab === 'report' 
+                ? 'bg-indigo-600 text-white shadow-md' 
+                : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+            }`}
+          >
+            🎙️ Nuevo Reporte Dinámico
+          </button>
+        </div>
 
-        <section className="flex justify-center">
-          <VoiceRecorder />
-        </section>
+        {activeTab === 'report' && (
+          <section className="flex justify-center animate-fade-in-up">
+            <div className="w-full max-w-2xl">
+              <VoiceRecorder onSave={() => setActiveTab('dashboard')} />
+            </div>
+          </section>
+        )}
 
-        <section>
-          <Dashboard />
-        </section>
+        {activeTab === 'dashboard' && (
+          <section className="animate-fade-in-up">
+            <Dashboard />
+          </section>
+        )}
+
       </main>
     </div>
   );
@@ -93,9 +108,9 @@ function App() {
         <Route 
           path="/admin/*" 
           element={
-            <AdminRoute>
+            <ProtectedRoute>
               <AdminDashboard />
-            </AdminRoute>
+            </ProtectedRoute>
           } 
         />
         

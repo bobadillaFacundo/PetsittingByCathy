@@ -100,7 +100,10 @@ export default function Dashboard() {
         <div className="animate-fade-in-up">
           <div className="flex items-center gap-4 mb-8">
             <button 
-              onClick={() => setSelectedSpeciesId(null)}
+              onClick={() => {
+                setSelectedSpeciesId(null);
+                setSelectedAnimal(null);
+              }}
               className="p-2 bg-gray-100 text-gray-600 rounded-full hover:bg-gray-200 transition flex items-center justify-center"
               title="Volver a especies"
             >

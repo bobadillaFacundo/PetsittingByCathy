@@ -3,13 +3,13 @@ from sqlalchemy.orm import Session
 from src.database.session import get_db
 from src.models.models import Animal, Species
 from src.dtos.animal_dto import AnimalCreate, AnimalResponse, AnimalUpdate
-from src.auth import get_current_admin
+from src.auth import get_current_user
 from typing import List
 
 router = APIRouter(prefix="/animals", tags=["Animals"])
 
 @router.post("/", response_model=AnimalResponse)
-def create_animal(animal: AnimalCreate, db: Session = Depends(get_db), current_admin = Depends(get_current_admin)):
+def create_animal(animal: AnimalCreate, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
     db_animal = Animal(**animal.model_dump())
     db.add(db_animal)
     db.commit()
@@ -64,7 +64,7 @@ def get_animal(animal_id: int, db: Session = Depends(get_db)):
     return animal
 
 @router.put("/{animal_id}", response_model=AnimalResponse)
-def update_animal(animal_id: int, animal_update: AnimalUpdate, db: Session = Depends(get_db), current_admin = Depends(get_current_admin)):
+def update_animal(animal_id: int, animal_update: AnimalUpdate, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
     db_animal = db.query(Animal).filter(Animal.id == animal_id).first()
     if not db_animal:
         raise HTTPException(status_code=404, detail="Animal no encontrado")
@@ -78,7 +78,7 @@ def update_animal(animal_id: int, animal_update: AnimalUpdate, db: Session = Dep
     return db_animal
 
 @router.delete("/{animal_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_animal(animal_id: int, db: Session = Depends(get_db), current_admin = Depends(get_current_admin)):
+def delete_animal(animal_id: int, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
     db_animal = db.query(Animal).filter(Animal.id == animal_id).first()
     if not db_animal:
         raise HTTPException(status_code=404, detail="Animal no encontrado")

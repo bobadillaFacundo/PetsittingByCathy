@@ -20,7 +20,7 @@ class TextAnalyzeRequest(BaseModel):
     animal_name: str
     text: str
 
-from src.auth import get_current_admin, get_current_user
+from src.auth import get_current_user, get_current_user
 
 @router.post("/analyze-voice")
 async def analyze_voice_report(
@@ -253,7 +253,7 @@ def confirm_report(
     return {"status": "success", "message": "Reportes guardados correctamente"}
 
 @router.get("/all")
-def get_all_reports(limit: int = 100, db: Session = Depends(get_db), current_admin = Depends(get_current_admin)):
+def get_all_reports(limit: int = 100, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
     from src.dtos.animal_dto import ReportHistoryDTO, EventDTO
     reports = db.query(Report).order_by(Report.created_at.desc()).limit(limit).all()
     
