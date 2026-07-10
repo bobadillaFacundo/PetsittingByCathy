@@ -66,10 +66,10 @@ erDiagram
 
 | Forma normal | Estado | Comentario |
 |---|---|---|
-| **1FN** | ✅ Cumple | Variantes, keywords y sinónimos en tablas hijas. `fields_config` sigue como JSON string (config estática). |
-| **2FN** | ✅ Cumple | PK surrogate en todas las tablas. |
-| **3FN** | ✅ Mayormente | Vacunas usan `veterinarian_id` FK. Alertas sin texto redundante. |
-| **BCNF** | ✅ Aceptable | Núcleo transaccional sin anomalías graves. |
+| **1FN** | ✅ Cumple | Sin CSV; variantes/keywords/sinónimos en tablas hijas. `fields_config` queda como JSON de config (no hecho transaccional). |
+| **2FN** | ✅ Cumple | PK surrogate en todas las tablas; sin attrs parciales sobre claves compuestas. |
+| **3FN** | ⚠️ Mayormente | Núcleo clínico OK. Desviaciones **intencionales**: `animals.severity` (caché), `attachments.animal_id` + `report_id` (fotos sin reporte). |
+| **BCNF** | ✅ Aceptable | Determinantes son PK/FK; sin anomalías graves en el núcleo. |
 
 ### Correcciones aplicadas
 
@@ -81,15 +81,38 @@ erDiagram
 | `critical_alerts.message` con nombre embebido | Eliminado; mensaje se compone en API desde `keyword_detected` |
 | Sin UNIQUE en razas, eventos, catálogos | `UNIQUE(species_id, name)` en breeds, `UNIQUE(report_id, event_type_id)` en report_events, `UNIQUE(name)` en catálogos |
 
+### Perfil animal (pelaje / edad / rescate / rasgos) — ¿rompe normalización?
+
+**No.** Los campos nuevos son atómicos (1FN) y dependen solo de la PK de `animals` (2FN/3FN):
+
+| Diseño | Evaluación |
+|--------|------------|
+| `coat_color` texto libre | OK en 1FN. Un catálogo sería UX/filtros, no obligación de 3FN. |
+| Flags `is_blind`, `is_deaf`, etc. | OK para un set cerrado (~5). Tabla `traits` solo si el set crece o se vuelve dinámico. |
+| `is_rescue` + `age_years` **o** rango estimado | Atributos distintos; no viola NF. Hace falta **invariante de negocio** (no mezclar ambos modos). |
+| `is_simil_breed` + `breed_id` | El flag califica el vínculo animal↔raza; no pertenece a `breeds`. |
+| `birth_date` vs `age_years` | Posible redundancia si ambos se usan como hecho; conviene una sola fuente de verdad. |
+
 ### Decisiones de diseño conservadas (válidas)
 
 | Campo | Razón |
 |-------|-------|
-| `attachments.animal_id` + `report_id` | Permite fotos sin reporte asociado |
+| `attachments.animal_id` + `report_id` | Permite fotos sin reporte asociado (redundancia controlada si hay `report_id`) |
 | `animals.severity` | Caché de lectura rápida para el dashboard (`normal` / `observation` / `critical`) |
 | `animals.is_daycare` | Distingue mascotas de guardería (casita) vs externas (solo calendario/reservas). Default `true` |
 | `animals.coat_color` + edad / rescate / SÍMIL / rasgos | Perfil operativo del paciente (texto y flags; sin catálogo de pelajes) |
 | `data_dictionary.fields_config` | JSON de configuración de campos, no dato transaccional |
+
+### Deuda de integridad (no es fallo de forma normal)
+
+Prioridad alta — invariantes a reforzar en API (y opcionalmente CHECK/trigger):
+
+1. Si hay `breed_id`, debe cumplirse `breeds.species_id = animals.species_id`.
+2. Al adjuntar con `report_id`, forzar `attachments.animal_id = reports.animal_id`.
+3. Edad: si `is_rescue` → usar rango y limpiar `age_years`; si no → limpiar `age_estimate_*`.
+4. Considerar `UNIQUE(animal_id, diagnosis_id)` en `animal_diagnoses` (o incluir fecha si se permiten re-diagnósticos).
+
+Opcional: CHECK/enum en `sex`, `severity`, `reservations.status`, `veterinary_products.type`; catálogo de pelaje solo si hace falta filtrar/estadísticas.
 
 ### TagSets obligatorios
 
@@ -114,7 +137,7 @@ Los conjuntos **Comida, Agua, Pis, Caca** se aseguran en migración/helpers (`RE
 ## Detalle de tablas principales
 
 ### `users`
-- `username`, `hashed_password`, `role` (`admin` | `user`), `is_active`
+- `name` (login único), `password_hash`, `role` (`admin` | `user`), `is_active`
 - Auth JWT (`SECRET_KEY`); CRUD en `/users/`
 
 ### `animals`
@@ -177,4 +200,4 @@ Migración: `python -m src.database.migrate_normalize` agrega estas columnas si 
 
 ## Conclusión
 
-El esquema cumple **1FN, 2FN y 3FN** en el núcleo clínico y de configuración IA. Las únicas desviaciones intencionales son cachés de rendimiento (`animals.severity`) y redundancia controlada (`attachments.animal_id`).
+El esquema cumple **1FN y 2FN** de forma sólida. En **3FN** el núcleo clínico está bien; las únicas desviaciones son **desnormalizaciones conscientes** (`animals.severity`, dual FK en `attachments`). El perfil nuevo (pelaje, edad/rescate, SÍMIL, rasgos) **no rompe** las formas normales: la deuda pendiente es de **invariantes de negocio** (coherencia raza↔especie, modos de edad, adjuntos), no de refactor a catálogos/traits.
