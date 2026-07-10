@@ -15,20 +15,23 @@ export default function AnimalHistory({ animalId = 1 }) { // Hardcoded Theo for 
 
   const [exportingPDF, setExportingPDF] = useState(false);
 
+  const [colorRules, setColorRules] = useState([]);
+
   useEffect(() => {
-    // LLamada a la API real
-    fetch(`/api/animals/${animalId}/history`, {
-      headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+    // Fetch History & Color Rules
+    Promise.all([
+      fetch(`/api/animals/${animalId}/history`, { headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` } }),
+      fetch('/api/catalogs/color-rules', { headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` } })
+    ])
+    .then(async ([histRes, rulesRes]) => {
+      if (histRes.ok) setData(await histRes.json());
+      if (rulesRes.ok) setColorRules(await rulesRes.json());
+      setLoading(false);
     })
-      .then(res => res.json())
-      .then(d => {
-        setData(d);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error(err);
-        setLoading(false);
-      });
+    .catch(err => {
+      console.error(err);
+      setLoading(false);
+    });
   }, [animalId]);
 
   const downloadPDF = async (range) => {
@@ -115,10 +118,26 @@ export default function AnimalHistory({ animalId = 1 }) { // Hardcoded Theo for 
                   let colorClass = 'bg-green-50 text-green-700 border-green-200';
                   let dotColor = 'bg-green-400';
 
-                  if (val === 'no' || val === 'nada' || val === 'ninguno') {
+                  let exactRed = [];
+                  let partialRed = [];
+                  let exactYellow = [];
+                  let partialYellow = [];
+                  
+                  colorRules.forEach(r => {
+                    const keys = r.keywords.split(',').map(k => k.trim().toLowerCase()).filter(k => k);
+                    if (r.color === 'red') {
+                      if (r.match_type === 'exact') exactRed.push(...keys);
+                      else partialRed.push(...keys);
+                    } else if (r.color === 'yellow') {
+                      if (r.match_type === 'exact') exactYellow.push(...keys);
+                      else partialYellow.push(...keys);
+                    }
+                  });
+
+                  if (exactRed.includes(val) || partialRed.some(v => val.includes(v))) {
                     colorClass = 'bg-red-50 text-red-700 border-red-200';
                     dotColor = 'bg-red-400';
-                  } else if (val === 'poco' || val === 'un poco' || val === 'mitad' || val === 'regular' || val === 'blanda') {
+                  } else if (exactYellow.includes(val) || partialYellow.some(v => val.includes(v))) {
                     colorClass = 'bg-amber-50 text-amber-700 border-amber-200';
                     dotColor = 'bg-amber-400';
                   }

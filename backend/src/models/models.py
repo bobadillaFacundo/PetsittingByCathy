@@ -21,6 +21,14 @@ class TagSet(Base):
     name = Column(String, unique=True, index=True, nullable=False) # e.g. "Comida"
     variants = Column(Text, nullable=False) # e.g. "comió, morfó, tragó, se alimentó"
 
+class ColorRule(Base):
+    """Reglas de color dinámicas para etiquetas (Rojo, Amarillo)."""
+    __tablename__ = "color_rules"
+    id = Column(Integer, primary_key=True, index=True)
+    color = Column(String, index=True, nullable=False) # e.g. "red" o "yellow"
+    match_type = Column(String, nullable=False) # "exact" o "partial"
+    keywords = Column(Text, nullable=False) # e.g. "no, nada, ninguno"
+
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)

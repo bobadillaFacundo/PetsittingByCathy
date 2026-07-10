@@ -11,6 +11,8 @@ import DiccionarioPanel from './DiccionarioPanel';
 import CatalogsPanel from './CatalogsPanel';
 import UsuariosPanel from './UsuariosPanel';
 import ExportacionPanel from './ExportacionPanel';
+import ColoresPanel from './ColoresPanel';
+import { Palette } from 'lucide-react';
 
 export default function AdminDashboard() {
   const username = localStorage.getItem('username');
@@ -35,6 +37,7 @@ export default function AdminDashboard() {
   const navItems = [
     ...(isSuperAdmin ? [
       { id: 'diccionario', label: 'Diccionario IA', icon: BookOpen },
+      { id: 'colores', label: 'Colores de Reporte', icon: Palette },
       { id: 'analisis', label: 'Análisis IA', icon: Activity },
     ] : []),
     { id: 'pacientes', label: 'Mascotas', icon: HeartPulse },
@@ -114,6 +117,10 @@ export default function AdminDashboard() {
           <div className="max-w-6xl mx-auto space-y-8">
             {activeTab === 'diccionario' && (
               <DiccionarioPanel />
+            )}
+
+            {activeTab === 'colores' && (
+              <ColoresPanel />
             )}
 
             {activeTab === 'pacientes' && (

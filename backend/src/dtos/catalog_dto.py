@@ -83,3 +83,21 @@ class TagSetResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+# ColorRule
+class ColorRuleCreate(BaseModel):
+    color: str
+    match_type: str
+    keywords: str
+
+class ColorRuleUpdate(BaseModel):
+    keywords: str
+
+class ColorRuleResponse(BaseModel):
+    id: int
+    color: str
+    match_type: str
+    keywords: str
+
+    class Config:
+        from_attributes = True

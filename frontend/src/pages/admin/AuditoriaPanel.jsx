@@ -15,22 +15,40 @@ export default function AuditoriaPanel() {
   const [filterDateEnd, setFilterDateEnd] = useState('');
   const [weatherData, setWeatherData] = useState(null);
   const [loadingWeather, setLoadingWeather] = useState(false);
+  const [colorRules, setColorRules] = useState([]);
+
   const getEventBadgeStyle = (e) => {
     const type = e.type.toLowerCase();
     const value = (e.value || '').toLowerCase();
-    
+
     if (['enfermedad', 'medicación', 'medicacion'].some(k => type.includes(k))) {
       return 'bg-red-50 text-red-700 border-red-200';
     }
-    
-    if (['no', 'nada', 'sangre', 'líquido', 'diarrea', 'vomit'].some(v => value.includes(v))) {
+
+    let exactRed = [];
+    let partialRed = [];
+    let exactYellow = [];
+    let partialYellow = [];
+
+    colorRules.forEach(r => {
+      const keys = r.keywords.split(',').map(k => k.trim().toLowerCase()).filter(k => k);
+      if (r.color === 'red') {
+        if (r.match_type === 'exact') exactRed.push(...keys);
+        else partialRed.push(...keys);
+      } else if (r.color === 'yellow') {
+        if (r.match_type === 'exact') exactYellow.push(...keys);
+        else partialYellow.push(...keys);
+      }
+    });
+
+    if (exactRed.includes(value) || partialRed.some(v => value.includes(v))) {
       return 'bg-red-50 text-red-700 border-red-200';
     }
-    
-    if (['poco', 'blanda', 'mitad', 'observación', 'observacion'].some(v => value.includes(v))) {
+
+    if (exactYellow.includes(value) || partialYellow.some(v => value.includes(v))) {
       return 'bg-amber-50 text-amber-700 border-amber-200';
     }
-    
+
     return 'bg-emerald-50 text-emerald-700 border-emerald-100';
   };
 
@@ -54,13 +72,16 @@ export default function AuditoriaPanel() {
   const fetchReports = async () => {
     setIsLoading(true);
     try {
-      const [reportsRes, animalsRes] = await Promise.all([
+      const [reportsRes, animalsRes, rulesRes] = await Promise.all([
         fetch('/api/reports/all', {
           headers: {
             "Authorization": `Bearer ${localStorage.getItem("token")}`
           }
         }),
         fetch('/api/animals/', {
+          headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+        }),
+        fetch('/api/catalogs/color-rules', {
           headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
         })
       ]);
@@ -75,6 +96,11 @@ export default function AuditoriaPanel() {
       if (animalsRes.ok) {
         const animalsData = await animalsRes.json();
         setMascotas(animalsData);
+      }
+      
+      if (rulesRes.ok) {
+        const rulesData = await rulesRes.json();
+        setColorRules(rulesData);
       }
 
     } catch (err) {
@@ -97,8 +123,7 @@ export default function AuditoriaPanel() {
           const type = e.type.toLowerCase();
           const value = (e.value || "").toLowerCase();
           const isRoutine = ['comida', 'agua', 'pis', 'caca'].includes(type);
-          const isAnomaly = ['enfermedad', 'medicación', 'medicacion'].some(k => type.includes(k)) || 
-                            ['no', 'nada', 'poco', 'blanda', 'sangre', 'diarrea', 'vomit', 'líquido', 'herida'].some(v => value.includes(v));
+          const isAnomaly = getEventBadgeStyle(e) !== 'bg-emerald-50 text-emerald-700 border-emerald-100';
           if (!isRoutine || isAnomaly) {
             const chartName = isRoutine ? `Problema con ${e.type}` : e.type;
             return chartName === filterSymptom;
@@ -154,8 +179,7 @@ export default function AuditoriaPanel() {
           const type = e.type.toLowerCase();
           const value = (e.value || "").toLowerCase();
           const isRoutine = ['comida', 'agua', 'pis', 'caca'].includes(type);
-          const isAnomaly = ['enfermedad', 'medicación', 'medicacion'].some(k => type.includes(k)) || 
-                            ['no', 'nada', 'poco', 'blanda', 'sangre', 'diarrea', 'vomit', 'líquido', 'herida'].some(v => value.includes(v));
+          const isAnomaly = getEventBadgeStyle(e) !== 'bg-emerald-50 text-emerald-700 border-emerald-100';
           if (!isRoutine || isAnomaly) {
             const chartName = isRoutine ? `Problema con ${e.type}` : e.type;
             return chartName === filterSymptom;
@@ -178,8 +202,7 @@ export default function AuditoriaPanel() {
         const type = e.type.toLowerCase();
         const value = (e.value || "").toLowerCase();
         const isRoutine = ['comida', 'agua', 'pis', 'caca'].includes(type);
-        const isAnomaly = ['enfermedad', 'medicación', 'medicacion'].some(k => type.includes(k)) || 
-                          ['no', 'nada', 'poco', 'blanda', 'sangre', 'diarrea', 'vomit', 'líquido', 'herida'].some(v => value.includes(v));
+        const isAnomaly = getEventBadgeStyle(e) !== 'bg-emerald-50 text-emerald-700 border-emerald-100';
         if (!isRoutine || isAnomaly) {
           const chartName = isRoutine ? `Problema con ${e.type}` : e.type;
           if (!counts[chartName]) counts[chartName] = new Set();
