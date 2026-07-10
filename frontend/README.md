@@ -59,7 +59,7 @@ src/
 | Diccionario IA | `DiccionarioPanel` | Solo super-admin (`cathy`) |
 | Colores de Reporte | `ColoresPanel` | Solo super-admin |
 | Análisis IA | `AnalisisPanel` | Solo super-admin |
-| Mascotas Guardería | `MascotasCRUD` (`is_daycare`) | Libreta / Labs / Desparasitaciones |
+| Mascotas Guardería | `MascotasCRUD` (`is_daycare`) | Perfil + Libreta / Labs / Desparasitaciones |
 | Mascotas Externas | `MascotasCRUD` | Idem |
 | Catálogos | `CatalogsPanel` | Especies, razas, labs, vacunas, productos, vets |
 | Exportar Historias | `ExportacionPanel` | PDF vía `/reports/export-pdf/{id}` |
@@ -67,6 +67,10 @@ src/
 | Usuarios | `UsuariosPanel` | Solo super-admin |
 
 Modales de mascota/catálogo: `createPortal` a `document.body` para scroll en iOS.
+
+### Perfil en `MascotasCRUD`
+- Color del pelaje, edad o rango estimado (si **Rescate**), raza / **SÍMIL a**, características especiales (ciego, sordo, sin olfato, neurológico, mov. involuntarios).
+- Listado e historial (`AnimalHistory`) muestran estos datos.
 
 ## Calendario
 
@@ -101,10 +105,11 @@ Todo-en-uno (backend + frontend + DevTunnel): `PetsittingByCathy - START.bat` en
 
 ## Autenticación
 
-- Login en `/login` → token JWT en `localStorage`
+- Login en `/login` → token JWT en `localStorage` (expira ~24 h en backend)
 - Header: `Authorization: Bearer <token>`
 - Rol en `localStorage.role` (`admin` | `user`)
 - Super-admin UI: `localStorage.username === 'cathy'`
+- Helpers en `src/lib/auth.js`: si el token venció o la API responde `401`, se limpia la sesión y se redirige a `/login` (evita pantalla blanca)
 
 ## Documentación Relacionada
 

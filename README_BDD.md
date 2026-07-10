@@ -88,6 +88,7 @@ erDiagram
 | `attachments.animal_id` + `report_id` | Permite fotos sin reporte asociado |
 | `animals.severity` | Caché de lectura rápida para el dashboard (`normal` / `observation` / `critical`) |
 | `animals.is_daycare` | Distingue mascotas de guardería (casita) vs externas (solo calendario/reservas). Default `true` |
+| `animals.coat_color` + edad / rescate / SÍMIL / rasgos | Perfil operativo del paciente (texto y flags; sin catálogo de pelajes) |
 | `data_dictionary.fields_config` | JSON de configuración de campos, no dato transaccional |
 
 ### TagSets obligatorios
@@ -117,11 +118,24 @@ Los conjuntos **Comida, Agua, Pis, Caca** se aseguran en migración/helpers (`RE
 - Auth JWT (`SECRET_KEY`); CRUD en `/users/`
 
 ### `animals`
-- `breed_id`, `veterinarian_id`, nombre, sexo, color, fechas, `is_active`
+- Núcleo: `name`, `species_id`, `breed_id`, `veterinarian_id`, `sex`, `is_castrated`, `birth_date`, `photo_url`, `is_active`
 - `is_daycare` (default `true`): casita vs solo calendario
 - `severity`: `normal` | `observation` | `critical` (caché dashboard)
-- Perfil: `coat_color`, `is_rescue`, `age_years` o rango `age_estimate_min`/`age_estimate_max`, `is_simil_breed` (raza = SÍMIL a…)
-- Características: `is_blind`, `is_deaf`, `no_smell`, `has_neurological`, `has_involuntary_movements`
+
+| Campo | Tipo | Uso |
+|-------|------|-----|
+| `coat_color` | string | Color del pelaje |
+| `is_rescue` | bool | Rescate → edad estimada + suele ir con SÍMIL |
+| `age_years` | float | Edad conocida (años) si **no** es rescate |
+| `age_estimate_min` / `age_estimate_max` | float | Rango estimado si es rescate |
+| `is_simil_breed` | bool | La raza elegida es *SÍMIL a…* (no pura) |
+| `is_blind` | bool | Ciego |
+| `is_deaf` | bool | Sordo |
+| `no_smell` | bool | Sin olfato |
+| `has_neurological` | bool | Temas neurológicos |
+| `has_involuntary_movements` | bool | Movimientos involuntarios |
+
+Migración: `python -m src.database.migrate_normalize` agrega estas columnas si faltan.
 
 ### `reservations`
 - `animal_id`, fechas, `status`, notas

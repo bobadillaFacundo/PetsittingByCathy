@@ -42,6 +42,17 @@ Validación en frontend y en `POST/PUT /reservations`.
 - Panel Admin: secciones **Mascotas Guardería** y **Mascotas Externas**.
 - En el modal de mascota: pestañas Libreta sanitaria, Desparasitaciones y Laboratorios.
 
+#### Perfil del animal (alta / edición)
+| Campo | Descripción |
+|-------|-------------|
+| **Color del pelaje** | Texto libre (`coat_color`) |
+| **Edad** | Años exactos (`age_years`) si no es rescate |
+| **Rescate** | Check `is_rescue`: en lugar de edad exacta, rango estimado `age_estimate_min`–`age_estimate_max` |
+| **SÍMIL (raza)** | `is_simil_breed` + `breed_id` → se muestra como *SÍMIL Border Collie* (tamaño / carácter aproximado) |
+| **Características** | Ciego, sordo, sin olfato, temas neurológicos, movimientos involuntarios |
+
+También visibles en el listado admin y en el encabezado del historial clínico.
+
 ### 6. Panel Admin
 Ruta `/admin` (rol `admin`). Super-admin (`username === 'cathy'`) ve además Diccionario IA, Colores, Análisis IA, Auditoría y Usuarios.
 
@@ -60,7 +71,8 @@ Modales de alta/edición con portal a `document.body` (scroll nativo en iOS).
 
 ### 7. Catálogos y Diccionarios IA
 - TagSets **obligatorios** (no eliminables): Comida, Agua, Pis, Caca.
-- Resto de conjuntos, especies, razas, colores, etc. editables en Admin.
+- Resto de conjuntos, especies, razas, labs, vacunas, productos, vets editables en Admin.
+- **Colores de reporte** (verde/amarillo/rojo por keywords) ≠ color del pelaje del animal.
 
 ### 8. Esquema Relacional Normalizado
 Historiales médicos, desparasitaciones, libretas, reservas, reportes, alertas y multimedia.
@@ -135,6 +147,8 @@ La app corre en `http://localhost:5173` con proxy `/api` → `:8000`.
 ## API — Endpoints Relevantes
 
 Todos los endpoints (excepto login) requieren `Authorization: Bearer <token>`.
+
+Si el JWT venció, el frontend (`src/lib/auth.js` + interceptor en `main.jsx`) limpia la sesión y redirige a `/login`.
 
 ### Auth y usuarios
 
