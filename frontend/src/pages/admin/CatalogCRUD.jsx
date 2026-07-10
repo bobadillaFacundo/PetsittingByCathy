@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, X } from 'lucide-react';
 
-export default function CatalogCRUD({ title, endpoint, columns, formFields, hideCreate, hideDelete }) {
+export default function CatalogCRUD({ title, endpoint, columns, formFields, hideCreate, hideDelete, canDeleteItem }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -77,6 +77,12 @@ export default function CatalogCRUD({ title, endpoint, columns, formFields, hide
     }
   };
 
+  const isDeletable = (item) => {
+    if (hideDelete) return false;
+    if (typeof canDeleteItem === 'function') return canDeleteItem(item);
+    return !item.is_required;
+  };
+
   const handleDelete = async (id, name) => {
     if (window.confirm(`¿Eliminar ${name}?`)) {
       try {
@@ -87,7 +93,8 @@ export default function CatalogCRUD({ title, endpoint, columns, formFields, hide
         if (res.ok) {
           fetchItems();
         } else {
-          alert("Error al eliminar.");
+          const errText = await res.text();
+          alert(errText || "Error al eliminar.");
         }
       } catch (err) {
         console.error(err);
@@ -130,10 +137,15 @@ export default function CatalogCRUD({ title, endpoint, columns, formFields, hide
                     </td>
                   ))}
                   <td className="py-3 px-4 text-sm text-right space-x-2">
+                    {item.is_required && (
+                      <span className="inline-block mr-2 px-2 py-0.5 text-xs font-bold rounded-lg bg-amber-50 text-amber-700 border border-amber-200">
+                        Obligatorio
+                      </span>
+                    )}
                     <button onClick={() => openModal(item)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">
                       <Edit2 size={16} />
                     </button>
-                    {!hideDelete && (
+                    {isDeletable(item) && (
                       <button onClick={() => handleDelete(item.id, item.name)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg">
                         <Trash2 size={16} />
                       </button>
@@ -152,8 +164,8 @@ export default function CatalogCRUD({ title, endpoint, columns, formFields, hide
       )}
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex justify-center items-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex justify-center items-end sm:items-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md overflow-hidden shadow-2xl modal-sheet pb-safe sm:pb-0">
             <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
               <h3 className="font-bold text-lg text-gray-800">{editingId ? 'Editar' : 'Nuevo'} Registro</h3>
               <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">
@@ -161,7 +173,9 @@ export default function CatalogCRUD({ title, endpoint, columns, formFields, hide
               </button>
             </div>
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              {formFields.map(f => (
+              {formFields.map(f => {
+                const lockName = editingId && formData.is_required && f.key === 'name';
+                return (
                 <div key={f.key}>
                   <label className="block text-sm font-bold text-gray-700 mb-1">{f.label}</label>
                   {f.type === 'select' ? (
@@ -170,6 +184,7 @@ export default function CatalogCRUD({ title, endpoint, columns, formFields, hide
                       onChange={e => setFormData({...formData, [f.key]: e.target.value})}
                       className="w-full px-4 py-2 rounded-xl border border-gray-200 text-gray-900 bg-white"
                       required={f.required}
+                      disabled={lockName}
                     >
                       <option value="">Seleccione...</option>
                       {f.options && f.options.map(opt => (
@@ -181,12 +196,17 @@ export default function CatalogCRUD({ title, endpoint, columns, formFields, hide
                       type={f.type || 'text'}
                       value={formData[f.key] || ''}
                       onChange={e => setFormData({...formData, [f.key]: e.target.value})}
-                      className="w-full px-4 py-2 rounded-xl border border-gray-200 text-gray-900"
+                      className={`w-full px-4 py-2 rounded-xl border border-gray-200 text-gray-900 ${lockName ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                       required={f.required}
+                      readOnly={lockName}
                     />
                   )}
+                  {lockName && (
+                    <p className="mt-1 text-xs text-amber-700">Este conjunto es obligatorio; solo se pueden editar las variantes.</p>
+                  )}
                 </div>
-              ))}
+                );
+              })}
               <div className="pt-4 flex gap-3">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 px-4 py-2 bg-gray-100 text-gray-600 font-bold rounded-xl hover:bg-gray-200">
                   Cancelar

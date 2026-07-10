@@ -162,6 +162,14 @@ def migrate():
                 set_color_keywords(db, rule, keywords)
             db.commit()
 
+        # --- is_daycare en animals ---
+        inspector = inspect(engine)
+        if table_exists(inspector, "animals") and not column_exists(inspector, "animals", "is_daycare"):
+            print("Agregando animals.is_daycare...")
+            db.execute(text("ALTER TABLE animals ADD COLUMN is_daycare BOOLEAN DEFAULT TRUE NOT NULL"))
+            db.commit()
+            print("  OK animals.is_daycare (existentes = guardería)")
+
         print("\nMigración completada. Reinicia el backend.")
     except Exception as e:
         db.rollback()

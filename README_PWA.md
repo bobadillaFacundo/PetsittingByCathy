@@ -56,17 +56,32 @@ Casos de uso: heridas, aspecto de comida, deposiciones, comportamiento visible.
 
 ## Probar en el Celular (Desarrollo Local)
 
-1. Obtener la IP local del PC (ej. `192.168.1.5`)
-2. En el celular: `http://192.168.1.5:5173`
-3. Asegurarse de que backend (`:8000`) también sea accesible en la red local
+1. En la PC: `cd frontend` → `npm run dev`
+2. Vite arranca con **HTTPS** (certificado de desarrollo)
+3. Anotá la URL que muestra (ej. `https://192.168.1.5:5173`)
+4. En el celular (misma Wi‑Fi), abrí esa URL en **Chrome**
+5. La primera vez Chrome avisará del certificado: tocá **Avanzado → Continuar**
+6. Debería aparecer **Instalar app** (banner o menú ⋮)
+
+> Sin HTTPS, Android **no** permite instalar la PWA (salvo `localhost`).
 
 ---
 
 ## Producción
 
-- **HTTPS obligatorio** para PWA instalable (excepto `localhost`)
+- **HTTPS obligatorio** para PWA instalable
 - Subir frontend (Vercel, Netlify…) y backend (Render, Railway…) con certificado SSL
 - Configurar proxy o CORS para que `/api` apunte al backend en producción
+
+---
+
+## Si no deja instalar en Android
+
+1. Confirmá que la URL empieza con `https://`
+2. Usá Chrome (no el navegador del sistema de algunos fabricantes)
+3. Borrá datos del sitio o abrí en pestaña de incógnito
+4. Menú ⋮ → **Instalar app** / **Agregar a la pantalla de inicio**
+5. Reiniciá `npm run dev` tras cambios de PWA
 
 ---
 
@@ -74,7 +89,7 @@ Casos de uso: heridas, aspecto de comida, deposiciones, comportamiento visible.
 
 | Archivo | Función |
 |---------|---------|
-| `frontend/vite.config.js` | Config PWA y proxy API |
+| `frontend/vite.config.js` | Config PWA, HTTPS y proxy API |
 | `frontend/src/components/InstallPrompt.jsx` | UI de instalación |
 | `frontend/src/components/VoiceRecorder.jsx` | Grabación, offline, fotos |
 | `README_NLP.md` | Pipeline de voz e IA |

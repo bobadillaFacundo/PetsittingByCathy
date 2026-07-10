@@ -16,16 +16,22 @@ except ImportError:
 UPLOAD_DIR = "uploads/audios"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# Configuración de Modelos (Soporta Groq Cloud Free o vLLM Local)
-GROQ_API_KEY = os.getenv("GROQ_API_KEY") # Define esto en tu entorno de producción (ej. Render)
+# Configuración de Modelos
+# Postproceso NLP: siempre el vLLM del servidor (Qwen 7B), no el modelo chico local.
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
+USE_GROQ = os.getenv("USE_GROQ", "").strip().lower() in ("1", "true", "yes")
 
-# Groq es gratuito, veloz y tiene modelos LLaMA
-GROQ_MODEL = "llama-3.1-8b-instant"
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
-# vLLM Local (OpenAI compatible en WSL)
-VLLM_MODEL = "Qwen/Qwen2.5-7B-Instruct-AWQ"
-VLLM_URL = "http://100.82.178.56:8010/v1/chat/completions"
+# Servidor vLLM (Tailscale). Override con VLLM_BASE_URL / VLLM_MODEL si hace falta.
+_VLLM_BASE = os.getenv("VLLM_BASE_URL", "http://100.82.178.56:8010/v1").rstrip("/")
+VLLM_MODEL = os.getenv("VLLM_MODEL", "Qwen/Qwen2.5-7B-Instruct-AWQ")
+VLLM_URL = f"{_VLLM_BASE}/chat/completions"
+
+print(f"[IA] Postproceso NLP -> {VLLM_URL} (modelo={VLLM_MODEL})")
+if USE_GROQ and GROQ_API_KEY:
+    print("[IA] USE_GROQ=1: se usara Groq en lugar del vLLM del servidor")
 
 
 class AudioService:
@@ -65,29 +71,31 @@ class AudioService:
 
 class NLPService:
     @staticmethod
-    def _call_llm(messages: list, json_format: bool = False) -> str:
-        """Llama al LLM (Groq si hay API Key, si no vLLM local)."""
-        is_groq = False
-        
+    def _call_llm(messages: list, json_format: bool = False, temperature: float = None) -> str:
+        """Llama al LLM del servidor (vLLM). Solo usa Groq si USE_GROQ=1."""
+        is_groq = USE_GROQ and bool(GROQ_API_KEY)
+
         headers = {
             "Content-Type": "application/json"
         }
         if is_groq:
             headers["Authorization"] = f"Bearer {GROQ_API_KEY}"
-            
+
+        if temperature is None:
+            temperature = 0.05 if json_format else 0.7
+
         payload = {
             "model": GROQ_MODEL if is_groq else VLLM_MODEL,
             "messages": messages,
-            "temperature": 0.05 if json_format else 0.7
+            "temperature": temperature
         }
-        
-        # El formato JSON puede variar según si el modelo soporta response_format
+
         if json_format:
             payload["response_format"] = {"type": "json_object"}
-            
+
         url = GROQ_URL if is_groq else VLLM_URL
-            
-        response = requests.post(url, headers=headers, json=payload, timeout=60)
+
+        response = requests.post(url, headers=headers, json=payload, timeout=90)
         response.raise_for_status()
         return response.json()["choices"][0]["message"]["content"]
 
@@ -225,25 +233,34 @@ Sé breve, amable y directo. Si no sabes la respuesta o no está en el historial
     @staticmethod
     def analyze_animal_evolution(animal_name: str, history_context: str) -> str:
         system_prompt = f"""
-Eres un veterinario experto analizando la evolución clínica de un paciente llamado "{animal_name}".
-Se te proporcionará un historial reciente de eventos (reportes, comidas, síntomas, deposiciones, etc.).
+Sos un asistente que resume de forma NEUTRA y FACTUAL el historial de "{animal_name}" en una guardería canina.
+No sos un diagnóstico veterinario ni una alerta dramática.
 
-Tu tarea es:
-1. Resumir brevemente el estado actual del animal basándote en los últimos eventos.
-2. Analizar su evolución (si mejoró, empeoró o se mantiene estable respecto a días o reportes previos).
-3. Redactar tu respuesta en un solo párrafo claro, conciso y profesional.
+TONO (obligatorio):
+- Neutro, sobrio, sin dramatizar.
+- Sin alarmismo, sin urgencia inventada, sin lenguaje emocional.
+- Evitá palabras como: "preocupante", "alarmante", "crítico", "grave", "urgente", "peligro", "riesgo alto", "debe atenderse de inmediato".
+- Si algo es anómalo, describilo con calma (ej: "se registró caca blanda") sin magnificarlo.
 
-REGLAS CRÍTICAS:
-- BÁSATE ESTRICTAMENTE Y ÚNICAMENTE en la información proporcionada en el historial.
-- NO ASUMAS, NO INFIERAS Y NO INVENTES síntomas, enfermedades, mejoras ni medicamentos que no estén escritos ahí.
-- Si no hay suficientes datos para analizar una evolución, indícalo amablemente sin inventar nada.
+CONTENIDO:
+1. Un solo párrafo corto (3 a 5 oraciones).
+2. Decí solo lo que aparece en el historial: rutina (comida/agua/pis/caca) y hallazgos explícitos.
+3. Compará reportes solo si hay datos suficientes; si no, decí que hay poca información para comparar.
+4. No inventes causas, diagnósticos, tratamientos ni pronósticos.
+5. No recomiendes visitas al vet ni medidas urgentes salvo que el historial lo diga explícitamente.
+6. Si todo está normal, decilo de forma simple: sin adornos.
+
+REGLAS:
+- Basate ÚNICAMENTE en el historial dado.
+- No asumas ni completes huecos.
+- Preferí "sin cambios relevantes" antes que forzar una evolución.
 """
         try:
             messages = [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Historial de {animal_name}:\n{history_context}"}
+                {"role": "user", "content": f"Historial de {animal_name}:\n{history_context}\n\nRedactá un resumen neutro y breve."}
             ]
-            return NLPService._call_llm(messages, json_format=False)
+            return NLPService._call_llm(messages, json_format=False, temperature=0.1)
         except Exception as e:
             print(f"Error con LLM (evolución): {e}")
             return "Ocurrió un error al generar el análisis. Revisa los logs de la aplicación."

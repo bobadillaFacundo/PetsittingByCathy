@@ -7,6 +7,16 @@ from src.models.models import (
     DataDictionary, DataDictionarySynonym,
 )
 
+# Conjuntos de rutina diaria: siempre presentes y no eliminables.
+REQUIRED_TAG_SETS: dict[str, list[str]] = {
+    "Comida": ["comida", "comió", "morfó", "tragó", "se alimentó", "alimento", "comio", "desayuno", "ceno"],
+    "Agua": ["agua", "tomó", "bebió", "hidratación", "aguita", "tomo", "bebio", "se hidrato", "sed"],
+    "Pis": ["pis", "orina", "meó", "meo", "hizo del uno", "hizo pis", "orino", "pichi"],
+    "Caca": ["caca", "heces", "popó", "defecó", "cagó", "hizo del dos", "garcó", "hizo caca", "popo"],
+}
+
+REQUIRED_TAG_SET_NAMES = frozenset(REQUIRED_TAG_SETS.keys())
+
 
 def parse_csv_values(raw: str) -> list[str]:
     return [v.strip() for v in (raw or "").split(",") if v.strip()]
@@ -14,6 +24,10 @@ def parse_csv_values(raw: str) -> list[str]:
 
 def join_values(values: list[str]) -> str:
     return ", ".join(values)
+
+
+def is_required_tag_set(name: str) -> bool:
+    return bool(name) and name.strip().casefold() in {n.casefold() for n in REQUIRED_TAG_SET_NAMES}
 
 
 # --- TagSet / TagVariant ---
@@ -26,8 +40,39 @@ def get_tag_variants_text(tag_set: TagSet) -> str:
     return join_values(get_tag_variants(tag_set))
 
 
+def ensure_required_tag_sets(db: Session) -> list[TagSet]:
+    """Crea Comida/Agua/Pis/Caca si faltan. No sobrescribe variantes existentes."""
+    existing = {
+        t.name.casefold(): t
+        for t in db.query(TagSet).options(joinedload(TagSet.variants_rel)).all()
+    }
+    created = False
+    for name, defaults in REQUIRED_TAG_SETS.items():
+        if name.casefold() in existing:
+            continue
+        tag_set = TagSet(name=name)
+        db.add(tag_set)
+        db.flush()
+        set_tag_variants(db, tag_set, defaults)
+        existing[name.casefold()] = tag_set
+        created = True
+    if created:
+        db.commit()
+    return load_tag_sets(db)
+
+
 def load_tag_sets(db: Session) -> list[TagSet]:
-    return db.query(TagSet).options(joinedload(TagSet.variants_rel)).all()
+    sets = db.query(TagSet).options(joinedload(TagSet.variants_rel)).all()
+    # Obligatorios primero, luego el resto por nombre
+    required_order = {n.casefold(): i for i, n in enumerate(REQUIRED_TAG_SETS.keys())}
+
+    def sort_key(t: TagSet):
+        key = t.name.casefold()
+        if key in required_order:
+            return (0, required_order[key])
+        return (1, key)
+
+    return sorted(sets, key=sort_key)
 
 
 def set_tag_variants(db: Session, tag_set: TagSet, variants: list[str]) -> None:
@@ -57,6 +102,7 @@ def tag_set_to_dict(tag_set: TagSet) -> dict:
         "name": tag_set.name,
         "variants": variants,
         "variants_text": join_values(variants),
+        "is_required": is_required_tag_set(tag_set.name),
     }
 
 

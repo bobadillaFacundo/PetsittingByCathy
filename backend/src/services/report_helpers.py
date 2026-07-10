@@ -15,11 +15,17 @@ def calculate_severity_from_inserts(inserts: list) -> str:
             val = insert.get("fields", {}).get("value", "").lower()
             if any(k in etype for k in ["enfermedad", "medicación", "medicacion"]):
                 return "critical"
+            if any(k in etype for k in ["observacion", "observación", "nota"]):
+                if severity != "critical":
+                    severity = "observation"
             if any(k in val for k in ["no", "nada", "sangre", "líquido", "diarrea", "vomit", "herida"]):
                 severity = "critical"
             elif any(k in val for k in ["poco", "blanda", "mitad", "observación", "observacion"]):
                 if severity != "critical":
                     severity = "observation"
+        elif insert.get("table_name") == "AnimalObservation":
+            if severity != "critical":
+                severity = "observation"
     return severity
 
 

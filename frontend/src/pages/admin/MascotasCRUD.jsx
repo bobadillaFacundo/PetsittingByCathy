@@ -13,7 +13,7 @@ const SPECIES_INFO = {
   6: { name: "Erizos", emoji: "🦔" }
 };
 
-export default function MascotasCRUD() {
+export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
   const [mascotas, setMascotas] = useState([]);
   const [speciesList, setSpeciesList] = useState([]);
   const [breedsList, setBreedsList] = useState([]);
@@ -30,20 +30,27 @@ export default function MascotasCRUD() {
     breed_id: '',
     sex: '',
     is_castrated: false,
-    is_active: true
+    is_active: true,
+    is_daycare: daycareOnly
   });
 
   const token = localStorage.getItem('token');
+  const sectionTitle = title || (daycareOnly ? 'Mascotas Guardería' : 'Mascotas Externas');
+  const sectionSubtitle = subtitle || (daycareOnly
+    ? 'Pacientes que se alojan en la guardería'
+    : 'Mascotas para servicios de veterinaria o baño (sin estadía)');
 
   useEffect(() => {
+    setSelectedSpeciesId(null);
+    setIsLoading(true);
     fetchMascotas();
     fetchSpecies();
     fetchBreeds();
-  }, []);
+  }, [daycareOnly]);
 
   const fetchMascotas = async () => {
     try {
-      const res = await fetch(`/api/animals/`, {
+      const res = await fetch(`/api/animals/?is_daycare=${daycareOnly}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) {
@@ -98,7 +105,8 @@ export default function MascotasCRUD() {
         breed_id: mascota.breed_id || '',
         sex: mascota.sex || '',
         is_castrated: mascota.is_castrated || false,
-        is_active: mascota.is_active
+        is_active: mascota.is_active,
+        is_daycare: mascota.is_daycare ?? daycareOnly
       });
     } else {
       setEditingId(null);
@@ -108,7 +116,8 @@ export default function MascotasCRUD() {
         breed_id: '',
         sex: 'M',
         is_castrated: false,
-        is_active: true
+        is_active: true,
+        is_daycare: daycareOnly
       });
     }
     setModalTab('basic');
@@ -182,8 +191,8 @@ export default function MascotasCRUD() {
       {/* Encabezado */}
       <div className="p-4 sm:p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 rounded-t-2xl gap-2">
         <div>
-          <h2 className="text-lg sm:text-xl font-bold text-gray-800">Directorio de Mascotas</h2>
-          <p className="text-xs sm:text-sm text-gray-500 mt-0.5 sm:mt-1">Gestiona los pacientes de la guardería</p>
+          <h2 className="text-lg sm:text-xl font-bold text-gray-800">{sectionTitle}</h2>
+          <p className="text-xs sm:text-sm text-gray-500 mt-0.5 sm:mt-1">{sectionSubtitle}</p>
         </div>
         <button 
           onClick={() => openModal()}
@@ -355,8 +364,8 @@ export default function MascotasCRUD() {
 
       {/* Modal / Formulario */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full max-w-md overflow-hidden modal-sheet pb-safe sm:pb-0">
             <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <h3 className="text-lg font-bold text-gray-800">
                 {editingId ? 'Editar Mascota' : 'Nueva Mascota'}

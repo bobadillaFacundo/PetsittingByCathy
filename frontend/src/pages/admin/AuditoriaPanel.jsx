@@ -13,16 +13,20 @@ export default function AuditoriaPanel() {
   const [filterSymptom, setFilterSymptom] = useState('Todos');
   const [filterDateStart, setFilterDateStart] = useState('');
   const [filterDateEnd, setFilterDateEnd] = useState('');
+  const [filterColor, setFilterColor] = useState('Todos'); // Todos | green | yellow | red
   const [weatherData, setWeatherData] = useState(null);
   const [loadingWeather, setLoadingWeather] = useState(false);
   const [colorRules, setColorRules] = useState([]);
 
-  const getEventBadgeStyle = (e) => {
-    const type = e.type.toLowerCase();
+  const getEventColor = (e) => {
+    const type = (e.type || '').toLowerCase();
     const value = (e.value || '').toLowerCase();
 
     if (['enfermedad', 'medicación', 'medicacion'].some(k => type.includes(k))) {
-      return 'bg-red-50 text-red-700 border-red-200';
+      return 'red';
+    }
+    if (['observacion', 'observación', 'nota'].some(k => type.includes(k))) {
+      return 'yellow';
     }
 
     let exactRed = [];
@@ -31,7 +35,7 @@ export default function AuditoriaPanel() {
     let partialYellow = [];
 
     colorRules.forEach(r => {
-      const keys = r.keywords.split(',').map(k => k.trim().toLowerCase()).filter(k => k);
+      const keys = (r.keywords || '').split(',').map(k => k.trim().toLowerCase()).filter(k => k);
       if (r.color === 'red') {
         if (r.match_type === 'exact') exactRed.push(...keys);
         else partialRed.push(...keys);
@@ -41,14 +45,23 @@ export default function AuditoriaPanel() {
       }
     });
 
-    if (exactRed.includes(value) || partialRed.some(v => value.includes(v))) {
-      return 'bg-red-50 text-red-700 border-red-200';
-    }
+    if (exactRed.includes(value) || partialRed.some(v => value.includes(v))) return 'red';
+    if (exactYellow.includes(value) || partialYellow.some(v => value.includes(v))) return 'yellow';
+    return 'green';
+  };
 
-    if (exactYellow.includes(value) || partialYellow.some(v => value.includes(v))) {
-      return 'bg-amber-50 text-amber-700 border-amber-200';
-    }
+  const getReportColor = (report) => {
+    const events = report.events || [];
+    if (events.length === 0) return 'green';
+    if (events.some(e => getEventColor(e) === 'red')) return 'red';
+    if (events.some(e => getEventColor(e) === 'yellow')) return 'yellow';
+    return 'green';
+  };
 
+  const getEventBadgeStyle = (e) => {
+    const color = getEventColor(e);
+    if (color === 'red') return 'bg-red-50 text-red-700 border-red-200';
+    if (color === 'yellow') return 'bg-yellow-100 text-yellow-800 border-yellow-300';
     return 'bg-emerald-50 text-emerald-700 border-emerald-100';
   };
 
@@ -121,9 +134,8 @@ export default function AuditoriaPanel() {
       if (!matchSymptom) {
         matchSymptom = r.events.some(e => {
           const type = e.type.toLowerCase();
-          const value = (e.value || "").toLowerCase();
           const isRoutine = ['comida', 'agua', 'pis', 'caca'].includes(type);
-          const isAnomaly = getEventBadgeStyle(e) !== 'bg-emerald-50 text-emerald-700 border-emerald-100';
+          const isAnomaly = getEventColor(e) !== 'green';
           if (!isRoutine || isAnomaly) {
             const chartName = isRoutine ? `Problema con ${e.type}` : e.type;
             return chartName === filterSymptom;
@@ -141,9 +153,12 @@ export default function AuditoriaPanel() {
       } else if (filterDateEnd) {
         matchDate = reportDate <= filterDateEnd;
       }
-      return matchAnimal && matchSymptom && matchDate;
+
+      const matchColor = filterColor === 'Todos' || getReportColor(r) === filterColor;
+
+      return matchAnimal && matchSymptom && matchDate && matchColor;
     });
-  }, [reports, filterAnimal, filterSymptom, filterDateStart, filterDateEnd]);
+  }, [reports, filterAnimal, filterSymptom, filterDateStart, filterDateEnd, filterColor, colorRules]);
 
   const recentReportsGlobal = useMemo(() => {
     const fortyEightHoursAgo = new Date();
@@ -334,8 +349,8 @@ export default function AuditoriaPanel() {
         <div className="p-6 border-b border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gray-50/50">
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-black text-gray-900">Historial de Auditoría</h2>
-            {(filterAnimal !== 'Todas' || filterSymptom !== 'Todos') && (
-              <div className="flex gap-2">
+            {(filterAnimal !== 'Todas' || filterSymptom !== 'Todos' || filterColor !== 'Todos') && (
+              <div className="flex gap-2 flex-wrap">
                 {filterAnimal !== 'Todas' && (
                   <span className="bg-indigo-100 text-indigo-700 text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wide">
                     {filterAnimal}
@@ -346,24 +361,89 @@ export default function AuditoriaPanel() {
                     {filterSymptom}
                   </span>
                 )}
+                {filterColor !== 'Todos' && (
+                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wide ${
+                    filterColor === 'red' ? 'bg-red-100 text-red-700' :
+                    filterColor === 'yellow' ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-emerald-100 text-emerald-700'
+                  }`}>
+                    {filterColor === 'red' ? 'Rojo' : filterColor === 'yellow' ? 'Amarillo' : 'Verde'}
+                  </span>
+                )}
               </div>
             )}
           </div>
 
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full md:w-auto">
-            <span className="text-sm font-bold text-gray-600 hidden sm:inline">Desde:</span>
-            <input type="date" value={filterDateStart} onChange={(e) => setFilterDateStart(e.target.value)} className="w-full sm:w-auto px-3 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-gray-900 font-medium uppercase text-sm" />
-            <span className="text-sm font-bold text-gray-600 hidden sm:inline">Hasta:</span>
-            <input type="date" value={filterDateEnd} onChange={(e) => setFilterDateEnd(e.target.value)} className="w-full sm:w-auto px-3 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-gray-900 font-medium uppercase text-sm" />
-            {(filterDateStart || filterDateEnd) && (
-              <button onClick={() => { setFilterDateStart(''); setFilterDateEnd(''); }} className="text-sm text-indigo-600 font-bold hover:underline px-2 whitespace-nowrap">Limpiar</button>
-            )}
-            <button onClick={fetchReports} className="text-gray-500 hover:text-indigo-600 p-2.5 rounded-xl border border-gray-200 bg-white shadow-sm ml-2 hidden sm:block" title="Refrescar Feed"><RefreshCw size={16} /></button>
+          <div className="flex flex-col gap-3 w-full md:w-auto">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">Color:</span>
+              {[
+                { id: 'Todos', label: 'Todos', active: 'bg-gray-800 text-white border-gray-800', idle: 'bg-white text-gray-600 border-gray-200' },
+                { id: 'green', label: 'Verde', active: 'bg-emerald-600 text-white border-emerald-600', idle: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+                { id: 'yellow', label: 'Amarillo', active: 'bg-yellow-400 text-yellow-950 border-yellow-400', idle: 'bg-yellow-50 text-yellow-800 border-yellow-200' },
+                { id: 'red', label: 'Rojo', active: 'bg-red-600 text-white border-red-600', idle: 'bg-red-50 text-red-700 border-red-200' },
+              ].map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setFilterColor(opt.id)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${
+                    filterColor === opt.id ? opt.active : opt.idle
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full">
+            <label className="flex flex-col gap-1 min-w-0 flex-1 sm:flex-initial">
+              <span className="text-xs font-bold text-black sm:hidden">Desde</span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-black hidden sm:inline shrink-0">Desde:</span>
+                <input
+                  type="date"
+                  value={filterDateStart}
+                  onChange={(e) => setFilterDateStart(e.target.value)}
+                  className="audit-date-input w-full sm:w-auto min-w-0 px-3 py-2.5 rounded-xl border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-black font-semibold text-base normal-case"
+                />
+              </div>
+            </label>
+            <label className="flex flex-col gap-1 min-w-0 flex-1 sm:flex-initial">
+              <span className="text-xs font-bold text-black sm:hidden">Hasta</span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-black hidden sm:inline shrink-0">Hasta:</span>
+                <input
+                  type="date"
+                  value={filterDateEnd}
+                  onChange={(e) => setFilterDateEnd(e.target.value)}
+                  className="audit-date-input w-full sm:w-auto min-w-0 px-3 py-2.5 rounded-xl border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-black font-semibold text-base normal-case"
+                />
+              </div>
+            </label>
+            <div className="flex items-center gap-2">
+              {(filterDateStart || filterDateEnd || filterColor !== 'Todos') && (
+                <button
+                  onClick={() => { setFilterDateStart(''); setFilterDateEnd(''); setFilterColor('Todos'); }}
+                  className="text-sm text-indigo-600 font-bold hover:underline px-2 py-2 whitespace-nowrap"
+                >
+                  Limpiar
+                </button>
+              )}
+              <button
+                onClick={fetchReports}
+                className="text-gray-500 hover:text-indigo-600 p-2.5 rounded-xl border border-gray-200 bg-white shadow-sm"
+                title="Refrescar Feed"
+              >
+                <RefreshCw size={16} />
+              </button>
+            </div>
+            </div>
           </div>
         </div>
         <div className="p-4 md:p-6 space-y-8">
           {isLoading ? <div className="text-center py-12 text-gray-400">Cargando...</div> : Object.keys(groupedReports).length === 0 ? <div className="p-12 text-center text-gray-500 border-dashed border-2 border-gray-200 rounded-2xl">No hay reportes.</div> : (
-            Object.entries(groupedReports).slice(0, (filterDateStart || filterDateEnd) ? undefined : 1).map(([dateStr, dayReports]) => (
+            Object.entries(groupedReports).slice(0, (filterDateStart || filterDateEnd || filterColor !== 'Todos') ? undefined : 1).map(([dateStr, dayReports]) => (
               <div key={dateStr} className="space-y-4">
                 <div className="sticky top-[140px] z-20 flex items-center gap-3 bg-gray-50/95 backdrop-blur-xl p-2.5 rounded-xl border border-gray-200 mb-4">
                   <div className="w-3 h-3 rounded-full bg-indigo-500"></div>
@@ -384,10 +464,23 @@ export default function AuditoriaPanel() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 bg-white">
-                      {dayReports.map((r) => (
-                        <tr key={r.id} className="hover:bg-indigo-50/30 transition-colors">
+                      {dayReports.map((r) => {
+                        const reportColor = getReportColor(r);
+                        const rowTint =
+                          reportColor === 'red' ? 'bg-red-50/40' :
+                          reportColor === 'yellow' ? 'bg-yellow-100' :
+                          '';
+                        return (
+                        <tr key={r.id} className={`hover:bg-indigo-50/30 transition-colors ${rowTint}`}>
                           <td className="px-6 py-4 text-sm text-gray-500 font-bold whitespace-nowrap">
-                            {new Date(r.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                            <div className="flex items-center gap-2">
+                              <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                                reportColor === 'red' ? 'bg-red-500' :
+                                reportColor === 'yellow' ? 'bg-yellow-400' :
+                                'bg-emerald-500'
+                              }`} />
+                              {new Date(r.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                            </div>
                           </td>
                           <td className="px-6 py-4 font-black text-indigo-900">
                             {r.animal_name}
@@ -397,11 +490,14 @@ export default function AuditoriaPanel() {
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex flex-wrap gap-1.5">
-                              {r.events.map((e, idx) => (
+                              {r.events.map((e, idx) => {
+                                const label = e.value && e.value.length > 40 ? `${e.value.slice(0, 40)}…` : (e.value || 'Sí');
+                                return (
                                 <span key={idx} className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold border ${getEventBadgeStyle(e)}`}>
-                                  <CheckCircle2 size={12} /> {e.type}: {e.value || 'Sí'}
+                                  <CheckCircle2 size={12} /> {e.type}: {label}
                                 </span>
-                              ))}
+                                );
+                              })}
                               {r.events.length === 0 && <span className="text-xs text-gray-400 font-medium">Sin hallazgos</span>}
                             </div>
                           </td>
@@ -409,40 +505,56 @@ export default function AuditoriaPanel() {
                             <div className="bg-gray-100 inline-block px-2 py-1 rounded-md">{r.user_name}</div>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
 
                 {/* Mobile view (cards) */}
                 <div className="md:hidden grid grid-cols-1 gap-4 pl-2 border-l-2 border-gray-100">
-                  {dayReports.map((r) => (
-                    <div key={r.id} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 hover:shadow-md hover:border-indigo-100 transition-all relative">
+                  {dayReports.map((r) => {
+                    const reportColor = getReportColor(r);
+                    const cardBorder =
+                      reportColor === 'red' ? 'border-red-200 bg-red-50/30' :
+                      reportColor === 'yellow' ? 'border-yellow-300 bg-yellow-100' :
+                      'border-gray-100 bg-white';
+                    return (
+                    <div key={r.id} className={`rounded-2xl p-5 shadow-sm border hover:shadow-md transition-all relative ${cardBorder}`}>
                       <div className="absolute top-6 -left-3 w-4 h-0.5 bg-gray-200"></div>
                       <div className="flex justify-between items-start mb-3">
                         <div className="flex items-center gap-3">
-                          <div className="bg-indigo-50 text-indigo-600 p-2 rounded-xl">
+                          <div className={`p-2 rounded-xl ${
+                            reportColor === 'red' ? 'bg-red-100 text-red-600' :
+                            reportColor === 'yellow' ? 'bg-yellow-200 text-yellow-700' :
+                            'bg-indigo-50 text-indigo-600'
+                          }`}>
                             <Database size={20} />
                           </div>
                           <div>
                             <h4 className="font-black text-gray-900 text-lg">{r.animal_name}</h4>
                             <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
                               {new Date(r.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                              {reportColor === 'yellow' && ' · Observación'}
+                              {reportColor === 'red' && ' · Crítico'}
                             </p>
                           </div>
                         </div>
                       </div>
 
-                      <div className="bg-gray-50 p-4 rounded-2xl mb-4 text-sm text-gray-700 italic border border-gray-100 relative">
+                      <div className="bg-white/80 p-4 rounded-2xl mb-4 text-sm text-gray-700 italic border border-gray-100 relative">
                         "{r.transcript}"
                       </div>
 
                       <div className="flex flex-wrap gap-1.5 mb-3">
-                        {r.events.map((e, idx) => (
+                        {r.events.map((e, idx) => {
+                          const label = e.value && e.value.length > 40 ? `${e.value.slice(0, 40)}…` : (e.value || 'Sí');
+                          return (
                           <span key={idx} className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border ${getEventBadgeStyle(e)}`}>
-                            <CheckCircle2 size={12} /> {e.type}: {e.value || 'Sí'}
+                            <CheckCircle2 size={12} /> {e.type}: {label}
                           </span>
-                        ))}
+                          );
+                        })}
                         {r.events.length === 0 && <span className="text-xs font-medium text-gray-400">Sin hallazgos</span>}
                       </div>
 
@@ -451,7 +563,8 @@ export default function AuditoriaPanel() {
                         <span className="text-xs font-bold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-lg">{r.user_name}</span>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ))

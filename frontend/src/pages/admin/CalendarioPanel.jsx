@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -16,6 +16,14 @@ const localizer = dateFnsLocalizer({
   getDay,
   locales,
 });
+
+const SERVICE_STATUSES = new Set([
+  'Llevar Veterinaria',
+  'Viene Veterinaria',
+  'Llevar a Bañar',
+]);
+
+const isServiceEvent = (status) => SERVICE_STATUSES.has(status);
 
 export default function CalendarioPanel() {
   const [events, setEvents] = useState([]);
@@ -61,7 +69,6 @@ export default function CalendarioPanel() {
       });
       if (res.ok) {
         const data = await res.json();
-        // Mapear a formato que usa react-big-calendar
         const calendarEvents = data.map(r => ({
           id: r.id,
           title: `${r.animal?.name || `Paciente #${r.animal_id}`} - ${r.status}`,
@@ -76,30 +83,53 @@ export default function CalendarioPanel() {
     }
   };
 
+  const selectableAnimals = useMemo(() => {
+    // Vet / baño: solo mascotas de guardería
+    if (isServiceEvent(formData.status)) {
+      return animals.filter(a => a.is_daycare === true);
+    }
+    // Nueva Reserva: solo mascotas externas
+    return animals.filter(a => a.is_daycare === false);
+  }, [animals, formData.status]);
+
+  const openModal = (data, id = null) => {
+    setFormData(data);
+    setEditingId(id);
+    setIsModalOpen(true);
+  };
+
   const handleSelectSlot = ({ start, end }) => {
     if (!isAdmin) return;
-    setFormData({
+    openModal({
       animal_id: '',
       start_date: formatForInput(start),
       end_date: formatForInput(end),
       status: 'Pendiente',
       notes: ''
     });
-    setEditingId(null);
-    setIsModalOpen(true);
   };
 
   const handleSelectEvent = (event) => {
     const r = event.resource;
-    setFormData({
+    openModal({
       animal_id: r.animal_id,
       start_date: formatForInput(r.start_date),
       end_date: formatForInput(r.end_date),
       status: r.status,
       notes: r.notes || ''
-    });
-    setEditingId(r.id);
-    setIsModalOpen(true);
+    }, r.id);
+  };
+
+  const handleStatusChange = (status) => {
+    const next = { ...formData, status };
+    if (formData.animal_id) {
+      const selected = animals.find(a => String(a.id) === String(formData.animal_id));
+      const ok = isServiceEvent(status)
+        ? selected?.is_daycare === true
+        : selected?.is_daycare === false;
+      if (!ok) next.animal_id = '';
+    }
+    setFormData(next);
   };
 
   const saveReservation = async () => {
@@ -109,7 +139,17 @@ export default function CalendarioPanel() {
       return;
     }
 
-    // Convertir de local a UTC string asumiendo el input local
+    const selected = animals.find(a => String(a.id) === String(formData.animal_id));
+    if (isServiceEvent(formData.status)) {
+      if (!selected || selected.is_daycare !== true) {
+        alert("Vet / Baño solo se puede asignar a mascotas de guardería.");
+        return;
+      }
+    } else if (!selected || selected.is_daycare !== false) {
+      alert("Las reservas solo se pueden asignar a mascotas externas.");
+      return;
+    }
+
     const payload = {
       animal_id: parseInt(formData.animal_id),
       start_date: new Date(formData.start_date).toISOString(),
@@ -135,7 +175,8 @@ export default function CalendarioPanel() {
         setIsModalOpen(false);
         fetchReservations();
       } else {
-        alert("Error al guardar reserva");
+        const errText = await res.text();
+        alert(errText || "Error al guardar reserva");
       }
     } catch (err) {
       console.error(err);
@@ -169,14 +210,14 @@ export default function CalendarioPanel() {
   };
 
   const eventStyleGetter = (event) => {
-    let backgroundColor = '#3b82f6'; // blue-500
-    if (event.resource.status === 'Confirmada') backgroundColor = '#10b981'; // green-500
-    if (event.resource.status === 'Ingresada') backgroundColor = '#8b5cf6'; // violet-500
-    if (event.resource.status === 'Llevar Veterinaria') backgroundColor = '#f97316'; // orange-500
-    if (event.resource.status === 'Viene Veterinaria') backgroundColor = '#eab308'; // yellow-500
-    if (event.resource.status === 'Llevar a Bañar') backgroundColor = '#06b6d4'; // cyan-500
-    if (event.resource.status === 'Cancelada') backgroundColor = '#ef4444'; // red-500
-    if (event.resource.status === 'Finalizada') backgroundColor = '#9ca3af'; // gray-400
+    let backgroundColor = '#3b82f6';
+    if (event.resource.status === 'Confirmada') backgroundColor = '#10b981';
+    if (event.resource.status === 'Ingresada') backgroundColor = '#8b5cf6';
+    if (event.resource.status === 'Llevar Veterinaria') backgroundColor = '#f97316';
+    if (event.resource.status === 'Viene Veterinaria') backgroundColor = '#eab308';
+    if (event.resource.status === 'Llevar a Bañar') backgroundColor = '#06b6d4';
+    if (event.resource.status === 'Cancelada') backgroundColor = '#ef4444';
+    if (event.resource.status === 'Finalizada') backgroundColor = '#9ca3af';
     
     return {
       style: {
@@ -197,53 +238,53 @@ export default function CalendarioPanel() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [currentView, setCurrentView] = useState('month');
 
+  const openQuickService = (status) => {
+    const now = new Date();
+    const in1h = new Date(now); in1h.setHours(now.getHours() + 1);
+    openModal({
+      animal_id: '',
+      start_date: formatForInput(now),
+      end_date: formatForInput(in1h),
+      status,
+      notes: ''
+    });
+  };
+
+  const patientLabel = isServiceEvent(formData.status)
+    ? 'Paciente de guardería'
+    : 'Paciente (mascota externa)';
+
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-      <div className="flex justify-between items-center mb-6">
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 sm:p-6">
+      <div className="flex flex-col gap-4 mb-4 sm:mb-6">
         <div>
-          <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-            <CalendarIcon className="w-6 h-6 text-indigo-500" />
+          <h2 className="text-lg sm:text-xl font-bold text-gray-800 flex items-center gap-2">
+            <CalendarIcon className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-500 shrink-0" />
             Calendario de Reservas
           </h2>
-          <p className="text-gray-500 text-sm mt-1">
-            {isAdmin ? "Arrastra para crear o haz clic en un evento para editarlo." : "Haz clic en un evento para ver los detalles."}
+          <p className="text-gray-500 text-xs sm:text-sm mt-1">
+            {isAdmin
+              ? "Nueva Reserva: externas. Vet/Baño: solo guardería."
+              : "Haz clic en un evento para ver los detalles."}
           </p>
         </div>
         {isAdmin && (
-          <div className="flex flex-wrap justify-end gap-2">
+          <div className="flex flex-wrap gap-2">
             <button 
-              onClick={() => {
-                const now = new Date();
-                const in1h = new Date(now); in1h.setHours(now.getHours() + 1);
-                setFormData({ animal_id: '', start_date: formatForInput(now), end_date: formatForInput(in1h), status: 'Llevar Veterinaria', notes: ''});
-                setEditingId(null);
-                setIsModalOpen(true);
-              }}
-              className="bg-orange-500 text-white px-3 py-2 rounded-xl text-sm font-bold flex items-center gap-1 hover:bg-orange-600 transition"
+              onClick={() => openQuickService('Llevar Veterinaria')}
+              className="bg-orange-500 text-white px-3 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1 hover:bg-orange-600 transition"
             >
               <Plus className="w-4 h-4" /> Llevar Vet
             </button>
             <button 
-              onClick={() => {
-                const now = new Date();
-                const in1h = new Date(now); in1h.setHours(now.getHours() + 1);
-                setFormData({ animal_id: '', start_date: formatForInput(now), end_date: formatForInput(in1h), status: 'Viene Veterinaria', notes: ''});
-                setEditingId(null);
-                setIsModalOpen(true);
-              }}
-              className="bg-yellow-500 text-white px-3 py-2 rounded-xl text-sm font-bold flex items-center gap-1 hover:bg-yellow-600 transition"
+              onClick={() => openQuickService('Viene Veterinaria')}
+              className="bg-yellow-500 text-white px-3 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1 hover:bg-yellow-600 transition"
             >
               <Plus className="w-4 h-4" /> Viene Vet
             </button>
             <button 
-              onClick={() => {
-                const now = new Date();
-                const in1h = new Date(now); in1h.setHours(now.getHours() + 1);
-                setFormData({ animal_id: '', start_date: formatForInput(now), end_date: formatForInput(in1h), status: 'Llevar a Bañar', notes: ''});
-                setEditingId(null);
-                setIsModalOpen(true);
-              }}
-              className="bg-cyan-500 text-white px-3 py-2 rounded-xl text-sm font-bold flex items-center gap-1 hover:bg-cyan-600 transition"
+              onClick={() => openQuickService('Llevar a Bañar')}
+              className="bg-cyan-500 text-white px-3 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1 hover:bg-cyan-600 transition"
             >
               <Plus className="w-4 h-4" /> Bañar
             </button>
@@ -253,7 +294,7 @@ export default function CalendarioPanel() {
                 const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
                 handleSelectSlot({ start: now, end: tomorrow });
               }}
-              className="bg-indigo-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-indigo-700 transition"
+              className="bg-indigo-600 text-white px-3 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 hover:bg-indigo-700 transition"
             >
               <Plus className="w-4 h-4" /> Nueva Reserva
             </button>
@@ -261,43 +302,45 @@ export default function CalendarioPanel() {
         )}
       </div>
 
-      <div style={{ height: '70vh' }}>
-        <Calendar
-          localizer={localizer}
-          events={events}
-          startAccessor="start"
-          endAccessor="end"
-          style={{ height: '100%', fontFamily: 'Inter, sans-serif' }}
-          selectable={isAdmin}
-          onSelectSlot={isAdmin ? handleSelectSlot : undefined}
-          onSelectEvent={handleSelectEvent}
-          eventPropGetter={eventStyleGetter}
-          date={currentDate}
-          onNavigate={(newDate) => setCurrentDate(newDate)}
-          view={currentView}
-          onView={(newView) => setCurrentView(newView)}
-          culture="es"
-          dayLayoutAlgorithm="no-overlap"
-          messages={{
-            next: "Sig",
-            previous: "Ant",
-            today: "Hoy",
-            month: "Mes",
-            week: "Semana",
-            day: "Día",
-            agenda: "Agenda",
-            date: "Fecha",
-            time: "Hora",
-            event: "Evento",
-            noEventsInRange: "No hay eventos en este rango."
-          }}
-        />
+      <div className="h-[55dvh] sm:h-[65dvh] min-h-[320px] overflow-x-auto scroll-touch -mx-1">
+        <div className="min-w-[320px] h-full">
+          <Calendar
+            localizer={localizer}
+            events={events}
+            startAccessor="start"
+            endAccessor="end"
+            style={{ height: '100%', fontFamily: 'Inter, sans-serif' }}
+            selectable={isAdmin}
+            onSelectSlot={isAdmin ? handleSelectSlot : undefined}
+            onSelectEvent={handleSelectEvent}
+            eventPropGetter={eventStyleGetter}
+            date={currentDate}
+            onNavigate={(newDate) => setCurrentDate(newDate)}
+            view={currentView}
+            onView={(newView) => setCurrentView(newView)}
+            culture="es"
+            dayLayoutAlgorithm="no-overlap"
+            messages={{
+              next: "Sig",
+              previous: "Ant",
+              today: "Hoy",
+              month: "Mes",
+              week: "Semana",
+              day: "Día",
+              agenda: "Agenda",
+              date: "Fecha",
+              time: "Hora",
+              event: "Evento",
+              noEventsInRange: "No hay eventos en este rango."
+            }}
+          />
+        </div>
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md p-6 animate-fade-in-up">
-            <div className="flex justify-between items-center mb-6 border-b pb-4">
+        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-md p-5 sm:p-6 modal-sheet pb-[max(1.25rem,var(--safe-bottom))] sm:pb-6">
+            <div className="flex justify-between items-center mb-4 sm:mb-6 border-b pb-3 sm:pb-4">
               <h3 className="text-lg font-bold text-gray-800">
                 {editingId ? "Editar Reserva" : "Nueva Reserva"}
               </h3>
@@ -308,7 +351,7 @@ export default function CalendarioPanel() {
             
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Paciente</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{patientLabel}</label>
                 <select 
                   className="w-full border border-gray-300 rounded-lg p-2 bg-gray-50 text-gray-800 disabled:opacity-70 disabled:bg-gray-100"
                   value={formData.animal_id}
@@ -316,18 +359,20 @@ export default function CalendarioPanel() {
                   disabled={!isAdmin}
                 >
                   <option value="">Seleccione...</option>
-                  {animals.map(a => (
-                    <option key={a.id} value={a.id}>{a.name}</option>
+                  {selectableAnimals.map(a => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}{a.is_daycare ? ' (guardería)' : ''}
+                    </option>
                   ))}
                 </select>
               </div>
               
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Ingreso</label>
                   <input 
                     type="datetime-local" 
-                    className="w-full border border-gray-300 rounded-lg p-2 bg-gray-50 text-gray-800 disabled:opacity-70 disabled:bg-gray-100"
+                    className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-800 disabled:opacity-70 disabled:bg-gray-100"
                     value={formData.start_date}
                     onChange={(e) => setFormData({...formData, start_date: e.target.value})}
                     disabled={!isAdmin}
@@ -337,7 +382,7 @@ export default function CalendarioPanel() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Salida</label>
                   <input 
                     type="datetime-local" 
-                    className="w-full border border-gray-300 rounded-lg p-2 bg-gray-50 text-gray-800 disabled:opacity-70 disabled:bg-gray-100"
+                    className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-800 disabled:opacity-70 disabled:bg-gray-100"
                     value={formData.end_date}
                     onChange={(e) => setFormData({...formData, end_date: e.target.value})}
                     disabled={!isAdmin}
@@ -350,7 +395,7 @@ export default function CalendarioPanel() {
                 <select 
                   className="w-full border border-gray-300 rounded-lg p-2 bg-gray-50 text-gray-800 disabled:opacity-70 disabled:bg-gray-100"
                   value={formData.status}
-                  onChange={(e) => setFormData({...formData, status: e.target.value})}
+                  onChange={(e) => handleStatusChange(e.target.value)}
                   disabled={!isAdmin}
                 >
                   <option value="Pendiente">Pendiente (Azul)</option>

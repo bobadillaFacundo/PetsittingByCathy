@@ -68,8 +68,21 @@ class TestTagVariants:
         set_tag_variants(db, ts, ["bebió", "tomó"])
         d = tag_set_to_dict(ts)
         assert d["name"] == "Agua"
+        assert d["is_required"] is True
         assert "bebió" in d["variants"]
         assert "tomó" in d["variants_text"]
+
+    def test_optional_tag_set_not_required(self, db):
+        ts = TagSet(name="Medicacion")
+        db.add(ts)
+        db.flush()
+        assert tag_set_to_dict(ts)["is_required"] is False
+
+    def test_ensure_required_tag_sets(self, db):
+        from src.services.tag_helpers import ensure_required_tag_sets, REQUIRED_TAG_SET_NAMES
+        sets = ensure_required_tag_sets(db)
+        names = {s.name for s in sets}
+        assert REQUIRED_TAG_SET_NAMES.issubset(names)
 
     def test_load_tag_sets(self, db, seed):
         sets = load_tag_sets(db)

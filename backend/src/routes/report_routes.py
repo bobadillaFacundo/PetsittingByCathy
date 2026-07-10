@@ -156,10 +156,12 @@ def confirm_report(
             if table_name == "ReportEvent":
                 event_type_name = fields.get("event_type_name")
                 if not event_type_name: continue
-                event_type = _get_or_create_event_type(db, event_type_name)
                 val = fields.get("value")
-                if val:
-                    event_values.append(str(val))
+                # Campos rutinarios vacíos: no se guardan (opcionales)
+                if val is None or str(val).strip() == "":
+                    continue
+                event_type = _get_or_create_event_type(db, event_type_name)
+                event_values.append(str(val))
                 _upsert_report_event(db, report.id, event_type.id, val)
                 
             elif table_name == "AnimalDiagnosis":

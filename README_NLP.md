@@ -154,7 +154,9 @@ Prioridad: Enfermedad y Medicación → siempre rojo.
 
 | Variable | Descripción |
 |----------|-------------|
-| `GROQ_API_KEY` | API key de Groq (alternativa a vLLM local) |
-| `VLLM_BASE_URL` | URL del servidor vLLM (default: `http://localhost:8001/v1`) |
+| `GROQ_API_KEY` | API key de Groq (solo si `USE_GROQ=1`) |
+| `USE_GROQ` | `1` para forzar Groq; por defecto usa vLLM del servidor |
+| `VLLM_BASE_URL` | URL base del vLLM (default: `http://100.82.178.56:8010/v1`) |
+| `VLLM_MODEL` | Modelo en el servidor (default: `Qwen/Qwen2.5-7B-Instruct-AWQ`) |
 
 La conexión PostgreSQL se configura en `backend/src/database/session.py`.

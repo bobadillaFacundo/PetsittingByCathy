@@ -133,9 +133,10 @@ export default function CatalogsPanel() {
               { key: 'variants_text', label: 'Variantes / Palabras clave' }
             ]}
             formFields={[
-              { key: 'name', label: 'Nombre de Conjunto (Ej: Alerta Verde, Comida)', required: true },
+              { key: 'name', label: 'Nombre de Conjunto (Ej: Medicacion, Enfermedad)', required: true },
               { key: 'variants', label: 'Variantes (separadas por coma)', required: true }
             ]}
+            canDeleteItem={(item) => !item.is_required}
           />
         )}
       </div>

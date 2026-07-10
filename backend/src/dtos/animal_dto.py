@@ -12,6 +12,7 @@ class AnimalBase(BaseModel):
     is_castrated: bool = False
     photo_url: Optional[str] = None
     is_active: bool = True
+    is_daycare: bool = True
 
 class AnimalCreate(AnimalBase):
     pass
@@ -26,6 +27,7 @@ class AnimalUpdate(BaseModel):
     is_castrated: Optional[bool] = None
     photo_url: Optional[str] = None
     is_active: Optional[bool] = None
+    is_daycare: Optional[bool] = None
 
 class AnimalResponse(AnimalBase):
     id: int

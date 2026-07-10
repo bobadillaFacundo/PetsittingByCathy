@@ -132,6 +132,7 @@ class Animal(Base):
     is_castrated = Column(Boolean, default=False)
     photo_url = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
+    is_daycare = Column(Boolean, default=True, nullable=False)
     severity = Column(String, default="normal")
 
     species = relationship("Species", back_populates="animals")

@@ -86,6 +86,7 @@ def seed(db):
         breed_id=breed.id,
         veterinarian_id=vet.id,
         is_active=True,
+        is_daycare=True,
         severity="normal",
     )
     db.add(animal)
@@ -95,9 +96,15 @@ def seed(db):
     db.flush()
 
     comida = TagSet(name="Comida")
-    db.add(comida)
+    agua = TagSet(name="Agua")
+    pis = TagSet(name="Pis")
+    caca = TagSet(name="Caca")
+    db.add_all([comida, agua, pis, caca])
     db.flush()
     set_tag_variants(db, comida, ["comió", "morfó", "comio"])
+    set_tag_variants(db, agua, ["tomó", "bebió", "agua"])
+    set_tag_variants(db, pis, ["meó", "orina", "pis"])
+    set_tag_variants(db, caca, ["cagó", "heces", "caca"])
 
     red_exact = ColorRule(color="red", match_type="exact")
     red_partial = ColorRule(color="red", match_type="partial")

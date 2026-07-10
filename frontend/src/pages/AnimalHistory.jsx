@@ -14,12 +14,15 @@ function getEventColor(val, evtType, colorRules) {
   if (typeLower.includes('enfermedad') || typeLower.includes('medicación') || typeLower.includes('medicacion')) {
     return { colorClass: 'bg-red-50 text-red-700 border-red-200', dotColor: 'bg-red-400' };
   }
+  if (typeLower.includes('observacion') || typeLower.includes('observación') || typeLower.includes('nota')) {
+    return { colorClass: 'bg-yellow-100 text-yellow-800 border-yellow-300', dotColor: 'bg-yellow-400' };
+  }
 
   const v = val?.toLowerCase() || '';
   let exactRed = [], partialRed = [], exactYellow = [], partialYellow = [];
 
   colorRules.forEach(r => {
-    const keys = r.keywords.split(',').map(k => k.trim().toLowerCase()).filter(k => k);
+    const keys = (r.keywords || '').split(',').map(k => k.trim().toLowerCase()).filter(k => k);
     if (r.color === 'red') {
       if (r.match_type === 'exact') exactRed.push(...keys);
       else partialRed.push(...keys);
@@ -33,7 +36,7 @@ function getEventColor(val, evtType, colorRules) {
     return { colorClass: 'bg-red-50 text-red-700 border-red-200', dotColor: 'bg-red-400' };
   }
   if (exactYellow.includes(v) || partialYellow.some(k => v.includes(k))) {
-    return { colorClass: 'bg-amber-50 text-amber-700 border-amber-200', dotColor: 'bg-amber-400' };
+    return { colorClass: 'bg-yellow-100 text-yellow-800 border-yellow-300', dotColor: 'bg-yellow-400' };
   }
   return { colorClass: 'bg-green-50 text-green-700 border-green-200', dotColor: 'bg-green-400' };
 }

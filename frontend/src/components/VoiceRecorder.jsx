@@ -9,6 +9,65 @@ const SPECIES_INFO = {
   6: { name: "Erizos", emoji: "🦔" }
 };
 
+const ROUTINE_EVENTS = ["Comida", "Agua", "Pis", "Caca"];
+
+function isRoutineEvent(insert) {
+  if (!insert || insert.table_name !== "ReportEvent") return false;
+  const name = (insert.fields?.event_type_name || "").toLowerCase();
+  return ROUTINE_EVENTS.some(r => r.toLowerCase() === name);
+}
+
+function ensureRoutineFields(extractedData, fallbackAnimalName) {
+  let data = Array.isArray(extractedData) ? extractedData.map(a => ({
+    ...a,
+    inserts: Array.isArray(a.inserts) ? [...a.inserts] : [],
+  })) : [];
+
+  if (data.length === 0) {
+    data = [{ animal: fallbackAnimalName || "", inserts: [], severity: "normal" }];
+  }
+
+  return data.map(animalData => {
+    const inserts = [...(animalData.inserts || [])];
+    const otherInserts = inserts.filter(ins => !isRoutineEvent(ins));
+    const routineInserts = ROUTINE_EVENTS.map(name => {
+      const existing = inserts.find(
+        ins =>
+          ins.table_name === "ReportEvent" &&
+          (ins.fields?.event_type_name || "").toLowerCase() === name.toLowerCase()
+      );
+      if (existing) {
+        return {
+          ...existing,
+          fields: {
+            event_type_name: name,
+            value: existing.fields?.value ?? "",
+          },
+        };
+      }
+      return {
+        table_name: "ReportEvent",
+        fields: { event_type_name: name, value: "" },
+      };
+    });
+    return {
+      ...animalData,
+      inserts: [...routineInserts, ...otherInserts],
+    };
+  });
+}
+
+function cleanExtractedDataForSave(extractedData) {
+  return (extractedData || []).map(animalData => ({
+    ...animalData,
+    inserts: (animalData.inserts || []).filter(ins => {
+      if (ins.table_name !== "ReportEvent") return true;
+      const val = ins.fields?.value;
+      return val !== null && val !== undefined && String(val).trim() !== "";
+    }),
+  }));
+}
+
 export default function VoiceRecorder({ onSave }) {
   const [animals, setAnimals] = useState([]);
   const [selectedAnimal, setSelectedAnimal] = useState(null);
@@ -22,6 +81,7 @@ export default function VoiceRecorder({ onSave }) {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [pendingReports, setPendingReports] = useState(0);
   const [attachedPhotos, setAttachedPhotos] = useState([]);
+  const [observationDraft, setObservationDraft] = useState("");
   const photoInputRef = useRef(null);
   
   const mediaRecorder = useRef(null);
@@ -111,8 +171,9 @@ export default function VoiceRecorder({ onSave }) {
         return;
       }
       setAnalysisResult(data);
-      setEditableData(data.extracted_data);
+      setEditableData(ensureRoutineFields(data.extracted_data, selectedAnimal?.name));
       setEditableTranscript(data.transcript);
+      setObservationDraft(data.transcript || "");
       setCurrentStep(0);
     } catch (error) {
       console.error("Error analizando el audio:", error);
@@ -207,7 +268,7 @@ export default function VoiceRecorder({ onSave }) {
     const payload = {
       user_id: 1,
       transcript: editableTranscript,
-      extracted_data: editableData
+      extracted_data: cleanExtractedDataForSave(editableData)
     };
 
     try {
@@ -436,8 +497,8 @@ export default function VoiceRecorder({ onSave }) {
 
       {/* Modal de Confirmación */}
       {analysisResult && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90dvh] pb-safe sm:pb-0">
             <div className="p-6 bg-indigo-50 border-b border-indigo-100 flex flex-col gap-2">
               <h3 className="text-xl font-bold text-indigo-900">Verificar Datos Extraídos</h3>
               <label className="text-xs font-semibold text-indigo-700 uppercase">Texto interpretado del audio (Editable):</label>
@@ -451,38 +512,60 @@ export default function VoiceRecorder({ onSave }) {
             
             <div className="p-6 overflow-y-auto flex-1">
               {(() => {
-                if (!editableData) return null;
-                const steps = [];
-                editableData.forEach((animalData, i) => {
-                  if (animalData.inserts && animalData.inserts.length > 0) {
-                    animalData.inserts.forEach((insert, j) => {
-                      steps.push({ animalIndex: i, insertIndex: j, animal: animalData.animal, insert });
-                    });
-                  } else {
-                    steps.push({ animalIndex: i, insertIndex: null, animal: animalData.animal, insert: null });
-                  }
-                });
-                
-                if (steps.length === 0) return <p className="text-gray-500 italic text-sm">No se extrajeron registros.</p>;
-                
-                const step = steps[currentStep];
-                const i = step.animalIndex;
-                const j = step.insertIndex;
+                if (!editableData || editableData.length === 0) {
+                  return <p className="text-gray-500 italic text-sm">No hay datos para confirmar.</p>;
+                }
+
+                const i = Math.min(currentStep, editableData.length - 1);
                 const animalData = editableData[i];
-                const insert = step.insert;
+                const inserts = animalData.inserts || [];
+                const routineInserts = ROUTINE_EVENTS.map(name => {
+                  const idx = inserts.findIndex(
+                    ins =>
+                      ins.table_name === "ReportEvent" &&
+                      (ins.fields?.event_type_name || "").toLowerCase() === name.toLowerCase()
+                  );
+                  return { name, idx, insert: idx >= 0 ? inserts[idx] : null };
+                });
+                const otherInserts = inserts
+                  .map((ins, idx) => ({ ins, idx }))
+                  .filter(({ ins }) => !isRoutineEvent(ins));
+
+                const updateRoutineValue = (eventName, value) => {
+                  const newData = [...editableData];
+                  const list = [...(newData[i].inserts || [])];
+                  const found = list.findIndex(
+                    ins =>
+                      ins.table_name === "ReportEvent" &&
+                      (ins.fields?.event_type_name || "").toLowerCase() === eventName.toLowerCase()
+                  );
+                  if (found >= 0) {
+                    list[found] = {
+                      ...list[found],
+                      fields: { ...list[found].fields, event_type_name: eventName, value },
+                    };
+                  } else {
+                    list.push({
+                      table_name: "ReportEvent",
+                      fields: { event_type_name: eventName, value },
+                    });
+                  }
+                  newData[i] = { ...newData[i], inserts: list };
+                  setEditableData(newData);
+                };
 
                 return (
                   <div>
                     <div className="flex items-center justify-between mb-4">
                       <span className="text-xs font-bold text-indigo-500 uppercase tracking-wide">
-                        Paso {currentStep + 1} de {steps.length}
+                        Paciente {i + 1} de {editableData.length}
                       </span>
                     </div>
 
-                    <div className="mb-6">
-                      <div className="flex items-center gap-2 border-b pb-2 mb-3">
+                    <div className="mb-6 space-y-5">
+                      <div className="flex items-center gap-2 border-b pb-2">
                         <span className="text-xl">{SPECIES_INFO[selectedAnimal?.species_id]?.emoji || "🐾"}</span>
-                        <input 
+                        <input
                           type="text"
                           className="font-bold text-lg text-gray-800 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-indigo-500 focus:outline-none transition-colors w-full"
                           value={animalData.animal}
@@ -493,24 +576,54 @@ export default function VoiceRecorder({ onSave }) {
                           }}
                         />
                       </div>
-                      
-                      {insert ? (
-                        <div className="bg-gray-50 border border-gray-200 p-3 rounded-lg text-sm">
-                          {(() => {
-                            const entityName = insert.table_name === "ReportEvent" ? "Evento Rutinario" : (insert.table_name === "AnimalDiagnosis" ? "Diagnóstico" : insert.table_name);
-                            const fields = insert.fields || {};
-                            const keys = Object.keys(fields);
+
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-sm font-bold text-gray-800">Rutina diaria</h4>
+                          <span className="text-[11px] font-medium text-gray-400">Opcional</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {routineInserts.map(({ name, insert }) => (
+                            <label key={name} className="bg-indigo-50/60 border border-indigo-100 rounded-xl p-3 flex flex-col gap-1.5">
+                              <span className="text-xs font-bold text-indigo-700 uppercase tracking-wide">{name}</span>
+                              <input
+                                type="text"
+                                className="w-full bg-white border border-indigo-100 rounded-lg px-3 py-2 text-gray-900 text-base focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                value={insert?.fields?.value ?? ""}
+                                placeholder="Ej. todo, normal, no..."
+                                onChange={(e) => updateRoutineValue(name, e.target.value)}
+                              />
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      {otherInserts.length > 0 && (
+                        <div className="space-y-3">
+                          <h4 className="text-sm font-bold text-gray-800">Otros hallazgos</h4>
+                          {otherInserts.map(({ ins, idx }) => {
+                            const entityName =
+                              ins.table_name === "ReportEvent"
+                                ? ins.fields?.event_type_name || "Evento"
+                                : ins.table_name === "AnimalDiagnosis"
+                                  ? "Diagnóstico"
+                                  : ins.table_name === "AnimalObservation"
+                                    ? "Observación"
+                                    : ins.table_name;
+                            const fields = ins.fields || {};
+                            const keys = Object.keys(fields).filter(k => k !== "event_type_name");
 
                             return (
-                              <>
+                              <div key={idx} className="bg-gray-50 border border-gray-200 p-3 rounded-lg text-sm">
                                 <div className="flex justify-between items-center mb-2">
                                   <span className="font-bold text-indigo-600 uppercase text-xs tracking-wide">
-                                    Categoría: {entityName}
+                                    {entityName}
                                   </span>
-                                  <button 
+                                  <button
+                                    type="button"
                                     onClick={() => {
                                       const newData = [...editableData];
-                                      newData[i].inserts.splice(j, 1);
+                                      newData[i].inserts.splice(idx, 1);
                                       setEditableData(newData);
                                     }}
                                     className="text-xs text-red-500 hover:text-red-700 font-bold px-2 py-1 bg-red-50 rounded"
@@ -521,42 +634,77 @@ export default function VoiceRecorder({ onSave }) {
                                 <ul className="space-y-2">
                                   {keys.map((key) => {
                                     const val = fields[key] || "";
-                                    const isMissing = !val && insert.table_name !== "AnimalMedication";
-                                    const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                                    
+                                    const formattedKey = key.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
                                     return (
                                       <li key={key} className="flex gap-2 items-center bg-white p-1.5 rounded border border-gray-100">
-                                        <span className="font-medium text-gray-600 w-32 shrink-0">{formattedKey}:</span>
-                                        <input 
-                                          type="text" 
-                                          className={`w-full bg-transparent border-b focus:outline-none text-gray-900 py-1 transition-colors ${
-                                            isMissing ? 'border-red-300 focus:border-red-500 bg-red-50/30' : 'border-gray-200 focus:border-indigo-500'
-                                          }`}
+                                        <span className="font-medium text-gray-600 w-28 shrink-0 text-xs">{formattedKey}:</span>
+                                        <input
+                                          type="text"
+                                          className="w-full bg-transparent border-b border-gray-200 focus:border-indigo-500 focus:outline-none text-gray-900 py-1"
                                           value={String(val)}
-                                          placeholder={isMissing ? 'Falta completar...' : ''}
                                           onChange={(e) => {
                                             const newData = [...editableData];
-                                            if (!newData[i].inserts[j].fields) {
-                                              newData[i].inserts[j].fields = {};
+                                            if (!newData[i].inserts[idx].fields) {
+                                              newData[i].inserts[idx].fields = {};
                                             }
-                                            newData[i].inserts[j].fields[key] = e.target.value;
+                                            newData[i].inserts[idx].fields[key] = e.target.value;
                                             setEditableData(newData);
                                           }}
                                         />
-                                        {isMissing && (
-                                          <span title="Dato no encontrado en el audio. Por favor, completar a mano." className="text-red-500 text-lg cursor-help">⚠️</span>
-                                        )}
                                       </li>
                                     );
                                   })}
                                 </ul>
-                              </>
+                              </div>
                             );
-                          })()}
+                          })}
                         </div>
-                      ) : (
-                        <p className="text-gray-500 italic text-sm">No hay registros extraídos para este paciente.</p>
                       )}
+
+                      <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl space-y-3">
+                        <p className="text-amber-900 text-sm font-medium">
+                          ¿Querés agregar el texto como <b>observación</b>? (queda en amarillo)
+                        </p>
+                        <textarea
+                          className="w-full bg-white border border-amber-200 rounded-lg p-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-amber-400 resize-y"
+                          rows={3}
+                          value={observationDraft}
+                          onChange={(e) => setObservationDraft(e.target.value)}
+                          placeholder="Escribí la observación..."
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const text = (observationDraft || editableTranscript || "").trim();
+                            if (!text) {
+                              alert("Escribí una observación antes de agregarla.");
+                              return;
+                            }
+                            const newData = [...editableData];
+                            const list = [...(newData[i].inserts || [])];
+                            const already = list.some(
+                              ins =>
+                                ins.table_name === "ReportEvent" &&
+                                (ins.fields?.event_type_name || "").toLowerCase() === "observación"
+                            );
+                            if (!already) {
+                              list.push({
+                                table_name: "ReportEvent",
+                                fields: { event_type_name: "Observación", value: text },
+                              });
+                              list.push({
+                                table_name: "AnimalObservation",
+                                fields: { observation: text },
+                              });
+                            }
+                            newData[i] = { ...newData[i], inserts: list, severity: "observation" };
+                            setEditableData(newData);
+                          }}
+                          className="w-full sm:w-auto px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-sm transition-colors"
+                        >
+                          Agregar como observación
+                        </button>
+                      </div>
                     </div>
 
                     <div className="flex justify-between items-center mt-8 pt-6 border-t border-gray-100">
@@ -572,17 +720,17 @@ export default function VoiceRecorder({ onSave }) {
                       <div className="flex gap-3">
                         <button
                           onClick={() => setCurrentStep(prev => Math.max(0, prev - 1))}
-                          disabled={currentStep === 0}
+                          disabled={i === 0}
                           className={`px-6 py-2 rounded-lg font-medium transition-all ${
-                            currentStep === 0 
-                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                            : 'bg-white text-indigo-600 border border-indigo-200 hover:bg-indigo-50 shadow-sm'
+                            i === 0
+                              ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                              : "bg-white text-indigo-600 border border-indigo-200 hover:bg-indigo-50 shadow-sm"
                           }`}
                         >
                           Anterior
                         </button>
-                        
-                        {currentStep < steps.length - 1 ? (
+
+                        {i < editableData.length - 1 ? (
                           <button
                             onClick={() => setCurrentStep(prev => prev + 1)}
                             className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium shadow-md hover:shadow-lg transition-all"

@@ -194,14 +194,28 @@ def delete_veterinarian(item_id: int, db: Session = Depends(get_db), current_adm
     db.commit()
     return None
 
-from src.services.tag_helpers import load_tag_sets, tag_set_to_dict, set_tag_variants, parse_csv_values
+from src.services.tag_helpers import (
+    ensure_required_tag_sets,
+    is_required_tag_set,
+    tag_set_to_dict,
+    set_tag_variants,
+    parse_csv_values,
+)
 
 @router.get("/tagsets")
 def get_tagsets(db: Session = Depends(get_db)):
-    return [tag_set_to_dict(t) for t in load_tag_sets(db)]
+    # Garantiza que Comida, Agua, Pis y Caca existan siempre
+    return [tag_set_to_dict(t) for t in ensure_required_tag_sets(db)]
 
 @router.post("/tagsets")
 def create_tagset(data: catalog_dto.TagSetCreate, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
+    if is_required_tag_set(data.name):
+        existing = db.query(TagSet).filter(TagSet.name.ilike(data.name.strip())).first()
+        if existing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"'{existing.name}' es un conjunto obligatorio y ya existe.",
+            )
     new_item = TagSet(name=data.name)
     db.add(new_item)
     db.flush()
@@ -225,6 +239,11 @@ def delete_tagset(item_id: int, db: Session = Depends(get_db), current_admin = D
     item = db.query(TagSet).filter(TagSet.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
+    if is_required_tag_set(item.name):
+        raise HTTPException(
+            status_code=400,
+            detail=f"'{item.name}' es un conjunto obligatorio y no se puede eliminar.",
+        )
     db.delete(item)
     db.commit()
     return None

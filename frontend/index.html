@@ -1,41 +1,21 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/logo.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="theme-color" content="#ffffff" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#4f46e5" />
+    <meta name="description" content="Gestión de Guardería Canina - Petsitting by Cathy" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Petsitting" />
+    <meta name="format-detection" content="telephone=no" />
     <link rel="apple-touch-icon" href="/pwa-192x192.png" />
     <title>Petsitting by Cathy</title>
   </head>
   <body>
     <div id="root"></div>
-    <script>
-      // Desregistrar todos los Service Workers viejos para forzar recarga limpia
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(function(registrations) {
-          for (let registration of registrations) {
-            registration.unregister().then(function() {
-              console.log('Service Worker desregistrado exitosamente');
-            });
-          }
-          if (registrations.length > 0) {
-            // Limpiar cachés viejas
-            caches.keys().then(function(names) {
-              for (let name of names) {
-                caches.delete(name);
-              }
-            });
-            console.log('Cachés limpiadas. Recargando...');
-            window.location.reload();
-          }
-        });
-      }
-    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

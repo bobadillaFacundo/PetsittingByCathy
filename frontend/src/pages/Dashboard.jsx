@@ -289,7 +289,7 @@ function AnimalCard({ animal, onSelect, type }) {
     <div 
       onClick={() => onSelect(animal.id)}
       className={`p-5 rounded-2xl cursor-pointer transition-all border shadow-sm hover:shadow-md ${
-        isObs ? "bg-amber-50 border-amber-200 hover:bg-amber-100" : "bg-white border-gray-100 hover:border-indigo-100 hover:-translate-y-1"
+        isObs ? "bg-yellow-100 border-yellow-300 hover:bg-yellow-200" : "bg-white border-gray-100 hover:border-indigo-100 hover:-translate-y-1"
       }`}
     >
       <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
@@ -297,7 +297,7 @@ function AnimalCard({ animal, onSelect, type }) {
         {animal.name}
       </h3>
       <span className={`inline-block mt-3 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${
-        isObs ? "bg-amber-200 text-amber-800" : "bg-green-100 text-green-700"
+        isObs ? "bg-yellow-300 text-yellow-900" : "bg-green-100 text-green-700"
       }`}>
         {isObs ? "En Observación" : "Normal"}
       </span>

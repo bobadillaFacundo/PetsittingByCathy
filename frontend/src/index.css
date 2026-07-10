@@ -4,11 +4,91 @@
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  color-scheme: light dark;
+  color-scheme: light;
+  /* Safe areas iOS (notch / home indicator) */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
-  background-color: #f3f4f6; /* bg-gray-100 */
+  min-height: 100dvh;
+  background-color: #f3f4f6;
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#root {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* Evita zoom automático de iOS en inputs (< 16px) */
+input,
+select,
+textarea {
+  font-size: 16px;
+}
+
+/* Filtros fecha: letras negras (iOS/WebKit suele pintarlas grises) */
+input[type="date"].audit-date-input,
+input[type="date"].audit-date-input:invalid {
+  color: #000 !important;
+  -webkit-text-fill-color: #000 !important;
+  opacity: 1;
+  color-scheme: light;
+}
+
+input[type="date"].audit-date-input::-webkit-datetime-edit,
+input[type="date"].audit-date-input::-webkit-datetime-edit-fields-wrapper,
+input[type="date"].audit-date-input::-webkit-datetime-edit-text,
+input[type="date"].audit-date-input::-webkit-datetime-edit-month-field,
+input[type="date"].audit-date-input::-webkit-datetime-edit-day-field,
+input[type="date"].audit-date-input::-webkit-datetime-edit-year-field {
+  color: #000 !important;
+  -webkit-text-fill-color: #000 !important;
+}
+
+@media (min-width: 768px) {
+  input,
+  select,
+  textarea {
+    font-size: inherit;
+  }
+}
+
+/* Utilidades safe-area */
+@utility pt-safe {
+  padding-top: var(--safe-top);
+}
+@utility pb-safe {
+  padding-bottom: var(--safe-bottom);
+}
+@utility px-safe {
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+}
+@utility mb-safe {
+  margin-bottom: var(--safe-bottom);
+}
+
+/* Scroll suave en iOS */
+.scroll-touch {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Modales a pantalla completa en móvil */
+.modal-sheet {
+  max-height: min(90dvh, 90vh);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }

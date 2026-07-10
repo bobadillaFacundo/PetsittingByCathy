@@ -37,11 +37,47 @@ class TestTagSets:
         assert res.status_code == 200
         assert res.json()["name"] == "Conducta"
         assert "jugó" in res.json()["variants_text"]
+        assert res.json()["is_required"] is False
 
     def test_list_tagsets(self, client, seed, auth_headers):
         res = client.get("/catalogs/tagsets", headers=auth_headers)
         assert res.status_code == 200
-        assert any(t["name"] == "Comida" for t in res.json())
+        names = {t["name"] for t in res.json()}
+        for required in ("Comida", "Agua", "Pis", "Caca"):
+            assert required in names
+        comida = next(t for t in res.json() if t["name"] == "Comida")
+        assert comida["is_required"] is True
+
+    def test_list_ensures_required_tagsets(self, client, db, auth_headers):
+        from src.models.models import TagSet
+        # Primero asegurar que existen
+        client.get("/catalogs/tagsets", headers=auth_headers)
+        pis = db.query(TagSet).filter(TagSet.name == "Pis").first()
+        assert pis is not None
+        db.delete(pis)
+        db.commit()
+        res = client.get("/catalogs/tagsets", headers=auth_headers)
+        assert res.status_code == 200
+        assert any(t["name"] == "Pis" and t["is_required"] for t in res.json())
+
+    def test_cannot_delete_required_tagset(self, client, auth_headers, seed):
+        res = client.delete(
+            f"/catalogs/tagsets/{seed['tag_comida'].id}",
+            headers=auth_headers,
+        )
+        assert res.status_code == 400
+        assert "obligatorio" in res.json()["detail"].lower()
+
+    def test_can_delete_optional_tagset(self, client, auth_headers):
+        created = client.post(
+            "/catalogs/tagsets",
+            json={"name": "JuegoTemp", "variants": "jugó, pelota"},
+            headers=auth_headers,
+        )
+        assert created.status_code == 200
+        tag_id = created.json()["id"]
+        res = client.delete(f"/catalogs/tagsets/{tag_id}", headers=auth_headers)
+        assert res.status_code == 204
 
     def test_update_tagset(self, client, auth_headers, seed):
         res = client.put(
@@ -51,6 +87,7 @@ class TestTagSets:
         )
         assert res.status_code == 200
         assert "nuevo_verbo" in res.json()["variants_text"]
+        assert res.json()["is_required"] is True
 
 
 @pytest.mark.api
