@@ -25,13 +25,24 @@ export default function Dashboard() {
         "Cache-Control": "no-cache"
       }
     })
-      .then(res => res.json())
-      .then(d => {
+      .then(async (res) => {
+        if (!res.ok) {
+          setData(null);
+          setLoading(false);
+          return;
+        }
+        const d = await res.json();
+        if (!d || !Array.isArray(d.observation_animals) || !Array.isArray(d.normal_animals)) {
+          setData(null);
+          setLoading(false);
+          return;
+        }
         setData(d);
         setLoading(false);
       })
       .catch(err => {
         console.error(err);
+        setData(null);
         setLoading(false);
       });
   };
@@ -46,9 +57,9 @@ export default function Dashboard() {
       const res = await fetch(`/api/dashboard/weather`, {
         headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
       });
+      if (!res.ok) return;
       const d = await res.json();
       setWeatherData(d);
-      // Refresh the dashboard data so animals change visually from green to yellow/red
       fetchData();
     } catch (err) {
       console.error(err);

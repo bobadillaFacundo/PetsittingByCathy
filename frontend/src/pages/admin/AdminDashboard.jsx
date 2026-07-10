@@ -12,6 +12,7 @@ import CatalogsPanel from './CatalogsPanel';
 import UsuariosPanel from './UsuariosPanel';
 import ExportacionPanel from './ExportacionPanel';
 import ColoresPanel from './ColoresPanel';
+import { clearSession, isAuthenticated } from '../../lib/auth';
 
 export default function AdminDashboard() {
   const username = localStorage.getItem('username');
@@ -21,16 +22,15 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      navigate('/login');
+    if (!isAuthenticated()) {
+      clearSession();
+      navigate('/login', { replace: true });
     }
   }, [navigate]);
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('role');
-    navigate('/login');
+    clearSession();
+    navigate('/login', { replace: true });
   };
 
   const navItems = [

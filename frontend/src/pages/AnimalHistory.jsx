@@ -139,8 +139,39 @@ export default function AnimalHistory({ animalId = 1 }) {
             {SPECIES_INFO[data.animal.species_id]?.emoji || "🐾"}
           </div>
           <div>
-            <h2 className="text-3xl font-bold text-gray-900">{data.animal.name}</h2>
+            <h2 className="text-3xl font-bold text-gray-900 flex items-center gap-2 flex-wrap">
+              {data.animal.name}
+              {data.animal.is_rescue && (
+                <span className="text-xs font-bold uppercase tracking-wide bg-amber-100 text-amber-800 px-2.5 py-1 rounded-full">Rescate</span>
+              )}
+            </h2>
             <p className="text-gray-500 font-medium">Historial Clínico Cronológico</p>
+            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-sm text-gray-600">
+              {data.animal.coat_color && <span>Pelaje: <strong>{data.animal.coat_color}</strong></span>}
+              {data.animal.is_rescue ? (
+                (data.animal.age_estimate_min != null || data.animal.age_estimate_max != null) && (
+                  <span>
+                    Edad est.: <strong>
+                      {data.animal.age_estimate_min ?? '?'}–{data.animal.age_estimate_max ?? '?'} años
+                    </strong>
+                  </span>
+                )
+              ) : (
+                data.animal.age_years != null && (
+                  <span>Edad: <strong>{data.animal.age_years} años</strong></span>
+                )
+              )}
+              {data.animal.is_simil_breed && <span className="font-bold text-indigo-700">SÍMIL raza</span>}
+            </div>
+            {(data.animal.is_blind || data.animal.is_deaf || data.animal.no_smell || data.animal.has_neurological || data.animal.has_involuntary_movements) && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {data.animal.is_blind && <span className="text-xs font-bold bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full border border-rose-100">Ciego</span>}
+                {data.animal.is_deaf && <span className="text-xs font-bold bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full border border-rose-100">Sordo</span>}
+                {data.animal.no_smell && <span className="text-xs font-bold bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full border border-rose-100">Sin olfato</span>}
+                {data.animal.has_neurological && <span className="text-xs font-bold bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full border border-rose-100">Neurológico</span>}
+                {data.animal.has_involuntary_movements && <span className="text-xs font-bold bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full border border-rose-100">Mov. involuntarios</span>}
+              </div>
+            )}
           </div>
         </div>
         

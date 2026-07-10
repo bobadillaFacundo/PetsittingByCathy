@@ -120,6 +120,8 @@ Los conjuntos **Comida, Agua, Pis, Caca** se aseguran en migración/helpers (`RE
 - `breed_id`, `veterinarian_id`, nombre, sexo, color, fechas, `is_active`
 - `is_daycare` (default `true`): casita vs solo calendario
 - `severity`: `normal` | `observation` | `critical` (caché dashboard)
+- Perfil: `coat_color`, `is_rescue`, `age_years` o rango `age_estimate_min`/`age_estimate_max`, `is_simil_breed` (raza = SÍMIL a…)
+- Características: `is_blind`, `is_deaf`, `no_smell`, `has_neurological`, `has_involuntary_movements`
 
 ### `reservations`
 - `animal_id`, fechas, `status`, notas

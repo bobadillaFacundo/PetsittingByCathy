@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { redirectToLogin } from "../lib/auth";
 
 const SPECIES_INFO = {
   1: { name: "Perros", emoji: "🐶" },
@@ -159,7 +160,7 @@ export default function VoiceRecorder({ onSave }) {
       if (!response.ok) {
         if (response.status === 401) {
           alert("Tu sesión ha expirado o no tienes permisos. Por favor, inicia sesión nuevamente.");
-          window.location.href = '/login';
+          redirectToLogin();
           return;
         }
         throw new Error("Error en el servidor al analizar el audio.");

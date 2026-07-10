@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { clearSession } from '../lib/auth';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -9,8 +10,7 @@ export default function Login() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('role');
+    clearSession();
   }, []);
 
 

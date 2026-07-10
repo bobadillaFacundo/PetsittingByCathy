@@ -135,6 +135,21 @@ class Animal(Base):
     is_daycare = Column(Boolean, default=True, nullable=False)
     severity = Column(String, default="normal")
 
+    # Perfil físico / rescate
+    coat_color = Column(String, nullable=True)
+    is_rescue = Column(Boolean, default=False, nullable=False)
+    age_years = Column(Float, nullable=True)  # edad conocida (no rescate / exacta)
+    age_estimate_min = Column(Float, nullable=True)  # rango estimado si rescate
+    age_estimate_max = Column(Float, nullable=True)
+    is_simil_breed = Column(Boolean, default=False, nullable=False)  # raza = "SÍMIL a …"
+
+    # Características especiales
+    is_blind = Column(Boolean, default=False, nullable=False)
+    is_deaf = Column(Boolean, default=False, nullable=False)
+    no_smell = Column(Boolean, default=False, nullable=False)
+    has_neurological = Column(Boolean, default=False, nullable=False)
+    has_involuntary_movements = Column(Boolean, default=False, nullable=False)
+
     species = relationship("Species", back_populates="animals")
     breed = relationship("Breed", back_populates="animals")
     veterinarian = relationship("Veterinarian", back_populates="animals")

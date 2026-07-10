@@ -6,10 +6,11 @@ import Login from './pages/Login';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import InstallPrompt from './components/InstallPrompt';
 import CalendarioPanel from './pages/admin/CalendarioPanel';
+import { clearSession, isAuthenticated } from './lib/auth';
 
 function ProtectedRoute({ children }) {
-  const token = localStorage.getItem('token');
-  if (!token) {
+  if (!isAuthenticated()) {
+    clearSession();
     return <Navigate to="/login" replace />;
   }
   return children;
@@ -39,8 +40,7 @@ function MainApp() {
           )}
           <button 
             onClick={() => {
-              localStorage.removeItem('token');
-              localStorage.removeItem('role');
+              clearSession();
               navigate('/login');
             }}
             className="px-2.5 sm:px-4 py-2 bg-red-50 text-red-600 text-xs sm:text-sm font-bold rounded-lg hover:bg-red-100 transition-colors"
@@ -115,10 +115,28 @@ function MainApp() {
  */
 function AuthenticatedShell() {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
   const role = localStorage.getItem('role');
   const isAdminRoute = pathname.startsWith('/admin');
   const [homeMounted, setHomeMounted] = useState(!isAdminRoute);
   const [adminMounted, setAdminMounted] = useState(isAdminRoute);
+
+  useEffect(() => {
+    const ensureAuth = () => {
+      if (!isAuthenticated()) {
+        clearSession();
+        navigate('/login', { replace: true });
+      }
+    };
+    ensureAuth();
+    const onFocus = () => ensureAuth();
+    window.addEventListener('focus', onFocus);
+    const interval = window.setInterval(ensureAuth, 60_000);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      window.clearInterval(interval);
+    };
+  }, [navigate]);
 
   useEffect(() => {
     if (isAdminRoute) {
@@ -127,6 +145,10 @@ function AuthenticatedShell() {
       setHomeMounted(true);
     }
   }, [isAdminRoute]);
+
+  if (!isAuthenticated()) {
+    return <Navigate to="/login" replace />;
+  }
 
   if (!isAdminRoute && pathname !== '/') {
     return <Navigate to="/" replace />;

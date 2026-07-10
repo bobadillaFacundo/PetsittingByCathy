@@ -170,6 +170,31 @@ def migrate():
             db.commit()
             print("  OK animals.is_daycare (existentes = guardería)")
 
+        # --- Perfil físico / rescate / características ---
+        inspector = inspect(engine)
+        if table_exists(inspector, "animals"):
+            animal_cols = {
+                "coat_color": "VARCHAR",
+                "is_rescue": "BOOLEAN DEFAULT FALSE NOT NULL",
+                "age_years": "DOUBLE PRECISION",
+                "age_estimate_min": "DOUBLE PRECISION",
+                "age_estimate_max": "DOUBLE PRECISION",
+                "is_simil_breed": "BOOLEAN DEFAULT FALSE NOT NULL",
+                "is_blind": "BOOLEAN DEFAULT FALSE NOT NULL",
+                "is_deaf": "BOOLEAN DEFAULT FALSE NOT NULL",
+                "no_smell": "BOOLEAN DEFAULT FALSE NOT NULL",
+                "has_neurological": "BOOLEAN DEFAULT FALSE NOT NULL",
+                "has_involuntary_movements": "BOOLEAN DEFAULT FALSE NOT NULL",
+            }
+            added = []
+            for col, ddl in animal_cols.items():
+                if not column_exists(inspector, "animals", col):
+                    db.execute(text(f"ALTER TABLE animals ADD COLUMN {col} {ddl}"))
+                    added.append(col)
+            if added:
+                db.commit()
+                print(f"  OK animals perfil: {', '.join(added)}")
+
         print("\nMigración completada. Reinicia el backend.")
     except Exception as e:
         db.rollback()

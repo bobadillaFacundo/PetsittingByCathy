@@ -4,6 +4,7 @@ import { Pencil, Trash2, Plus, X, Save, Syringe, FileText, UserCircle, BookHeart
 import DesparasitacionesTab from './DesparasitacionesTab';
 import LaboratoriosTab from './LaboratoriosTab';
 import LibretaTab from './LibretaTab';
+import { redirectToLogin } from '../../lib/auth';
 
 const SPECIES_INFO = {
   1: { name: "Perros", emoji: "🐶" },
@@ -13,6 +14,52 @@ const SPECIES_INFO = {
   5: { name: "Tortugas", emoji: "🐢" },
   6: { name: "Erizos", emoji: "🦔" }
 };
+
+const TRAIT_OPTIONS = [
+  { key: 'is_blind', label: 'Ciego' },
+  { key: 'is_deaf', label: 'Sordo' },
+  { key: 'no_smell', label: 'Sin olfato' },
+  { key: 'has_neurological', label: 'Temas neurológicos' },
+  { key: 'has_involuntary_movements', label: 'Movimientos involuntarios' },
+];
+
+const emptyForm = (daycareOnly, speciesId = '') => ({
+  name: '',
+  species_id: speciesId,
+  breed_id: '',
+  sex: 'M',
+  is_castrated: false,
+  is_active: true,
+  is_daycare: daycareOnly,
+  coat_color: '',
+  is_rescue: false,
+  age_years: '',
+  age_estimate_min: '',
+  age_estimate_max: '',
+  is_simil_breed: false,
+  is_blind: false,
+  is_deaf: false,
+  no_smell: false,
+  has_neurological: false,
+  has_involuntary_movements: false,
+});
+
+function formatAge(m) {
+  if (m.is_rescue) {
+    const min = m.age_estimate_min;
+    const max = m.age_estimate_max;
+    if (min != null && max != null) return `~${min}–${max} años`;
+    if (min != null) return `desde ~${min} años`;
+    if (max != null) return `hasta ~${max} años`;
+    return 'Edad estimada';
+  }
+  if (m.age_years != null && m.age_years !== '') return `${m.age_years} años`;
+  return null;
+}
+
+function traitLabels(m) {
+  return TRAIT_OPTIONS.filter(t => m[t.key]).map(t => t.label);
+}
 
 export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
   const [mascotas, setMascotas] = useState([]);
@@ -25,15 +72,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
   const [modalTab, setModalTab] = useState('basic');
   const [selectedSpeciesId, setSelectedSpeciesId] = useState(null);
   
-  const [formData, setFormData] = useState({
-    name: '',
-    species_id: '',
-    breed_id: '',
-    sex: '',
-    is_castrated: false,
-    is_active: true,
-    is_daycare: daycareOnly
-  });
+  const [formData, setFormData] = useState(() => emptyForm(daycareOnly));
 
   const token = localStorage.getItem('token');
   const sectionTitle = title || (daycareOnly ? 'Mascotas Guardería' : 'Mascotas Externas');
@@ -55,7 +94,10 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) {
-        if (res.status === 401) window.location.href = '/login';
+        if (res.status === 401) {
+          redirectToLogin();
+          return;
+        }
         throw new Error();
       }
       const data = await res.json();
@@ -73,7 +115,10 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) {
-        if (res.status === 401) window.location.href = '/login';
+        if (res.status === 401) {
+          redirectToLogin();
+          return;
+        }
         throw new Error();
       }
       const data = await res.json();
@@ -107,19 +152,22 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
         sex: mascota.sex || '',
         is_castrated: mascota.is_castrated || false,
         is_active: mascota.is_active,
-        is_daycare: mascota.is_daycare ?? daycareOnly
+        is_daycare: mascota.is_daycare ?? daycareOnly,
+        coat_color: mascota.coat_color || '',
+        is_rescue: Boolean(mascota.is_rescue),
+        age_years: mascota.age_years ?? '',
+        age_estimate_min: mascota.age_estimate_min ?? '',
+        age_estimate_max: mascota.age_estimate_max ?? '',
+        is_simil_breed: Boolean(mascota.is_simil_breed),
+        is_blind: Boolean(mascota.is_blind),
+        is_deaf: Boolean(mascota.is_deaf),
+        no_smell: Boolean(mascota.no_smell),
+        has_neurological: Boolean(mascota.has_neurological),
+        has_involuntary_movements: Boolean(mascota.has_involuntary_movements),
       });
     } else {
       setEditingId(null);
-      setFormData({
-        name: '',
-        species_id: speciesList.length > 0 ? speciesList[0].id : '',
-        breed_id: '',
-        sex: 'M',
-        is_castrated: false,
-        is_active: true,
-        is_daycare: daycareOnly
-      });
+      setFormData(emptyForm(daycareOnly, speciesList.length > 0 ? speciesList[0].id : ''));
     }
     setModalTab('basic');
     setIsModalOpen(true);
@@ -132,6 +180,17 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
     return () => { document.body.style.overflow = prev; };
   }, [isModalOpen]);
 
+  const handleRescueToggle = (checked) => {
+    setFormData((prev) => ({
+      ...prev,
+      is_rescue: checked,
+      is_simil_breed: checked ? true : prev.is_simil_breed,
+      age_years: checked ? '' : prev.age_years,
+      age_estimate_min: checked ? prev.age_estimate_min : '',
+      age_estimate_max: checked ? prev.age_estimate_max : '',
+    }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const url = editingId 
@@ -140,9 +199,29 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
     
     const method = editingId ? 'PUT' : 'POST';
 
-    // Convert empty strings to null for optional integer fields
     const payload = { ...formData };
     if (payload.breed_id === '') payload.breed_id = null;
+    if (payload.coat_color === '') payload.coat_color = null;
+
+    const toNumOrNull = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
+
+    if (payload.is_rescue) {
+      payload.age_years = null;
+      payload.age_estimate_min = toNumOrNull(payload.age_estimate_min);
+      payload.age_estimate_max = toNumOrNull(payload.age_estimate_max);
+      if (
+        payload.age_estimate_min != null &&
+        payload.age_estimate_max != null &&
+        payload.age_estimate_min > payload.age_estimate_max
+      ) {
+        alert('El rango de edad estimado es inválido (mínimo mayor que máximo).');
+        return;
+      }
+    } else {
+      payload.age_years = toNumOrNull(payload.age_years);
+      payload.age_estimate_min = null;
+      payload.age_estimate_max = null;
+    }
 
     try {
       const res = await fetch(url, {
@@ -190,6 +269,13 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
   const getSpeciesName = (id) => {
     const s = speciesList.find(x => x.id === id);
     return s ? s.name : 'Desconocida';
+  };
+
+  const getBreedLabel = (m) => {
+    if (!m.breed_id) return m.is_simil_breed ? 'SÍMIL (sin raza)' : null;
+    const b = breedsList.find(x => x.id === m.breed_id);
+    const name = b ? b.name : 'Raza';
+    return m.is_simil_breed ? `SÍMIL ${name}` : name;
   };
 
   if (isLoading) return <div className="text-center p-8 text-gray-500">Cargando mascotas...</div>;
@@ -255,10 +341,30 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
               <div key={m.id} onClick={() => openModal(m)} className="bg-white rounded-3xl shadow-sm border border-gray-100 p-5 flex flex-col justify-between hover:shadow-md transition-shadow cursor-pointer">
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <h3 className="text-xl font-black text-gray-900 tracking-tight">{m.name}</h3>
+                    <h3 className="text-xl font-black text-gray-900 tracking-tight flex items-center gap-2">
+                      {m.name}
+                      {m.is_rescue && (
+                        <span className="text-[10px] font-bold uppercase tracking-wide bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">Rescate</span>
+                      )}
+                    </h3>
                     <span className="inline-block mt-1 px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700">
                       {getSpeciesName(m.species_id)}
                     </span>
+                    {getBreedLabel(m) && (
+                      <p className="text-sm text-gray-600 mt-1.5 font-medium">{getBreedLabel(m)}</p>
+                    )}
+                    <p className="text-xs text-gray-500 mt-1">
+                      {[formatAge(m), m.coat_color].filter(Boolean).join(' · ') || 'Sin edad / pelaje'}
+                    </p>
+                    {traitLabels(m).length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {traitLabels(m).map((label) => (
+                          <span key={label} className="text-[10px] font-bold bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full border border-rose-100">
+                            {label}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   {m.is_active ? (
                     <span className="flex items-center gap-1.5 bg-green-50 text-green-700 px-3 py-1.5 rounded-full text-xs font-bold border border-green-100">
@@ -309,7 +415,9 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
               <thead>
                 <tr className="bg-gray-50 text-gray-500 text-sm border-y border-gray-100">
                   <th className="px-6 py-4 font-medium">Nombre</th>
-                  <th className="px-6 py-4 font-medium">Especie</th>
+                  <th className="px-6 py-4 font-medium">Raza / Símil</th>
+                  <th className="px-6 py-4 font-medium">Edad</th>
+                  <th className="px-6 py-4 font-medium">Pelaje</th>
                   <th className="px-6 py-4 font-medium">Sexo</th>
                   <th className="px-6 py-4 font-medium">Estado</th>
                   <th className="px-6 py-4 font-medium text-right">Acciones</th>
@@ -318,11 +426,31 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
               <tbody className="divide-y divide-gray-100">
                 {mascotas.filter(m => m.species_id === selectedSpeciesId).map((m) => (
                   <tr key={m.id} onClick={() => openModal(m)} className="hover:bg-gray-50/50 transition-colors cursor-pointer">
-                    <td className="px-6 py-4 font-bold text-gray-900">{m.name}</td>
-                    <td className="px-6 py-4 text-gray-600">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
-                        {getSpeciesName(m.species_id)}
-                      </span>
+                    <td className="px-6 py-4 font-bold text-gray-900">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {m.name}
+                        {m.is_rescue && (
+                          <span className="text-[10px] font-bold uppercase tracking-wide bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">Rescate</span>
+                        )}
+                      </div>
+                      {traitLabels(m).length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {traitLabels(m).map((label) => (
+                            <span key={label} className="text-[10px] font-bold bg-rose-50 text-rose-700 px-1.5 py-0.5 rounded-full">
+                              {label}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-gray-600 text-sm font-medium">
+                      {getBreedLabel(m) || '—'}
+                    </td>
+                    <td className="px-6 py-4 text-gray-600 text-sm font-medium">
+                      {formatAge(m) || '—'}
+                    </td>
+                    <td className="px-6 py-4 text-gray-600 text-sm font-medium">
+                      {m.coat_color || '—'}
                     </td>
                     <td className="px-6 py-4 text-gray-600 text-sm font-medium">
                       {m.sex === 'M' ? 'Macho' : m.sex === 'F' ? 'Hembra' : 'No definido'}
@@ -456,8 +584,24 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                     </select>
                   </div>
 
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 border border-amber-100">
+                    <input
+                      type="checkbox"
+                      id="isRescue"
+                      checked={formData.is_rescue}
+                      onChange={(e) => handleRescueToggle(e.target.checked)}
+                      className="w-5 h-5 text-amber-600 rounded border-gray-300"
+                    />
+                    <label htmlFor="isRescue" className="text-sm font-bold text-amber-900">
+                      Rescate
+                    </label>
+                    <span className="text-xs text-amber-700">Edad estimada y raza símil</span>
+                  </div>
+
                   <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">Raza</label>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">
+                      {formData.is_simil_breed ? 'Símil a (raza)' : 'Raza'}
+                    </label>
                     <select
                       value={formData.breed_id}
                       onChange={(e) => setFormData({...formData, breed_id: e.target.value ? parseInt(e.target.value) : null})}
@@ -470,7 +614,70 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                         <option key={b.id} value={b.id}>{b.name}</option>
                       ))}
                     </select>
+                    <label className="mt-2 flex items-center gap-2 text-sm text-gray-600">
+                      <input
+                        type="checkbox"
+                        checked={formData.is_simil_breed}
+                        onChange={(e) => setFormData({ ...formData, is_simil_breed: e.target.checked })}
+                        className="w-4 h-4 text-indigo-600 rounded border-gray-300"
+                      />
+                      Marcar como SÍMIL (tamaño / carácter aproximado)
+                    </label>
                   </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Color del pelaje</label>
+                    <input
+                      type="text"
+                      value={formData.coat_color}
+                      onChange={(e) => setFormData({ ...formData, coat_color: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 text-base"
+                      placeholder="Ej. negro y blanco, atigrado…"
+                    />
+                  </div>
+
+                  {formData.is_rescue ? (
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-1">Edad estimada (años)</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.5"
+                          inputMode="decimal"
+                          value={formData.age_estimate_min}
+                          onChange={(e) => setFormData({ ...formData, age_estimate_min: e.target.value })}
+                          className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 text-base"
+                          placeholder="Desde"
+                        />
+                        <span className="text-gray-500 font-bold shrink-0">a</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.5"
+                          inputMode="decimal"
+                          value={formData.age_estimate_max}
+                          onChange={(e) => setFormData({ ...formData, age_estimate_max: e.target.value })}
+                          className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 text-base"
+                          placeholder="Hasta"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-1">Edad (años)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        inputMode="decimal"
+                        value={formData.age_years}
+                        onChange={(e) => setFormData({ ...formData, age_years: e.target.value })}
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 text-base"
+                        placeholder="Ej. 3 o 1.5"
+                      />
+                    </div>
+                  )}
 
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1">Sexo</label>
@@ -483,6 +690,26 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                       <option value="M">Macho</option>
                       <option value="F">Hembra</option>
                     </select>
+                  </div>
+
+                  <div>
+                    <p className="block text-sm font-bold text-gray-700 mb-2">Características especiales</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {TRAIT_OPTIONS.map((t) => (
+                        <label
+                          key={t.key}
+                          className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-800"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={Boolean(formData[t.key])}
+                            onChange={(e) => setFormData({ ...formData, [t.key]: e.target.checked })}
+                            className="w-4 h-4 text-indigo-600 rounded border-gray-300"
+                          />
+                          {t.label}
+                        </label>
+                      ))}
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-2">
