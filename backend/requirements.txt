@@ -12,3 +12,6 @@ psycopg2-binary
 qdrant-client
 fastembed
 pypdf
+pytest
+pytest-cov
+httpx

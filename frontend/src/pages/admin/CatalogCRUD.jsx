@@ -29,7 +29,11 @@ export default function CatalogCRUD({ title, endpoint, columns, formFields, hide
   const openModal = (item = null) => {
     if (item) {
       setEditingId(item.id);
-      setFormData(item);
+      const data = { ...item };
+      if (Array.isArray(data.variants)) {
+        data.variants = data.variants_text || data.variants.join(', ');
+      }
+      setFormData(data);
     } else {
       setEditingId(null);
       const initialData = {};

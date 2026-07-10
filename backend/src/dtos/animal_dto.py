@@ -72,12 +72,18 @@ class EventDTO(BaseModel):
     type: str
     value: Optional[str] = None
 
+class AttachmentDTO(BaseModel):
+    id: int
+    file_url: str
+    file_type: str
+
 class ReportHistoryDTO(BaseModel):
     id: int
     created_at: datetime
     transcript: Optional[str] = None
     user_name: str
     events: List[EventDTO]
+    attachments: List[AttachmentDTO] = []
 
 class AnimalHistoryResponse(BaseModel):
     animal: AnimalResponse

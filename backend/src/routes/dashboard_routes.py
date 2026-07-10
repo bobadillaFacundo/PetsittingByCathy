@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from datetime import datetime, timedelta
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 
 from src.database.session import get_db
-from src.models.models import Animal, Report, ReportEvent, EventType
+from src.models.models import Animal, Report, ReportEvent, EventType, CriticalAlert
 from src.dtos.animal_dto import AnimalResponse
+from src.services.report_helpers import resolve_critical_alert, format_critical_alert_message
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -16,10 +17,20 @@ class AlertDTO(BaseModel):
     message: str
     severity: str # "high", "medium"
 
+class CriticalAlertDTO(BaseModel):
+    id: int
+    animal_id: int
+    animal_name: str
+    report_id: Optional[int] = None
+    message: str
+    keyword_detected: str
+    created_at: datetime
+
 class DashboardResponse(BaseModel):
     normal_animals: List[AnimalResponse]
     observation_animals: List[AnimalResponse]
     alerts: List[AlertDTO]
+    critical_alerts: List[CriticalAlertDTO]
 
 @router.get("/", response_model=DashboardResponse)
 def get_dashboard(db: Session = Depends(get_db)):
@@ -32,7 +43,7 @@ def get_dashboard(db: Session = Depends(get_db)):
 
     # 3. Alertas de Vacunas y Desparasitaciones (próximos 15 días o vencidas)
     alerts_list = []
-    from src.models.models import Vaccine, InternalDeworming, ExternalDeworming, HealthRecord, VaccineCatalog, VeterinaryProduct
+    from src.models.models import Vaccine, Deworming, HealthRecord, VaccineCatalog, VeterinaryProduct
     from sqlalchemy.orm import joinedload
     
     threshold_date = datetime.utcnow().date() + timedelta(days=15)
@@ -55,15 +66,16 @@ def get_dashboard(db: Session = Depends(get_db)):
                     severity="high" if days_left < 0 else "medium"
                 ))
                 
-    # Desparasitaciones Internas
-    expiring_internal = db.query(InternalDeworming).filter(
-        InternalDeworming.next_due_date <= threshold_date
-    ).all()
-    for de in expiring_internal:
+    # Desparasitaciones (tabla unificada)
+    expiring_dewormings = db.query(Deworming).options(
+        joinedload(Deworming.product)
+    ).filter(Deworming.next_due_date <= threshold_date).all()
+    for de in expiring_dewormings:
         animal = db.query(Animal).filter(Animal.id == de.animal_id, Animal.is_active == True).first()
         if animal:
             days_left = (de.next_due_date - datetime.utcnow().date()).days
-            msg = f"Desparasitación Interna vence en {days_left} días" if days_left >= 0 else f"Desparasitación Interna VENCIDA hace {-days_left} días"
+            tipo = "Interna" if de.product and de.product.type == "INTERNAL" else "Externa"
+            msg = f"Desparasitación {tipo} vence en {days_left} días" if days_left >= 0 else f"Desparasitación {tipo} VENCIDA hace {-days_left} días"
             alerts_list.append(AlertDTO(
                 animal_id=animal.id,
                 animal_name=animal.name,
@@ -71,27 +83,30 @@ def get_dashboard(db: Session = Depends(get_db)):
                 severity="high" if days_left < 0 else "medium"
             ))
 
-    # Desparasitaciones Externas
-    expiring_external = db.query(ExternalDeworming).filter(
-        ExternalDeworming.next_due_date <= threshold_date
-    ).all()
-    for de in expiring_external:
-        animal = db.query(Animal).filter(Animal.id == de.animal_id, Animal.is_active == True).first()
+    # 4. Alertas críticas no resueltas (palabras clave rojas)
+    critical_alerts_list = []
+    unresolved = db.query(CriticalAlert).filter(
+        CriticalAlert.is_resolved == False
+    ).order_by(CriticalAlert.created_at.desc()).all()
+    for ca in unresolved:
+        animal = db.query(Animal).filter(Animal.id == ca.animal_id, Animal.is_active == True).first()
         if animal:
-            days_left = (de.next_due_date - datetime.utcnow().date()).days
-            msg = f"Desparasitación Externa vence en {days_left} días" if days_left >= 0 else f"Desparasitación Externa VENCIDA hace {-days_left} días"
-            alerts_list.append(AlertDTO(
+            critical_alerts_list.append(CriticalAlertDTO(
+                id=ca.id,
                 animal_id=animal.id,
                 animal_name=animal.name,
-                message=msg,
-                severity="high" if days_left < 0 else "medium"
+                report_id=ca.report_id,
+                message=format_critical_alert_message(ca.keyword_detected),
+                keyword_detected=ca.keyword_detected,
+                created_at=ca.created_at,
             ))
 
-    # 4. Retornar
+    # 5. Retornar
     return DashboardResponse(
         normal_animals=normal_animals,
         observation_animals=observation_animals,
-        alerts=alerts_list
+        alerts=alerts_list,
+        critical_alerts=critical_alerts_list,
     )
 
 @router.get("/weather")
@@ -138,16 +153,20 @@ def get_weather_report(db: Session = Depends(get_db)):
                 
     return result
 
+@router.patch("/critical-alerts/{alert_id}/resolve")
+def resolve_alert(alert_id: int, db: Session = Depends(get_db)):
+    """Marca una alerta crítica como leída/resuelta."""
+    alert = resolve_critical_alert(db, alert_id)
+    if not alert:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Alerta no encontrada")
+    db.commit()
+    return {"status": "success", "alert_id": alert_id}
+
 @router.get("/dictionary")
 def get_dictionary(db: Session = Depends(get_db)):
     from src.models.models import TagSet
-    tags = db.query(TagSet).all()
-    result = []
-    for tag in tags:
-        variants_list = [v.strip() for v in tag.variants.split(",") if v.strip()]
-        result.append({
-            "id": tag.id,
-            "name": tag.name,
-            "variants": variants_list
-        })
+    from src.services.tag_helpers import load_tag_sets, add_tag_variant, tag_set_to_dict
+    tags = load_tag_sets(db)
+    result = [tag_set_to_dict(tag) for tag in tags]
     return result

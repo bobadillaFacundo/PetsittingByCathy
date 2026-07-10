@@ -136,7 +136,8 @@ Reportes del período:
         tags_instructions = ""
         for tag in tag_sets:
             tags_instructions += f"- Conjunto: '{tag.name}'\n"
-            tags_instructions += f"  Variantes conocidas: {tag.variants}\n"
+            from src.services.tag_helpers import get_tag_variants_text
+            tags_instructions += f"  Variantes conocidas: {get_tag_variants_text(tag)}\n"
 
         prompt = f"""
 ERES UN EXTRACTOR DE DATOS ESTRICTO. Extrae la información del reporte veterinario para el paciente "{animal_name}" en formato JSON.

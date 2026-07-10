@@ -130,7 +130,7 @@ export default function CatalogsPanel() {
             endpoint="/api/catalogs/tagsets"
             columns={[
               { key: 'name', label: 'Conjunto' },
-              { key: 'variants', label: 'Variantes / Palabras clave' }
+              { key: 'variants_text', label: 'Variantes / Palabras clave' }
             ]}
             formFields={[
               { key: 'name', label: 'Nombre de Conjunto (Ej: Alerta Verde, Comida)', required: true },

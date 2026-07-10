@@ -1,43 +1,90 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Float, Text, Date
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Float, Text, Date, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from src.database.session import Base
 
-# ----------------- ENTIDADES PRINCIPALES ----------------- #
+# ----------------- CONFIGURACIÓN IA (1FN normalizada) ----------------- #
 
 class DataDictionary(Base):
     """Diccionario de datos para mapeo dinámico de IA."""
     __tablename__ = "data_dictionary"
     id = Column(Integer, primary_key=True, index=True)
-    table_name = Column(String, unique=True, index=True, nullable=False) # e.g. "report_events"
-    entity_name = Column(String, nullable=False) # e.g. "Eventos Rutinarios"
-    synonyms = Column(String, nullable=False) # e.g. "comió, tomó agua, pis, caca"
-    fields_config = Column(String, nullable=False) # JSON: [{"name": "value", "type": "string"}]
+    table_name = Column(String, unique=True, index=True, nullable=False)
+    entity_name = Column(String, nullable=False)
+    fields_config = Column(String, nullable=False)
+
+    synonyms_rel = relationship("DataDictionarySynonym", back_populates="dictionary", cascade="all, delete-orphan")
+
+
+class DataDictionarySynonym(Base):
+    __tablename__ = "data_dictionary_synonyms"
+    id = Column(Integer, primary_key=True, index=True)
+    dictionary_id = Column(Integer, ForeignKey("data_dictionary.id"), nullable=False)
+    synonym = Column(String, nullable=False, index=True)
+
+    dictionary = relationship("DataDictionary", back_populates="synonyms_rel")
+
+    __table_args__ = (
+        UniqueConstraint("dictionary_id", "synonym", name="uq_dict_synonym"),
+    )
+
 
 class TagSet(Base):
-    """Conjuntos dinámicos auto-incrementales para la IA (Comida, Enfermedad, Pis, Caca, Agua)."""
+    """Conjuntos dinámicos auto-incrementales para la IA."""
     __tablename__ = "tag_sets"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True, nullable=False) # e.g. "Comida"
-    variants = Column(Text, nullable=False) # e.g. "comió, morfó, tragó, se alimentó"
+    name = Column(String, unique=True, index=True, nullable=False)
+
+    variants_rel = relationship("TagVariant", back_populates="tag_set", cascade="all, delete-orphan")
+
+
+class TagVariant(Base):
+    __tablename__ = "tag_variants"
+    id = Column(Integer, primary_key=True, index=True)
+    tag_set_id = Column(Integer, ForeignKey("tag_sets.id"), nullable=False)
+    variant = Column(String, nullable=False, index=True)
+
+    tag_set = relationship("TagSet", back_populates="variants_rel")
+
+    __table_args__ = (
+        UniqueConstraint("tag_set_id", "variant", name="uq_tag_variant"),
+    )
+
 
 class ColorRule(Base):
-    """Reglas de color dinámicas para etiquetas (Rojo, Amarillo)."""
+    """Reglas de color dinámicas para etiquetas."""
     __tablename__ = "color_rules"
     id = Column(Integer, primary_key=True, index=True)
-    color = Column(String, index=True, nullable=False) # e.g. "red" o "yellow"
-    match_type = Column(String, nullable=False) # "exact" o "partial"
-    keywords = Column(Text, nullable=False) # e.g. "no, nada, ninguno"
+    color = Column(String, index=True, nullable=False)
+    match_type = Column(String, nullable=False)
+
+    keywords_rel = relationship("ColorRuleKeyword", back_populates="color_rule", cascade="all, delete-orphan")
+
+
+class ColorRuleKeyword(Base):
+    __tablename__ = "color_rule_keywords"
+    id = Column(Integer, primary_key=True, index=True)
+    color_rule_id = Column(Integer, ForeignKey("color_rules.id"), nullable=False)
+    keyword = Column(String, nullable=False, index=True)
+
+    color_rule = relationship("ColorRule", back_populates="keywords_rel")
+
+    __table_args__ = (
+        UniqueConstraint("color_rule_id", "keyword", name="uq_color_rule_keyword"),
+    )
+
+# ----------------- ENTIDADES PRINCIPALES ----------------- #
 
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True, nullable=False)
-    role = Column(String, default="user") # admin, user
-    password_hash = Column(String, nullable=False) # Para autenticación
+    role = Column(String, default="user")
+    password_hash = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
 
     reports = relationship("Report", back_populates="user")
+
 
 class Species(Base):
     __tablename__ = "species"
@@ -47,6 +94,7 @@ class Species(Base):
     animals = relationship("Animal", back_populates="species")
     breeds = relationship("Breed", back_populates="species")
 
+
 class Veterinarian(Base):
     __tablename__ = "veterinarians"
     id = Column(Integer, primary_key=True, index=True)
@@ -55,15 +103,22 @@ class Veterinarian(Base):
     email = Column(String, nullable=True)
 
     animals = relationship("Animal", back_populates="veterinarian")
+    vaccines = relationship("Vaccine", back_populates="veterinarian")
+
 
 class Breed(Base):
     __tablename__ = "breeds"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True, nullable=False)
+    name = Column(String, nullable=False)
     species_id = Column(Integer, ForeignKey("species.id"), nullable=False)
 
     species = relationship("Species", back_populates="breeds")
     animals = relationship("Animal", back_populates="breed")
+
+    __table_args__ = (
+        UniqueConstraint("species_id", "name", name="uq_breed_species_name"),
+    )
+
 
 class Animal(Base):
     __tablename__ = "animals"
@@ -73,11 +128,11 @@ class Animal(Base):
     breed_id = Column(Integer, ForeignKey("breeds.id"), nullable=True)
     veterinarian_id = Column(Integer, ForeignKey("veterinarians.id"), nullable=True)
     birth_date = Column(Date, nullable=True)
-    sex = Column(String(1), nullable=True) # M, F, U (Unknown)
+    sex = Column(String(1), nullable=True)
     is_castrated = Column(Boolean, default=False)
     photo_url = Column(String, nullable=True)
-    is_active = Column(Boolean, default=True) # Para filtrado de dashboard
-    severity = Column(String, default="normal") # normal, observation, critical
+    is_active = Column(Boolean, default=True)
+    severity = Column(String, default="normal")
 
     species = relationship("Species", back_populates="animals")
     breed = relationship("Breed", back_populates="animals")
@@ -88,8 +143,7 @@ class Animal(Base):
     observations = relationship("AnimalObservation", back_populates="animal")
     attachments = relationship("Attachment", back_populates="animal")
     lab_results = relationship("LabResult", back_populates="animal", cascade="all, delete-orphan")
-    internal_dewormings = relationship("InternalDeworming", back_populates="animal", cascade="all, delete-orphan")
-    external_dewormings = relationship("ExternalDeworming", back_populates="animal", cascade="all, delete-orphan")
+    dewormings = relationship("Deworming", back_populates="animal", cascade="all, delete-orphan")
     health_record = relationship("HealthRecord", uselist=False, back_populates="animal", cascade="all, delete-orphan")
     reservations = relationship("Reservation", back_populates="animal", cascade="all, delete-orphan")
 
@@ -101,7 +155,7 @@ class Reservation(Base):
     animal_id = Column(Integer, ForeignKey("animals.id"), nullable=False)
     start_date = Column(DateTime, nullable=False)
     end_date = Column(DateTime, nullable=False)
-    status = Column(String, default="Pendiente") # Pendiente, Confirmada, Ingresada, Finalizada, Cancelada
+    status = Column(String, default="Pendiente")
     notes = Column(Text, nullable=True)
 
     animal = relationship("Animal", back_populates="reservations")
@@ -119,27 +173,19 @@ class LabResult(Base):
     animal = relationship("Animal", back_populates="lab_results")
     laboratory = relationship("LaboratoryCatalog")
 
-class InternalDeworming(Base):
-    __tablename__ = "internal_dewormings"
+
+class Deworming(Base):
+    """Desparasitaciones internas y externas unificadas (tipo en veterinary_products.type)."""
+    __tablename__ = "dewormings"
     id = Column(Integer, primary_key=True, index=True)
     animal_id = Column(Integer, ForeignKey("animals.id"), nullable=False)
     product_id = Column(Integer, ForeignKey("veterinary_products.id"), nullable=False)
     date = Column(Date, default=datetime.utcnow, nullable=False)
     next_due_date = Column(Date, nullable=True)
 
-    animal = relationship("Animal", back_populates="internal_dewormings")
-    product = relationship("VeterinaryProduct")
+    animal = relationship("Animal", back_populates="dewormings")
+    product = relationship("VeterinaryProduct", back_populates="dewormings")
 
-class ExternalDeworming(Base):
-    __tablename__ = "external_dewormings"
-    id = Column(Integer, primary_key=True, index=True)
-    animal_id = Column(Integer, ForeignKey("animals.id"), nullable=False)
-    product_id = Column(Integer, ForeignKey("veterinary_products.id"), nullable=False)
-    date = Column(Date, default=datetime.utcnow, nullable=False)
-    next_due_date = Column(Date, nullable=True)
-
-    animal = relationship("Animal", back_populates="external_dewormings")
-    product = relationship("VeterinaryProduct")
 
 class HealthRecord(Base):
     __tablename__ = "health_records"
@@ -151,6 +197,7 @@ class HealthRecord(Base):
     animal = relationship("Animal", back_populates="health_record")
     vaccines = relationship("Vaccine", back_populates="health_record", cascade="all, delete-orphan")
 
+
 class Vaccine(Base):
     __tablename__ = "vaccines"
     id = Column(Integer, primary_key=True, index=True)
@@ -159,10 +206,11 @@ class Vaccine(Base):
     date_administered = Column(Date, default=datetime.utcnow, nullable=False)
     next_due_date = Column(Date, nullable=True)
     lot_number = Column(String, nullable=True)
-    veterinarian_name = Column(String, nullable=True)
+    veterinarian_id = Column(Integer, ForeignKey("veterinarians.id"), nullable=True)
 
     health_record = relationship("HealthRecord", back_populates="vaccines")
     vaccine_catalog = relationship("VaccineCatalog")
+    veterinarian = relationship("Veterinarian", back_populates="vaccines")
 
 # ----------------- CATÁLOGOS NORMALIZADOS ----------------- #
 
@@ -170,22 +218,32 @@ class VeterinaryProduct(Base):
     __tablename__ = "veterinary_products"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
-    type = Column(String, nullable=False) # 'INTERNAL' or 'EXTERNAL'
+    type = Column(String, nullable=False)
+
+    dewormings = relationship("Deworming", back_populates="product")
+
+    __table_args__ = (
+        UniqueConstraint("name", "type", name="uq_product_name_type"),
+    )
+
 
 class LaboratoryCatalog(Base):
     __tablename__ = "laboratory_catalog"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)
+    name = Column(String, unique=True, nullable=False)
+
 
 class VaccineCatalog(Base):
     __tablename__ = "vaccine_catalog"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)
+    name = Column(String, unique=True, nullable=False)
+
 
 class DiagnosisCatalog(Base):
     __tablename__ = "diagnosis_catalog"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False)
+
 
 class MedicationCatalog(Base):
     __tablename__ = "medication_catalog"
@@ -193,12 +251,13 @@ class MedicationCatalog(Base):
     name = Column(String, unique=True, nullable=False)
     active_principle = Column(String, nullable=True)
 
+
 class EventType(Base):
     __tablename__ = "event_types"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, nullable=False) # e.g. comida, agua, pis, caca, vomito, conducta
+    name = Column(String, unique=True, nullable=False)
 
-# ----------------- TABLAS INTERMEDIAS (M:N y Atributos Multivaluados) ----------------- #
+# ----------------- TABLAS INTERMEDIAS ----------------- #
 
 class AnimalDiagnosis(Base):
     __tablename__ = "animal_diagnoses"
@@ -210,20 +269,21 @@ class AnimalDiagnosis(Base):
     animal = relationship("Animal", back_populates="diagnoses")
     diagnosis = relationship("DiagnosisCatalog")
 
+
 class AnimalMedication(Base):
     __tablename__ = "animal_medications"
     id = Column(Integer, primary_key=True, index=True)
     animal_id = Column(Integer, ForeignKey("animals.id"), nullable=False)
     medication_id = Column(Integer, ForeignKey("medication_catalog.id"), nullable=False)
     dosage = Column(String, nullable=False)
-    frequency = Column(String, nullable=False) # e.g. "cada 12h"
+    frequency = Column(String, nullable=False)
     is_current = Column(Boolean, default=True)
 
     animal = relationship("Animal", back_populates="medications")
     medication = relationship("MedicationCatalog")
 
+
 class AnimalObservation(Base):
-    """Observaciones permanentes o alertas del animal"""
     __tablename__ = "animal_observations"
     id = Column(Integer, primary_key=True, index=True)
     animal_id = Column(Integer, ForeignKey("animals.id"), nullable=False)
@@ -240,25 +300,31 @@ class Report(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     animal_id = Column(Integer, ForeignKey("animals.id"), nullable=False)
-    audio_transcript = Column(Text, nullable=True) # Texto base del cual se extrajo la info
-    weight = Column(Float, nullable=True) # El peso es un atributo singular del momento
+    audio_transcript = Column(Text, nullable=True)
+    weight = Column(Float, nullable=True)
 
     user = relationship("User", back_populates="reports")
     animal = relationship("Animal", back_populates="reports")
     events = relationship("ReportEvent", back_populates="report")
     administered_meds = relationship("ReportMedication", back_populates="report")
+    attachments = relationship("Attachment", back_populates="report")
+
 
 class ReportEvent(Base):
-    """Registra si comió, tomó agua, hizo pis, vómitos, etc. (Normalizado)"""
     __tablename__ = "report_events"
     id = Column(Integer, primary_key=True, index=True)
     report_id = Column(Integer, ForeignKey("reports.id"), nullable=False)
     event_type_id = Column(Integer, ForeignKey("event_types.id"), nullable=False)
-    value = Column(String, nullable=True) # e.g. "blanda" para caca, "2" para vómitos
-    severity = Column(Integer, nullable=True) # 1 a 5, opcional
+    value = Column(String, nullable=True)
+    severity = Column(Integer, nullable=True)
 
     report = relationship("Report", back_populates="events")
     event_type = relationship("EventType")
+
+    __table_args__ = (
+        UniqueConstraint("report_id", "event_type_id", name="uq_report_event_type"),
+    )
+
 
 class ReportMedication(Base):
     __tablename__ = "report_medications"
@@ -271,15 +337,30 @@ class ReportMedication(Base):
     report = relationship("Report", back_populates="administered_meds")
     animal_medication = relationship("AnimalMedication")
 
-# ----------------- MULTIMEDIA ----------------- #
+# ----------------- MULTIMEDIA Y ALERTAS ----------------- #
 
 class Attachment(Base):
     __tablename__ = "attachments"
     id = Column(Integer, primary_key=True, index=True)
     animal_id = Column(Integer, ForeignKey("animals.id"), nullable=False)
     report_id = Column(Integer, ForeignKey("reports.id"), nullable=True)
-    file_type = Column(String, nullable=False) # image, video, lab_result, recipe
+    file_type = Column(String, nullable=False)
     file_url = Column(String, nullable=False)
     uploaded_at = Column(DateTime, default=datetime.utcnow)
 
     animal = relationship("Animal", back_populates="attachments")
+    report = relationship("Report", back_populates="attachments")
+
+
+class CriticalAlert(Base):
+    __tablename__ = "critical_alerts"
+    id = Column(Integer, primary_key=True, index=True)
+    animal_id = Column(Integer, ForeignKey("animals.id"), nullable=False)
+    report_id = Column(Integer, ForeignKey("reports.id"), nullable=True)
+    keyword_detected = Column(String, nullable=False)
+    is_resolved = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    resolved_at = Column(DateTime, nullable=True)
+
+    animal = relationship("Animal")
+    report = relationship("Report")

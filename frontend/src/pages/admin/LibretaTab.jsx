@@ -11,7 +11,7 @@ export default function LibretaTab({ animalId, token }) {
     date_administered: '',
     next_due_date: '',
     lot_number: '',
-    veterinarian_name: ''
+    veterinarian_id: ''
   });
 
   const fetchData = async () => {
@@ -47,7 +47,7 @@ export default function LibretaTab({ animalId, token }) {
         body: JSON.stringify(newVaccine)
       });
       if (res.ok) {
-        setNewVaccine({ vaccine_id: '', date_administered: '', next_due_date: '', lot_number: '', veterinarian_name: '' });
+        setNewVaccine({ vaccine_id: '', date_administered: '', next_due_date: '', lot_number: '', veterinarian_id: '' });
         fetchData();
       } else {
         alert("Error al guardar la vacuna");
@@ -99,10 +99,14 @@ export default function LibretaTab({ animalId, token }) {
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">Veterinario que aplicó</label>
           <div className="flex gap-2">
-            <input type="text" list="vets-list" value={newVaccine.veterinarian_name} onChange={e => setNewVaccine({...newVaccine, veterinarian_name: e.target.value})} className="flex-1 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-900" placeholder="Dr. / Dra." />
-            <datalist id="vets-list">
-              {veterinarians.map(v => <option key={v.id} value={v.name} />)}
-            </datalist>
+            <select
+              value={newVaccine.veterinarian_id}
+              onChange={e => setNewVaccine({...newVaccine, veterinarian_id: e.target.value})}
+              className="flex-1 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-900 bg-white"
+            >
+              <option value="">Seleccione veterinario (opcional)...</option>
+              {veterinarians.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+            </select>
             <button onClick={handleAdd} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1">
               <Plus size={16} /> Añadir
             </button>

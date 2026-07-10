@@ -93,7 +93,8 @@ from sqlalchemy.orm import joinedload
 
 @router.get("/{animal_id}/history", response_model=AnimalHistoryResponse)
 def get_animal_history(animal_id: int, db: Session = Depends(get_db)):
-    from src.models.models import Report, ReportEvent, EventType, User
+    from src.models.models import Report, ReportEvent, EventType, User, Attachment
+    from src.dtos.animal_dto import AttachmentDTO
     animal = db.query(Animal).filter(Animal.id == animal_id).first()
     if not animal:
         raise HTTPException(status_code=404, detail="Animal no encontrado")
@@ -104,18 +105,25 @@ def get_animal_history(animal_id: int, db: Session = Depends(get_db)):
     for r in reports:
         events = db.query(ReportEvent).filter(ReportEvent.report_id == r.id).all()
         user = db.query(User).filter(User.id == r.user_id).first()
+        attachments = db.query(Attachment).filter(Attachment.report_id == r.id).all()
         
         event_dtos = []
         for e in events:
             etype = db.query(EventType).filter(EventType.id == e.event_type_id).first()
             event_dtos.append(EventDTO(type=etype.name if etype else "Desconocido", value=e.value))
+
+        attachment_dtos = [
+            AttachmentDTO(id=a.id, file_url=a.file_url, file_type=a.file_type)
+            for a in attachments
+        ]
             
         history.append(ReportHistoryDTO(
             id=r.id,
             created_at=r.created_at,
             transcript=r.audio_transcript,
             user_name=user.name if user else "Desconocido",
-            events=event_dtos
+            events=event_dtos,
+            attachments=attachment_dtos,
         ))
         
     return AnimalHistoryResponse(animal=animal, reports=history)
@@ -167,7 +175,7 @@ def get_evolution_analysis(animal_id: int, db: Session = Depends(get_db)):
 
 from typing import Any
 from sqlalchemy.orm import joinedload
-from src.models.models import InternalDeworming, ExternalDeworming, LabResult, HealthRecord, Vaccine, VeterinaryProduct, LaboratoryCatalog, VaccineCatalog
+from src.models.models import LabResult, HealthRecord, Vaccine, VeterinaryProduct, LaboratoryCatalog, VaccineCatalog, Deworming, Veterinarian
 
 @router.get("/{animal_id}/health_record")
 def get_health_record(animal_id: int, db: Session = Depends(get_db)):
@@ -185,7 +193,20 @@ def get_vaccines(animal_id: int, db: Session = Depends(get_db)):
     record = db.query(HealthRecord).filter(HealthRecord.animal_id == animal_id).first()
     if not record:
         return []
-    return db.query(Vaccine).options(joinedload(Vaccine.vaccine_catalog)).filter(Vaccine.health_record_id == record.id).order_by(Vaccine.date_administered.desc()).all()
+    items = db.query(Vaccine).options(
+        joinedload(Vaccine.vaccine_catalog),
+        joinedload(Vaccine.veterinarian),
+    ).filter(Vaccine.health_record_id == record.id).order_by(Vaccine.date_administered.desc()).all()
+    return [{
+        "id": v.id,
+        "vaccine_id": v.vaccine_id,
+        "date_administered": v.date_administered,
+        "next_due_date": v.next_due_date,
+        "lot_number": v.lot_number,
+        "veterinarian_id": v.veterinarian_id,
+        "veterinarian_name": v.veterinarian.name if v.veterinarian else None,
+        "vaccine_catalog": {"id": v.vaccine_catalog.id, "name": v.vaccine_catalog.name} if v.vaccine_catalog else None,
+    } for v in items]
 
 @router.post("/{animal_id}/vaccines")
 def add_vaccine(animal_id: int, data: dict, db: Session = Depends(get_db)):
@@ -196,44 +217,60 @@ def add_vaccine(animal_id: int, data: dict, db: Session = Depends(get_db)):
         db.add(record)
         db.commit()
         db.refresh(record)
-        
-    vet_name = data.get('veterinarian_name')
-    if vet_name:
-        from src.models.models import Veterinarian
+
+    vet_id = data.get("veterinarian_id")
+    if not vet_id and data.get("veterinarian_name"):
+        vet_name = data["veterinarian_name"]
         vet = db.query(Veterinarian).filter(Veterinarian.name == vet_name).first()
         if not vet:
             vet = Veterinarian(name=vet_name)
             db.add(vet)
-            db.commit()
+            db.flush()
+        vet_id = vet.id
 
     vaccine = Vaccine(
         health_record_id=record.id,
-        vaccine_id=data['vaccine_id'],
-        date_administered=datetime.strptime(data['date_administered'], "%Y-%m-%d").date() if data.get('date_administered') else datetime.utcnow().date(),
-        next_due_date=datetime.strptime(data['next_due_date'], "%Y-%m-%d").date() if data.get('next_due_date') else None,
-        lot_number=data.get('lot_number'),
-        veterinarian_name=vet_name
+        vaccine_id=data["vaccine_id"],
+        date_administered=datetime.strptime(data["date_administered"], "%Y-%m-%d").date() if data.get("date_administered") else datetime.utcnow().date(),
+        next_due_date=datetime.strptime(data["next_due_date"], "%Y-%m-%d").date() if data.get("next_due_date") else None,
+        lot_number=data.get("lot_number"),
+        veterinarian_id=vet_id,
     )
     db.add(vaccine)
     db.commit()
     db.refresh(vaccine)
     return vaccine
 
-from sqlalchemy.orm import joinedload
+def _serialize_deworming(item):
+    return {
+        "id": item.id,
+        "date": item.date,
+        "next_due_date": item.next_due_date,
+        "product_id": item.product_id,
+        "product": {"id": item.product.id, "name": item.product.name, "type": item.product.type} if item.product else None,
+    }
+
+def _get_dewormings_by_type(animal_id: int, product_type: str, db: Session):
+    return db.query(Deworming).join(VeterinaryProduct).options(
+        joinedload(Deworming.product)
+    ).filter(
+        Deworming.animal_id == animal_id,
+        VeterinaryProduct.type == product_type,
+    ).order_by(Deworming.date.desc()).all()
 
 @router.get("/{animal_id}/internal_dewormings")
 def get_internal_dewormings(animal_id: int, db: Session = Depends(get_db)):
-    items = db.query(InternalDeworming).options(joinedload(InternalDeworming.product)).filter(InternalDeworming.animal_id == animal_id).order_by(InternalDeworming.date.desc()).all()
-    return items
+    items = _get_dewormings_by_type(animal_id, "INTERNAL", db)
+    return [_serialize_deworming(i) for i in items]
 
 @router.post("/{animal_id}/internal_dewormings")
 def add_internal_deworming(animal_id: int, data: dict, db: Session = Depends(get_db)):
     from datetime import datetime
-    item = InternalDeworming(
+    item = Deworming(
         animal_id=animal_id,
-        date=datetime.strptime(data['date'], "%Y-%m-%d").date() if data.get('date') else datetime.utcnow().date(),
-        product_id=data['product_id'],
-        next_due_date=datetime.strptime(data['next_due_date'], "%Y-%m-%d").date() if data.get('next_due_date') else None
+        date=datetime.strptime(data["date"], "%Y-%m-%d").date() if data.get("date") else datetime.utcnow().date(),
+        product_id=data["product_id"],
+        next_due_date=datetime.strptime(data["next_due_date"], "%Y-%m-%d").date() if data.get("next_due_date") else None,
     )
     db.add(item)
     db.commit()
@@ -241,17 +278,17 @@ def add_internal_deworming(animal_id: int, data: dict, db: Session = Depends(get
 
 @router.get("/{animal_id}/external_dewormings")
 def get_external_dewormings(animal_id: int, db: Session = Depends(get_db)):
-    items = db.query(ExternalDeworming).options(joinedload(ExternalDeworming.product)).filter(ExternalDeworming.animal_id == animal_id).order_by(ExternalDeworming.date.desc()).all()
-    return items
+    items = _get_dewormings_by_type(animal_id, "EXTERNAL", db)
+    return [_serialize_deworming(i) for i in items]
 
 @router.post("/{animal_id}/external_dewormings")
 def add_external_deworming(animal_id: int, data: dict, db: Session = Depends(get_db)):
     from datetime import datetime
-    item = ExternalDeworming(
+    item = Deworming(
         animal_id=animal_id,
-        date=datetime.strptime(data['date'], "%Y-%m-%d").date() if data.get('date') else datetime.utcnow().date(),
-        product_id=data['product_id'],
-        next_due_date=datetime.strptime(data['next_due_date'], "%Y-%m-%d").date() if data.get('next_due_date') else None
+        date=datetime.strptime(data["date"], "%Y-%m-%d").date() if data.get("date") else datetime.utcnow().date(),
+        product_id=data["product_id"],
+        next_due_date=datetime.strptime(data["next_due_date"], "%Y-%m-%d").date() if data.get("next_due_date") else None,
     )
     db.add(item)
     db.commit()

@@ -194,14 +194,41 @@ def delete_veterinarian(item_id: int, db: Session = Depends(get_db), current_adm
     db.commit()
     return None
 
-# --- TAGSETS (AI DICTIONARIES) ---
-@router.get("/tagsets", response_model=list[catalog_dto.TagSetResponse])
-def get_tagsets(db: Session = Depends(get_db)):
-    return db.query(TagSet).all()
+from src.services.tag_helpers import load_tag_sets, tag_set_to_dict, set_tag_variants, parse_csv_values
 
-@router.post("/tagsets", response_model=catalog_dto.TagSetResponse)
+@router.get("/tagsets")
+def get_tagsets(db: Session = Depends(get_db)):
+    return [tag_set_to_dict(t) for t in load_tag_sets(db)]
+
+@router.post("/tagsets")
 def create_tagset(data: catalog_dto.TagSetCreate, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
-    new_item = TagSet(name=data.name, variants=data.variants)
+    new_item = TagSet(name=data.name)
+    db.add(new_item)
+    db.flush()
+    set_tag_variants(db, new_item, parse_csv_values(data.variants))
+    db.commit()
+    db.refresh(new_item)
+    return tag_set_to_dict(new_item)
+
+@router.put("/tagsets/{item_id}")
+def update_tagset(item_id: int, data: catalog_dto.TagSetUpdate, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
+    item = db.query(TagSet).filter(TagSet.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    set_tag_variants(db, item, parse_csv_values(data.variants))
+    db.commit()
+    db.refresh(item)
+    return tag_set_to_dict(item)
+
+@router.delete("/tagsets/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_tagset(item_id: int, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
+    item = db.query(TagSet).filter(TagSet.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    db.delete(item)
+    db.commit()
+    return None
+
 # --- SPECIES ---
 @router.get("/species", response_model=list[catalog_dto.BaseCatalogResponse])
 def get_species(db: Session = Depends(get_db)):
@@ -389,58 +416,35 @@ def delete_veterinarian(item_id: int, db: Session = Depends(get_db), current_adm
     db.commit()
     return None
 
-# --- TAGSETS (AI DICTIONARIES) ---
-@router.get("/tagsets", response_model=list[catalog_dto.TagSetResponse])
-def get_tagsets(db: Session = Depends(get_db)):
-    return db.query(TagSet).all()
-
-@router.post("/tagsets", response_model=catalog_dto.TagSetResponse)
-def create_tagset(data: catalog_dto.TagSetCreate, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
-    new_item = TagSet(name=data.name, variants=data.variants)
-    db.add(new_item)
-    db.commit()
-    db.refresh(new_item)
-    return new_item
-
-@router.put("/tagsets/{item_id}", response_model=catalog_dto.TagSetResponse)
-def update_tagset(item_id: int, data: catalog_dto.TagSetUpdate, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
-    item = db.query(TagSet).filter(TagSet.id == item_id).first()
-    if not item: raise HTTPException(status_code=404, detail="Item not found")
-    item.variants = data.variants
-    db.commit()
-    db.refresh(item)
-    return item
-
-@router.delete("/tagsets/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_tagset(item_id: int, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
-    item = db.query(TagSet).filter(TagSet.id == item_id).first()
-    if not item: raise HTTPException(status_code=404, detail="Item not found")
-    db.delete(item)
-    db.commit()
-    return None
 
 # --- COLOR RULES ---
-@router.get("/color-rules", response_model=list[catalog_dto.ColorRuleResponse])
-def get_color_rules(db: Session = Depends(get_db)):
-    rules = db.query(ColorRule).all()
-    # Seed default rules if empty
-    if not rules:
-        default_rules = [
-            ColorRule(color="red", match_type="exact", keywords="no, nada, ninguno"),
-            ColorRule(color="red", match_type="partial", keywords="sangre, líquido, diarrea, vomito"),
-            ColorRule(color="yellow", match_type="exact", keywords="poco, un poco, mitad, regular, blanda"),
-            ColorRule(color="yellow", match_type="partial", keywords="observación, observacion")
-        ]
-        db.add_all(default_rules)
-        db.commit()
-        rules = db.query(ColorRule).all()
-    return rules
+from src.services.tag_helpers import load_color_rules, color_rule_to_dict, set_color_keywords, parse_csv_values
 
-@router.put("/color-rules/{item_id}", response_model=catalog_dto.ColorRuleResponse)
+@router.get("/color-rules")
+def get_color_rules(db: Session = Depends(get_db)):
+    rules = load_color_rules(db)
+    if not rules:
+        defaults = [
+            ("red", "exact", ["no", "nada", "ninguno"]),
+            ("red", "partial", ["sangre", "líquido", "diarrea", "vomito"]),
+            ("yellow", "exact", ["poco", "un poco", "mitad", "regular", "blanda"]),
+            ("yellow", "partial", ["observación", "observacion"]),
+        ]
+        for color, match_type, keywords in defaults:
+            rule = ColorRule(color=color, match_type=match_type)
+            db.add(rule)
+            db.flush()
+            set_color_keywords(db, rule, keywords)
+        db.commit()
+        rules = load_color_rules(db)
+    return [color_rule_to_dict(r) for r in rules]
+
+@router.put("/color-rules/{item_id}")
 def update_color_rule(item_id: int, data: catalog_dto.ColorRuleUpdate, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
     item = db.query(ColorRule).filter(ColorRule.id == item_id).first()
-    if not item: raise HTTPException(status_code=404, detail="Item not found")
-    item.keywords = data.keywords
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    set_color_keywords(db, item, parse_csv_values(data.keywords))
     db.commit()
     db.refresh(item)
-    return item
+    return color_rule_to_dict(item)

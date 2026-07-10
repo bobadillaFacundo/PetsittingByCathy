@@ -21,6 +21,8 @@ export default function VoiceRecorder({ onSave }) {
   const [currentStep, setCurrentStep] = useState(0);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [pendingReports, setPendingReports] = useState(0);
+  const [attachedPhotos, setAttachedPhotos] = useState([]);
+  const photoInputRef = useRef(null);
   
   const mediaRecorder = useRef(null);
   const audioChunks = useRef([]);
@@ -203,7 +205,7 @@ export default function VoiceRecorder({ onSave }) {
   const confirmAndSave = async () => {
     setIsProcessing(true);
     const payload = {
-      user_id: 1, // Hardcodeado por ahora
+      user_id: 1,
       transcript: editableTranscript,
       extracted_data: editableData
     };
@@ -219,10 +221,29 @@ export default function VoiceRecorder({ onSave }) {
       });
       
       if (response.ok) {
+        const result = await response.json();
+        const savedReports = result.saved_reports || [];
+
+        // Subir fotos adjuntas a cada reporte guardado
+        if (attachedPhotos.length > 0 && savedReports.length > 0) {
+          for (const saved of savedReports) {
+            for (const photo of attachedPhotos) {
+              const formData = new FormData();
+              formData.append("photo", photo);
+              await fetch(`/api/reports/${saved.report_id}/attach-photo`, {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` },
+                body: formData,
+              });
+            }
+          }
+        }
+
         setAnalysisResult(null);
         setEditableData(null);
+        setAttachedPhotos([]);
         setSaveSuccess(true);
-        setSelectedAnimal(null); // Reset selection
+        setSelectedAnimal(null);
         if (onSave) onSave();
       } else {
         alert("Error al confirmar el guardado.");
@@ -232,6 +253,19 @@ export default function VoiceRecorder({ onSave }) {
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handlePhotoSelect = (e) => {
+    const files = Array.from(e.target.files || []);
+    const valid = files.filter(f => f.type.startsWith("image/"));
+    if (valid.length > 0) {
+      setAttachedPhotos(prev => [...prev, ...valid]);
+    }
+    e.target.value = "";
+  };
+
+  const removePhoto = (index) => {
+    setAttachedPhotos(prev => prev.filter((_, i) => i !== index));
   };
 
   return (
@@ -341,6 +375,50 @@ export default function VoiceRecorder({ onSave }) {
               {isRecording ? "Detener" : "Grabar"}
             </span>
           </button>
+
+          {/* Adjuntar fotos */}
+          <div className="mt-6 w-full max-w-sm">
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              multiple
+              className="hidden"
+              onChange={handlePhotoSelect}
+            />
+            <button
+              onClick={() => photoInputRef.current?.click()}
+              className="w-full py-3 px-4 bg-white border-2 border-dashed border-gray-300 rounded-xl hover:border-indigo-400 hover:bg-indigo-50 transition-all flex items-center justify-center gap-2 text-gray-700 font-medium"
+            >
+              <span className="text-2xl">📸</span>
+              Tomar o subir foto
+            </button>
+            {attachedPhotos.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-3 justify-center">
+                {attachedPhotos.map((photo, idx) => (
+                  <div key={idx} className="relative group">
+                    <img
+                      src={URL.createObjectURL(photo)}
+                      alt={`Adjunto ${idx + 1}`}
+                      className="w-20 h-20 object-cover rounded-lg border border-gray-200 shadow-sm"
+                    />
+                    <button
+                      onClick={() => removePhoto(idx)}
+                      className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {attachedPhotos.length > 0 && (
+              <p className="text-xs text-gray-500 text-center mt-2">
+                {attachedPhotos.length} {attachedPhotos.length === 1 ? 'foto adjunta' : 'fotos adjuntas'} — se guardarán con el reporte
+              </p>
+            )}
+          </div>
         </div>
       )}
 

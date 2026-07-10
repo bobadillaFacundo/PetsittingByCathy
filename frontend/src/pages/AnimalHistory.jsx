@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 
 const SPECIES_INFO = {
   1: { name: "Perros", emoji: "🐶" },
@@ -9,16 +9,47 @@ const SPECIES_INFO = {
   6: { name: "Erizos", emoji: "🦔" }
 };
 
-export default function AnimalHistory({ animalId = 1 }) { // Hardcoded Theo for demo
+function getEventColor(val, evtType, colorRules) {
+  const typeLower = evtType?.toLowerCase() || '';
+  if (typeLower.includes('enfermedad') || typeLower.includes('medicación') || typeLower.includes('medicacion')) {
+    return { colorClass: 'bg-red-50 text-red-700 border-red-200', dotColor: 'bg-red-400' };
+  }
+
+  const v = val?.toLowerCase() || '';
+  let exactRed = [], partialRed = [], exactYellow = [], partialYellow = [];
+
+  colorRules.forEach(r => {
+    const keys = r.keywords.split(',').map(k => k.trim().toLowerCase()).filter(k => k);
+    if (r.color === 'red') {
+      if (r.match_type === 'exact') exactRed.push(...keys);
+      else partialRed.push(...keys);
+    } else if (r.color === 'yellow') {
+      if (r.match_type === 'exact') exactYellow.push(...keys);
+      else partialYellow.push(...keys);
+    }
+  });
+
+  if (exactRed.includes(v) || partialRed.some(k => v.includes(k))) {
+    return { colorClass: 'bg-red-50 text-red-700 border-red-200', dotColor: 'bg-red-400' };
+  }
+  if (exactYellow.includes(v) || partialYellow.some(k => v.includes(k))) {
+    return { colorClass: 'bg-amber-50 text-amber-700 border-amber-200', dotColor: 'bg-amber-400' };
+  }
+  return { colorClass: 'bg-green-50 text-green-700 border-green-200', dotColor: 'bg-green-400' };
+}
+
+export default function AnimalHistory({ animalId = 1 }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-
   const [exportingPDF, setExportingPDF] = useState(false);
-
   const [colorRules, setColorRules] = useState([]);
+  const [editingReport, setEditingReport] = useState(null);
+  const [editTranscript, setEditTranscript] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [expandedPhoto, setExpandedPhoto] = useState(null);
 
-  useEffect(() => {
-    // Fetch History & Color Rules
+  const fetchHistory = useCallback(() => {
+    setLoading(true);
     Promise.all([
       fetch(`/api/animals/${animalId}/history`, { headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` } }),
       fetch('/api/catalogs/color-rules', { headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` } })
@@ -33,6 +64,10 @@ export default function AnimalHistory({ animalId = 1 }) { // Hardcoded Theo for 
       setLoading(false);
     });
   }, [animalId]);
+
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory]);
 
   const downloadPDF = async (range) => {
     setExportingPDF(true);
@@ -55,6 +90,35 @@ export default function AnimalHistory({ animalId = 1 }) { // Hardcoded Theo for 
       alert("Hubo un error generando el PDF. Asegúrate de tener reportes registrados.");
     } finally {
       setExportingPDF(false);
+    }
+  };
+
+  const startEdit = (report) => {
+    setEditingReport(report.id);
+    setEditTranscript(report.transcript || "");
+  };
+
+  const saveEdit = async () => {
+    if (!editingReport) return;
+    setSavingEdit(true);
+    try {
+      const res = await fetch(`/api/reports/${editingReport}/edit`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("token")}`
+        },
+        body: JSON.stringify({ transcript: editTranscript }),
+      });
+      if (!res.ok) throw new Error("Error al guardar");
+      setEditingReport(null);
+      setEditTranscript("");
+      fetchHistory();
+    } catch (err) {
+      console.error(err);
+      alert("Error al guardar la edición. Intenta de nuevo.");
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -105,55 +169,96 @@ export default function AnimalHistory({ animalId = 1 }) { // Hardcoded Theo for 
                 <span className="text-sm font-bold text-indigo-700 bg-indigo-50 px-3 py-1 rounded-lg">
                   {new Date(report.created_at).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short', hour: '2-digit', minute:'2-digit' })}
                 </span>
-                <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Por {report.user_name}</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => startEdit(report)}
+                    className="text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg border border-indigo-200 transition"
+                  >
+                    ✏️ Editar
+                  </button>
+                  <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Por {report.user_name}</span>
+                </div>
               </div>
               
-              <p className="text-gray-700 italic mb-4 bg-gray-50 p-3 rounded-lg border-l-4 border-indigo-200">
-                "{report.transcript}"
-              </p>
+              {editingReport === report.id ? (
+                <div className="mb-4">
+                  <textarea
+                    className="w-full bg-white border border-indigo-200 rounded-lg p-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
+                    rows="4"
+                    value={editTranscript}
+                    onChange={(e) => setEditTranscript(e.target.value)}
+                  />
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      onClick={saveEdit}
+                      disabled={savingEdit}
+                      className="px-4 py-1.5 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 transition disabled:opacity-50"
+                    >
+                      {savingEdit ? "Guardando..." : "Guardar y Recalcular"}
+                    </button>
+                    <button
+                      onClick={() => { setEditingReport(null); setEditTranscript(""); }}
+                      className="px-4 py-1.5 bg-gray-100 text-gray-700 text-sm font-bold rounded-lg hover:bg-gray-200 transition"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Al guardar, la IA re-analiza el texto y recalcula los colores automáticamente.</p>
+                </div>
+              ) : (
+                <p className="text-gray-700 italic mb-4 bg-gray-50 p-3 rounded-lg border-l-4 border-indigo-200">
+                  "{report.transcript}"
+                </p>
+              )}
+
+              {/* Fotos adjuntas */}
+              {report.attachments && report.attachments.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {report.attachments.map((att) => (
+                    <button
+                      key={att.id}
+                      onClick={() => setExpandedPhoto(att.file_url)}
+                      className="block"
+                    >
+                      <img
+                        src={att.file_url}
+                        alt="Adjunto del reporte"
+                        className="w-24 h-24 object-cover rounded-lg border border-gray-200 shadow-sm hover:shadow-md hover:scale-105 transition-all"
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
               
               <div className="flex flex-wrap gap-2 mt-2">
                 {report.events.map((evt, idx) => {
-                  const val = evt.value?.toLowerCase() || '';
-                  let colorClass = 'bg-green-50 text-green-700 border-green-200';
-                  let dotColor = 'bg-green-400';
-
-                  let exactRed = [];
-                  let partialRed = [];
-                  let exactYellow = [];
-                  let partialYellow = [];
-                  
-                  colorRules.forEach(r => {
-                    const keys = r.keywords.split(',').map(k => k.trim().toLowerCase()).filter(k => k);
-                    if (r.color === 'red') {
-                      if (r.match_type === 'exact') exactRed.push(...keys);
-                      else partialRed.push(...keys);
-                    } else if (r.color === 'yellow') {
-                      if (r.match_type === 'exact') exactYellow.push(...keys);
-                      else partialYellow.push(...keys);
-                    }
-                  });
-
-                  if (exactRed.includes(val) || partialRed.some(v => val.includes(v))) {
-                    colorClass = 'bg-red-50 text-red-700 border-red-200';
-                    dotColor = 'bg-red-400';
-                  } else if (exactYellow.includes(val) || partialYellow.some(v => val.includes(v))) {
-                    colorClass = 'bg-amber-50 text-amber-700 border-amber-200';
-                    dotColor = 'bg-amber-400';
-                  }
-                  
+                  const { colorClass, dotColor } = getEventColor(evt.value, evt.type, colorRules);
                   return (
                     <span key={idx} className={`inline-flex items-center gap-2 px-3 py-1 rounded-xl text-xs font-bold border shadow-sm ${colorClass}`}>
                       <span className={`w-2 h-2 rounded-full shadow-inner ${dotColor}`}></span>
                       {evt.type}: {evt.value || "Sí"}
                     </span>
-                  )
+                  );
                 })}
               </div>
             </div>
           </div>
         ))}
       </div>
+
+      {/* Modal foto ampliada */}
+      {expandedPhoto && (
+        <div
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+          onClick={() => setExpandedPhoto(null)}
+        >
+          <img
+            src={expandedPhoto}
+            alt="Foto ampliada"
+            className="max-w-full max-h-[90vh] rounded-xl shadow-2xl"
+          />
+        </div>
+      )}
     </div>
   );
 }

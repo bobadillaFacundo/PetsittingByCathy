@@ -57,6 +57,18 @@ export default function Dashboard() {
     }
   };
 
+  const resolveCriticalAlert = async (alertId) => {
+    try {
+      await fetch(`/api/dashboard/critical-alerts/${alertId}/resolve`, {
+        method: "PATCH",
+        headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+      });
+      fetchData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse font-medium">Cargando tablero...</div>;
   if (!data) return <div className="p-8 text-center text-red-500 font-medium">Error al cargar datos del tablero.</div>;
 
@@ -65,6 +77,45 @@ export default function Dashboard() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-8">
+
+      {/* ALERTAS CRÍTICAS (palabras clave rojas) — fijadas hasta resolver */}
+      {data.critical_alerts && data.critical_alerts.length > 0 && (
+        <div className="bg-red-600 border-2 border-red-700 p-6 rounded-2xl shadow-lg animate-fade-in-up">
+          <h2 className="text-xl font-black text-white flex items-center gap-2 mb-4">
+            🚨 Alertas Críticas — Requieren Atención
+          </h2>
+          <div className="space-y-3">
+            {data.critical_alerts.map((alert) => (
+              <div key={alert.id} className="bg-white/95 p-4 rounded-xl flex items-start justify-between gap-4 border border-red-200">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl">🔴</span>
+                  <div>
+                    <div className="font-black text-red-900 text-lg">{alert.animal_name}</div>
+                    <div className="text-sm text-red-800 mt-1">{alert.message}</div>
+                    <div className="text-xs text-red-600 mt-1 font-medium">
+                      Palabra detectada: "{alert.keyword_detected}" · {new Date(alert.created_at).toLocaleString('es-ES')}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2 shrink-0">
+                  <button
+                    onClick={() => setSelectedAnimal(alert.animal_id)}
+                    className="px-3 py-1.5 bg-red-100 text-red-700 text-xs font-bold rounded-lg border border-red-300 hover:bg-red-200 transition"
+                  >
+                    Ver Ficha
+                  </button>
+                  <button
+                    onClick={() => resolveCriticalAlert(alert.id)}
+                    className="px-3 py-1.5 bg-green-600 text-white text-xs font-bold rounded-lg hover:bg-green-700 transition"
+                  >
+                    ✓ Marcar Resuelta
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       
       {/* ALERTAS DE SALUD (Vacunas y Desparasitación) */}
       {data.alerts && data.alerts.length > 0 && (

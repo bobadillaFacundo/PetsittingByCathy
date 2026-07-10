@@ -2,13 +2,25 @@ from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Form
 from sqlalchemy.orm import Session
 from src.database.session import get_db
 from src.services.audio_service import AudioService, NLPService
-from src.models.models import Animal, Report, ReportEvent, EventType, User, DataDictionary
+from src.services.report_helpers import (
+    calculate_severity_from_inserts,
+    create_critical_alerts_for_report,
+)
+from src.services.tag_helpers import (
+    load_tag_sets, add_tag_variant, parse_csv_values,
+    load_color_rules, color_rule_to_dict, set_color_keywords,
+    set_tag_variants, tag_set_to_dict,
+)
+from src.models.models import Animal, Report, ReportEvent, EventType, User, DataDictionary, Attachment, TagSet
+from sqlalchemy.orm import joinedload
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
 from datetime import datetime
 from pydantic import BaseModel
 from typing import List, Optional, Any
+import os
+import uuid
 
 # Modelos Pydantic para el Endpoint /confirm
 class ReportConfirmRequest(BaseModel):
@@ -19,6 +31,9 @@ class ReportConfirmRequest(BaseModel):
 class TextAnalyzeRequest(BaseModel):
     animal_name: str
     text: str
+
+class EditReportRequest(BaseModel):
+    transcript: str
 
 from src.auth import get_current_user
 
@@ -57,65 +72,14 @@ async def analyze_voice_report(
     
     # 3. Extraer info NLP
     dictionaries = db.query(DataDictionary).all()
-    from src.models.models import TagSet
-    tag_sets = db.query(TagSet).all()
+    tag_sets = load_tag_sets(db)
     nlp_result = NLPService.extract_events_from_transcript(transcript, dictionaries, animal_name, tag_sets)
     
     extracted_data = nlp_result.get("data", []) if isinstance(nlp_result, dict) else []
     cleaned_transcript = nlp_result.get("cleaned_text", transcript) if isinstance(nlp_result, dict) else transcript
     
-    # 4. Auto-Aprendizaje y Mapeo a Formato Legacy
-    mapped_extracted_data = []
-    for animal_d in extracted_data:
-        mapped_inserts = []
-        for item in animal_d.get("inserts", []):
-            std_set = item.get("standard_set")
-            spk_var = item.get("spoken_variant", "").lower().strip()
-            val = item.get("value")
-            
-            if not std_set: continue
-            
-            # Auto-incremento: Buscar el TagSet y añadir la variante si no existe
-            tag_record = db.query(TagSet).filter(TagSet.name.ilike(std_set)).first()
-            if tag_record and spk_var:
-                current_variants = [v.strip().lower() for v in tag_record.variants.split(",")]
-                if spk_var not in current_variants:
-                    tag_record.variants += f", {spk_var}"
-                    db.commit() # Guardar aprendizaje
-            
-            # Mapeo a legacy para el Frontend
-            if std_set.lower() in ["enfermedad", "diagnóstico", "diagnostico"]:
-                mapped_inserts.append({
-                    "table_name": "AnimalDiagnosis",
-                    "fields": {
-                        "diagnosis_name": val,
-                        "spoken_variant": spk_var
-                    }
-                })
-            elif std_set.lower() in ["medicacion", "medicación", "remedio"]:
-                mapped_inserts.append({
-                    "table_name": "AnimalMedication",
-                    "fields": {
-                        "medication_name": val,
-                        "spoken_variant": spk_var,
-                        "dosage": "No especificada"
-                    }
-                })
-            else:
-                # Por defecto, cualquier otro conjunto se considera un evento de rutina (Comida, Pis, Vomito, etc)
-                mapped_inserts.append({
-                    "table_name": "ReportEvent",
-                    "fields": {
-                        "event_type_name": std_set,
-                        "value": val,
-                        "spoken_variant": spk_var
-                    }
-                })
-                
-        mapped_extracted_data.append({
-            "animal": animal_d.get("animal", animal_d.get("animal_name", animal_name)),
-            "inserts": mapped_inserts
-        })
+    mapped_extracted_data = _map_nlp_to_extracted_data(nlp_result, animal_name, db)
+    db.commit()
     
     return {
         "transcript": cleaned_transcript,
@@ -132,62 +96,13 @@ def analyze_text_report(
     animal_name = req.animal_name
 
     dictionaries = db.query(DataDictionary).all()
-    from src.models.models import TagSet
-    tag_sets = db.query(TagSet).all()
+    tag_sets = load_tag_sets(db)
     
     nlp_result = NLPService.extract_events_from_transcript(transcript, dictionaries, animal_name, tag_sets)
     
-    extracted_data = nlp_result.get("data", []) if isinstance(nlp_result, dict) else []
     cleaned_transcript = nlp_result.get("cleaned_text", transcript) if isinstance(nlp_result, dict) else transcript
-    
-    mapped_extracted_data = []
-    for animal_d in extracted_data:
-        mapped_inserts = []
-        for item in animal_d.get("inserts", []):
-            std_set = item.get("standard_set")
-            spk_var = item.get("spoken_variant", "").lower().strip()
-            val = item.get("value")
-            
-            if not std_set: continue
-            
-            tag_record = db.query(TagSet).filter(TagSet.name.ilike(std_set)).first()
-            if tag_record and spk_var:
-                current_variants = [v.strip().lower() for v in tag_record.variants.split(",")]
-                if spk_var not in current_variants:
-                    tag_record.variants += f", {spk_var}"
-                    db.commit()
-            
-            if std_set.lower() in ["enfermedad", "diagnóstico", "diagnostico"]:
-                mapped_inserts.append({
-                    "table_name": "AnimalDiagnosis",
-                    "fields": {
-                        "diagnosis_name": val,
-                        "spoken_variant": spk_var
-                    }
-                })
-            elif std_set.lower() in ["medicacion", "medicación", "remedio"]:
-                mapped_inserts.append({
-                    "table_name": "AnimalMedication",
-                    "fields": {
-                        "medication_name": val,
-                        "spoken_variant": spk_var,
-                        "dosage": "No especificada"
-                    }
-                })
-            else:
-                mapped_inserts.append({
-                    "table_name": "ReportEvent",
-                    "fields": {
-                        "event_type_name": std_set,
-                        "value": val,
-                        "spoken_variant": spk_var
-                    }
-                })
-            
-        mapped_extracted_data.append({
-            "animal": animal_d.get("animal", animal_d.get("animal_name", animal_name)),
-            "inserts": mapped_inserts
-        })
+    mapped_extracted_data = _map_nlp_to_extracted_data(nlp_result, animal_name, db)
+    db.commit()
         
     return {
         "transcript": cleaned_transcript,
@@ -214,18 +129,7 @@ def confirm_report(
             continue
         
         # Auto-calculate immediate severity based on inserts
-        calculated_severity = "normal"
-        for insert in animal_data.get("inserts", []):
-            if insert.get("table_name") == "ReportEvent":
-                etype = insert.get("fields", {}).get("event_type_name", "").lower()
-                val = insert.get("fields", {}).get("value", "").lower()
-                if any(k in etype for k in ["enfermedad", "medicación", "medicacion"]):
-                    calculated_severity = "critical"
-                elif any(k in val for k in ["no", "nada", "sangre", "líquido", "diarrea", "vomit", "herida"]):
-                    calculated_severity = "critical"
-                elif any(k in val for k in ["poco", "blanda", "mitad", "observación", "observacion"]):
-                    if calculated_severity != "critical":
-                        calculated_severity = "observation"
+        calculated_severity = calculate_severity_from_inserts(animal_data.get("inserts", []))
                         
         # Update severity if provided by NLP or fallback to calculation
         severity_from_nlp = animal_data.get("severity")
@@ -243,6 +147,7 @@ def confirm_report(
         db.add(report)
         db.flush()
         
+        event_values = []
         # Procesar inserts según table_name
         for insert in animal_data.get("inserts", []):
             table_name = insert.get("table_name")
@@ -251,13 +156,11 @@ def confirm_report(
             if table_name == "ReportEvent":
                 event_type_name = fields.get("event_type_name")
                 if not event_type_name: continue
-                event_type = db.query(EventType).filter(EventType.name.ilike(f"%{event_type_name}%")).first()
-                if not event_type:
-                    event_type = EventType(name=event_type_name)
-                    db.add(event_type)
-                    db.flush()
-                report_event = ReportEvent(report_id=report.id, event_type_id=event_type.id, value=fields.get("value"))
-                db.add(report_event)
+                event_type = _get_or_create_event_type(db, event_type_name)
+                val = fields.get("value")
+                if val:
+                    event_values.append(str(val))
+                _upsert_report_event(db, report.id, event_type.id, val)
                 
             elif table_name == "AnimalDiagnosis":
                 diag_name = fields.get("diagnosis_name")
@@ -287,11 +190,226 @@ def confirm_report(
                 if not text: continue
                 animal_obs = AnimalObservation(animal_id=animal.id, observation=text)
                 db.add(animal_obs)
+
+        # Crear alertas críticas si se detectan palabras clave rojas
+        create_critical_alerts_for_report(
+            db, animal, report.id, request.transcript, event_values
+        )
                 
         db.commit()
-        saved_reports.append({"animal": animal_name, "report_id": report.id, "severity_assigned": severity_from_nlp})
+        saved_reports.append({"animal": animal_name, "report_id": report.id, "animal_id": animal.id, "severity_assigned": animal.severity})
         
-    return {"status": "success", "message": "Reportes guardados correctamente"}
+    return {"status": "success", "message": "Reportes guardados correctamente", "saved_reports": saved_reports}
+
+def _get_or_create_event_type(db, event_type_name: str) -> EventType:
+    event_type = db.query(EventType).filter(EventType.name.ilike(f"%{event_type_name}%")).first()
+    if not event_type:
+        event_type = EventType(name=event_type_name)
+        db.add(event_type)
+        db.flush()
+    return event_type
+
+
+def _upsert_report_event(db, report_id: int, event_type_id: int, value: str) -> None:
+    existing = db.query(ReportEvent).filter(
+        ReportEvent.report_id == report_id,
+        ReportEvent.event_type_id == event_type_id,
+    ).first()
+    if existing:
+        existing.value = value
+    else:
+        db.add(ReportEvent(report_id=report_id, event_type_id=event_type_id, value=value))
+        db.flush()
+
+
+def _map_nlp_to_extracted_data(nlp_result, animal_name, db):
+    """Mapea resultado NLP al formato legacy del frontend."""
+    extracted_data = nlp_result.get("data", []) if isinstance(nlp_result, dict) else []
+    mapped_extracted_data = []
+    for animal_d in extracted_data:
+        mapped_inserts = []
+        for item in animal_d.get("inserts", []):
+            std_set = item.get("standard_set")
+            spk_var = item.get("spoken_variant", "").lower().strip()
+            val = item.get("value")
+            if not std_set:
+                continue
+            tag_record = db.query(TagSet).options(joinedload(TagSet.variants_rel)).filter(
+                TagSet.name.ilike(std_set)
+            ).first()
+            if tag_record and spk_var:
+                add_tag_variant(db, tag_record, spk_var)
+            if std_set.lower() in ["enfermedad", "diagnóstico", "diagnostico"]:
+                mapped_inserts.append({
+                    "table_name": "AnimalDiagnosis",
+                    "fields": {"diagnosis_name": val, "spoken_variant": spk_var}
+                })
+            elif std_set.lower() in ["medicacion", "medicación", "remedio"]:
+                mapped_inserts.append({
+                    "table_name": "AnimalMedication",
+                    "fields": {"medication_name": val, "spoken_variant": spk_var, "dosage": "No especificada"}
+                })
+            else:
+                mapped_inserts.append({
+                    "table_name": "ReportEvent",
+                    "fields": {"event_type_name": std_set, "value": val, "spoken_variant": spk_var}
+                })
+        mapped_extracted_data.append({
+            "animal": animal_d.get("animal", animal_d.get("animal_name", animal_name)),
+            "inserts": mapped_inserts,
+            "severity": animal_d.get("severity"),
+        })
+    return mapped_extracted_data
+
+def _apply_inserts_to_report(db, report, animal, inserts):
+    """Aplica inserts a un reporte existente (solo ReportEvents)."""
+    from src.models.models import DiagnosisCatalog, MedicationCatalog, AnimalDiagnosis, AnimalMedication, AnimalObservation
+    event_values = []
+    for insert in inserts:
+        table_name = insert.get("table_name")
+        fields = insert.get("fields", {})
+        if table_name == "ReportEvent":
+            event_type_name = fields.get("event_type_name")
+            if not event_type_name:
+                continue
+            event_type = _get_or_create_event_type(db, event_type_name)
+            val = fields.get("value")
+            if val:
+                event_values.append(str(val))
+            _upsert_report_event(db, report.id, event_type.id, val)
+        elif table_name == "AnimalDiagnosis":
+            diag_name = fields.get("diagnosis_name")
+            if not diag_name:
+                continue
+            catalog = db.query(DiagnosisCatalog).filter(DiagnosisCatalog.name.ilike(f"%{diag_name}%")).first()
+            if not catalog:
+                catalog = DiagnosisCatalog(name=diag_name)
+                db.add(catalog)
+                db.flush()
+            db.add(AnimalDiagnosis(animal_id=animal.id, diagnosis_id=catalog.id, date_diagnosed=datetime.utcnow()))
+        elif table_name == "AnimalMedication":
+            med_name = fields.get("medication_name")
+            if not med_name:
+                continue
+            catalog = db.query(MedicationCatalog).filter(MedicationCatalog.name.ilike(f"%{med_name}%")).first()
+            if not catalog:
+                catalog = MedicationCatalog(name=med_name)
+                db.add(catalog)
+                db.flush()
+            db.add(AnimalMedication(
+                animal_id=animal.id, medication_id=catalog.id,
+                dosage=fields.get("dosage") or "No especificada", frequency="Según indicación"
+            ))
+        elif table_name == "AnimalObservation":
+            text = fields.get("observation")
+            if text:
+                db.add(AnimalObservation(animal_id=animal.id, observation=text))
+    return event_values
+
+@router.put("/{report_id}/edit")
+def edit_report_transcript(
+    report_id: int,
+    request: EditReportRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Edita la transcripción de un reporte y recalcula eventos/colores."""
+    report = db.query(Report).filter(Report.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Reporte no encontrado")
+
+    animal = db.query(Animal).filter(Animal.id == report.animal_id).first()
+    if not animal:
+        raise HTTPException(status_code=404, detail="Animal no encontrado")
+
+    report.audio_transcript = request.transcript
+
+    # Eliminar eventos anteriores del reporte
+    db.query(ReportEvent).filter(ReportEvent.report_id == report_id).delete()
+
+    # Re-analizar con NLP
+    dictionaries = db.query(DataDictionary).all()
+    from src.models.models import TagSet
+    tag_sets = load_tag_sets(db)
+    nlp_result = NLPService.extract_events_from_transcript(
+        request.transcript, dictionaries, animal.name, tag_sets
+    )
+    mapped_data = _map_nlp_to_extracted_data(nlp_result, animal.name, db)
+    db.commit()
+
+    inserts = mapped_data[0].get("inserts", []) if mapped_data else []
+    event_values = _apply_inserts_to_report(db, report, animal, inserts)
+
+    # Recalcular severidad
+    severity = calculate_severity_from_inserts(inserts)
+    nlp_severity = mapped_data[0].get("severity") if mapped_data else None
+    animal.severity = nlp_severity if nlp_severity in ["normal", "observation", "critical"] else severity
+
+    # Crear alertas críticas si aplica
+    create_critical_alerts_for_report(db, animal, report.id, request.transcript, event_values)
+
+    db.commit()
+
+    from src.dtos.animal_dto import EventDTO
+    events = db.query(ReportEvent).filter(ReportEvent.report_id == report_id).all()
+    event_dtos = []
+    for e in events:
+        etype = db.query(EventType).filter(EventType.id == e.event_type_id).first()
+        event_dtos.append({"type": etype.name if etype else "Desconocido", "value": e.value})
+
+    return {
+        "status": "success",
+        "report_id": report.id,
+        "transcript": report.audio_transcript,
+        "events": event_dtos,
+        "severity": animal.severity,
+    }
+
+
+@router.post("/{report_id}/attach-photo")
+async def attach_photo_to_report(
+    report_id: int,
+    photo: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Adjunta una foto a un reporte existente."""
+    report = db.query(Report).filter(Report.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Reporte no encontrado")
+
+    allowed = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+    ext = os.path.splitext(photo.filename or "photo.jpg")[1].lower()
+    if ext not in allowed:
+        raise HTTPException(status_code=400, detail="Formato de imagen no soportado")
+
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    photos_dir = os.path.join(base_dir, "uploads", "photos")
+    os.makedirs(photos_dir, exist_ok=True)
+
+    filename = f"{uuid.uuid4()}{ext}"
+    file_path = os.path.join(photos_dir, filename)
+    content = await photo.read()
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    file_url = f"/uploads/photos/{filename}"
+    attachment = Attachment(
+        animal_id=report.animal_id,
+        report_id=report_id,
+        file_type="image",
+        file_url=file_url,
+    )
+    db.add(attachment)
+    db.commit()
+    db.refresh(attachment)
+
+    return {
+        "id": attachment.id,
+        "file_url": file_url,
+        "report_id": report_id,
+        "animal_id": report.animal_id,
+    }
 
 @router.get("/all")
 def get_all_reports(limit: int = 100, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
@@ -324,7 +442,6 @@ def get_all_reports(limit: int = 100, db: Session = Depends(get_db), current_adm
 from fastapi.responses import FileResponse
 from fpdf import FPDF
 import tempfile
-import os
 
 @router.get("/export-pdf/{animal_id}")
 def export_pdf(

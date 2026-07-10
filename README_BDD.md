@@ -1,154 +1,131 @@
 # Esquema de Base de Datos - Guardería Canina
 
-Este documento describe la estructura y el modelo Entidad-Relación (ER) de la base de datos del sistema de la Guardería Canina, incluyendo las actualizaciones de perfiles clínicos avanzados.
+Este documento describe la estructura, el modelo Entidad-Relación (ER) y el análisis de **normalización** de la base de datos del sistema.
+
+> Documentación relacionada: [README.md](./README.md) · [README_NLP.md](./README_NLP.md) · [README_PWA.md](./README_PWA.md) · [README_GRAFICOS.md](./README_GRAFICOS.md)
+
+## Migración de normalización
+
+Tras actualizar modelos, ejecutar:
+
+```powershell
+cd backend
+python -m src.database.init_db
+python -m src.database.migrate_normalize
+```
+
+El script `migrate_normalize` migra datos CSV legacy a tablas hijas, unifica desparasitaciones y aplica constraints.
+
+---
 
 ## Diagrama Entidad-Relación (ER)
-
-El siguiente diagrama muestra las relaciones principales entre las entidades del sistema (Usuarios, Animales, Reportes, Catálogos, Historial Clínico, etc.).
 
 ```mermaid
 erDiagram
     users ||--o{ reports : "crea"
-    species ||--o{ animals : "clasifica a"
     species ||--o{ breeds : "tiene"
     breeds ||--o{ animals : "pertenece a"
     veterinarians ||--o{ animals : "atiende a"
-    
+    veterinarians ||--o{ vaccines : "aplicó"
+
     animals ||--o| health_records : "tiene libreta"
     health_records ||--o{ vaccines : "registra"
-    
-    animals ||--o{ internal_dewormings : "historial de"
-    animals ||--o{ external_dewormings : "historial de"
-    veterinary_products ||--o{ internal_dewormings : "producto usado"
-    veterinary_products ||--o{ external_dewormings : "producto usado"
-    
+
+    animals ||--o{ dewormings : "historial de"
+    veterinary_products ||--o{ dewormings : "producto usado"
+
     animals ||--o{ lab_results : "estudios de"
     laboratory_catalog ||--o{ lab_results : "tipo de estudio"
-    
+
+    animals ||--o{ reservations : "reserva"
     animals ||--o{ reports : "tiene"
-    animals ||--o{ animal_diagnoses : "tiene"
-    animals ||--o{ animal_medications : "tiene"
-    animals ||--o{ animal_observations : "tiene"
-    animals ||--o{ attachments : "tiene"
-    
+    animals ||--o{ critical_alerts : "alerta"
+
     reports ||--o{ report_events : "registra"
-    reports ||--o{ report_medications : "registra medicación"
     reports ||--o{ attachments : "adjunta"
-    
-    diagnosis_catalog ||--o{ animal_diagnoses : "catálogo de"
-    medication_catalog ||--o{ animal_medications : "catálogo de"
-    vaccine_catalog ||--o{ vaccines : "catálogo de"
-    event_types ||--o{ report_events : "tipo de"
-    animal_medications ||--o{ report_medications : "dosis reportada de"
+    reports ||--o{ critical_alerts : "origina"
+
+    tag_sets ||--o{ tag_variants : "tiene"
+    color_rules ||--o{ color_rule_keywords : "tiene"
+    data_dictionary ||--o{ data_dictionary_synonyms : "tiene"
 ```
 
-## Detalle de Tablas y Campos
+### Tablas de configuración IA (1FN)
 
-A continuación, se detalla cada tabla con sus respectivos campos y tipos de datos:
+| Tabla padre | Tabla hija | Constraint |
+|-------------|------------|------------|
+| `tag_sets` | `tag_variants(variant)` | UNIQUE(tag_set_id, variant) |
+| `color_rules` | `color_rule_keywords(keyword)` | UNIQUE(color_rule_id, keyword) |
+| `data_dictionary` | `data_dictionary_synonyms(synonym)` | UNIQUE(dictionary_id, synonym) |
 
-### 1. Entidades Principales
+---
 
-#### `users` (Usuarios del sistema)
-- `id` (Integer, PK)
-- `name` (String, Unique) - Nombre del usuario (ej. 'admin', 'cathy').
-- `role` (String) - Rol del usuario ('admin' o 'user'). Determina los accesos al Dashboard.
-- `password_hash` (String) - Contraseña encriptada con bcrypt para seguridad.
+## Análisis de Normalización (actualizado)
 
-#### `species` (Especies de animales)
-- `id` (Integer, PK)
-- `name` (String, Unique) - Nombre de la especie (ej. Perro, Gato).
+### Resumen por forma normal
 
-#### `breeds` (Razas de animales)
-- `id` (Integer, PK)
-- `name` (String) - Nombre de la raza (ej. Caniche, Siamés).
-- `species_id` (Integer, FK -> `species.id`) - Especie a la que pertenece la raza.
+| Forma normal | Estado | Comentario |
+|---|---|---|
+| **1FN** | ✅ Cumple | Variantes, keywords y sinónimos en tablas hijas. `fields_config` sigue como JSON string (config estática). |
+| **2FN** | ✅ Cumple | PK surrogate en todas las tablas. |
+| **3FN** | ✅ Mayormente | Vacunas usan `veterinarian_id` FK. Alertas sin texto redundante. |
+| **BCNF** | ✅ Aceptable | Núcleo transaccional sin anomalías graves. |
 
-#### `veterinarians` (Veterinarios asignados)
-- `id` (Integer, PK)
-- `name` (String) - Nombre del veterinario.
-- `phone` (String, Opcional) - Teléfono de contacto.
-- `email` (String, Opcional) - Email de contacto.
+### Correcciones aplicadas
 
-#### `animals` (Pacientes / Animales)
-- `id` (Integer, PK)
-- `name` (String) - Nombre del animal.
-- `species_id` (Integer, FK -> `species.id`)
-- `breed_id` (Integer, FK -> `breeds.id`, Opcional) - Raza del animal.
-- `veterinarian_id` (Integer, FK -> `veterinarians.id`, Opcional)
-- `birth_date` (Date, Opcional) - Fecha de nacimiento.
-- `sex` (String, Opcional) - Sexo ('M', 'F', 'U').
-- `is_castrated` (Boolean) - Si el animal está castrado.
-- `photo_url` (String, Opcional) - URL de la foto de perfil.
-- `is_active` (Boolean) - Si el animal está activo en el sistema.
+| Issue | Solución |
+|-------|----------|
+| CSV en `tag_sets`, `color_rules`, `data_dictionary` | Tablas `tag_variants`, `color_rule_keywords`, `data_dictionary_synonyms` |
+| `vaccines.veterinarian_name` texto libre | `vaccines.veterinarian_id` → FK `veterinarians` |
+| `internal_dewormings` + `external_dewormings` duplicadas | Tabla unificada `dewormings` (tipo en `veterinary_products.type`) |
+| `critical_alerts.message` con nombre embebido | Eliminado; mensaje se compone en API desde `keyword_detected` |
+| Sin UNIQUE en razas, eventos, catálogos | `UNIQUE(species_id, name)` en breeds, `UNIQUE(report_id, event_type_id)` en report_events, `UNIQUE(name)` en catálogos |
 
-### 2. Historial Clínico Avanzado (Entidades Débiles)
+### Decisiones de diseño conservadas (válidas)
 
-#### `health_records` (Libreta Sanitaria)
-- `id` (Integer, PK)
-- `animal_id` (Integer, FK -> `animals.id`, Unique) - Relación 1 a 1 con el paciente.
-- `creation_date` (Date) - Fecha en que se creó la libreta.
-- `notes` (String, Opcional) - Notas generales de la libreta.
+| Campo | Razón |
+|-------|-------|
+| `attachments.animal_id` + `report_id` | Permite fotos sin reporte asociado |
+| `animals.severity` | Caché de lectura rápida para el dashboard |
+| `data_dictionary.fields_config` | JSON de configuración de campos, no dato transaccional |
 
-#### `vaccines` (Historial de Vacunas)
-- `id` (Integer, PK)
-- `health_record_id` (Integer, FK -> `health_records.id`)
-- `vaccine_id` (Integer, FK -> `vaccine_catalog.id`) - Referencia al catálogo de vacunas.
-- `date_administered` (Date) - Fecha de aplicación.
-- `next_due_date` (Date, Opcional) - Fecha del próximo refuerzo.
-- `lot_number` (String, Opcional) - Número de lote de la vacuna.
-- `veterinarian_name` (String, Opcional) - Veterinario que firmó o aplicó.
+---
 
-#### `internal_dewormings` (Desparasitaciones Internas)
-- `id` (Integer, PK)
-- `animal_id` (Integer, FK -> `animals.id`)
-- `product_id` (Integer, FK -> `veterinary_products.id`) - Referencia al catálogo de productos.
-- `date` (Date) - Fecha de aplicación.
-- `next_due_date` (Date, Opcional) - Fecha de la próxima dosis.
+## Constraints de integridad
 
-#### `external_dewormings` (Desparasitaciones Externas)
-- `id` (Integer, PK)
-- `animal_id` (Integer, FK -> `animals.id`)
-- `product_id` (Integer, FK -> `veterinary_products.id`) - Referencia al catálogo de productos.
-- `date` (Date) - Fecha de aplicación.
-- `next_due_date` (Date, Opcional) - Fecha de la próxima dosis.
+| Tabla | Constraint |
+|-------|------------|
+| `breeds` | UNIQUE(species_id, name) |
+| `report_events` | UNIQUE(report_id, event_type_id) |
+| `laboratory_catalog` | UNIQUE(name) |
+| `vaccine_catalog` | UNIQUE(name) |
+| `veterinary_products` | UNIQUE(name, type) |
+| `tag_variants` | UNIQUE(tag_set_id, variant) |
+| `color_rule_keywords` | UNIQUE(color_rule_id, keyword) |
 
-#### `lab_results` (Estudios de Laboratorio)
-- `id` (Integer, PK)
-- `animal_id` (Integer, FK -> `animals.id`)
-- `laboratory_id` (Integer, FK -> `laboratory_catalog.id`) - Referencia al catálogo de tipos de estudios.
-- `date` (Date) - Fecha del estudio.
-- `document_url` (String) - URL física del PDF o imagen alojada en `/uploads/labs`.
+---
 
-### 3. Reportes Diarios
+## Detalle de tablas principales
 
-#### `reports` (Reportes generales de estado)
-- `id` (Integer, PK)
-- `created_at` (DateTime) - Fecha y hora de creación.
-- `user_id` (Integer, FK -> `users.id`) - Usuario que creó el reporte.
-- `animal_id` (Integer, FK -> `animals.id`) - Animal al que pertenece el reporte.
-- `audio_transcript` (Text, Opcional) - Texto transcrito.
-- `weight` (Float, Opcional) - Peso.
+### `dewormings` (unificada)
+- `animal_id`, `product_id`, `date`, `next_due_date`
+- Tipo interno/externo: `veterinary_products.type` = `INTERNAL` | `EXTERNAL`
+- API legacy: `/internal_dewormings` y `/external_dewormings` filtran por tipo
 
-#### `report_events` y `report_medications`
-Tablas de eventos y medicaciones administradas en un reporte específico.
+### `vaccines`
+- `veterinarian_id` FK nullable (reemplaza `veterinarian_name`)
+- `health_record_id`, `vaccine_id`, fechas, lote
 
-### 4. Catálogos Normalizados
+### `critical_alerts`
+- `animal_id`, `report_id`, `keyword_detected`, `is_resolved`, fechas
+- Sin columna `message` (se genera en runtime)
 
-#### `veterinary_products` (Catálogo de Productos de Desparasitación)
-- `id` (Integer, PK)
-- `name` (String) - Nombre comercial (ej. Drontal, Bravecto).
-- `type` (String) - 'INTERNAL' o 'EXTERNAL'.
+### Helpers
+- `backend/src/services/tag_helpers.py` — CRUD variantes/keywords
+- `backend/src/database/migrate_normalize.py` — migración one-shot
 
-#### `laboratory_catalog` (Catálogo de Tipos de Estudios)
-- `id` (Integer, PK)
-- `name` (String) - Nombre del estudio (ej. Hemograma Completo, Ecografía).
+---
 
-#### `vaccine_catalog` (Catálogo de Vacunas)
-- `id` (Integer, PK)
-- `name` (String) - Nombre de la vacuna (ej. Séxtuple, Antirrábica).
+## Conclusión
 
-#### `diagnosis_catalog` (Diagnósticos), `medication_catalog` (Medicamentos), `event_types` (Tipos de Eventos)
-Catálogos fijos para mantener la normalización de la BDD.
-
-### 5. Configuración del Sistema de IA
-Las tablas `data_dictionary` y `tag_sets` (Diccionario Auto-Incremental) manejan el motor semántico NLP del sistema.
+El esquema cumple **1FN, 2FN y 3FN** en el núcleo clínico y de configuración IA. Las únicas desviaciones intencionales son cachés de rendimiento (`animals.severity`) y redundancia controlada (`attachments.animal_id`).
