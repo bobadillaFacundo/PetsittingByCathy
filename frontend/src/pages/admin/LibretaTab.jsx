@@ -65,7 +65,7 @@ export default function LibretaTab({ animalId, token }) {
   if (loading) return <div className="p-8 text-center text-gray-500">Cargando libreta...</div>;
 
   return (
-    <div className="p-6 space-y-6 overflow-y-auto max-h-[60vh]">
+    <div className="p-6 space-y-6">
       <div className="bg-gray-50 p-4 rounded-xl space-y-3">
         <h4 className="font-bold text-gray-800 text-sm flex items-center gap-2">
           <Shield size={18} className="text-blue-600" /> Registrar Nueva Vacuna

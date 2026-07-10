@@ -86,9 +86,49 @@ input[type="date"].audit-date-input::-webkit-datetime-edit-year-field {
   overscroll-behavior: contain;
 }
 
-/* Modales a pantalla completa en móvil */
-.modal-sheet {
-  max-height: min(90dvh, 90vh);
+/* Overlay de modal: scrollea entero (iOS-friendly) */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  background: rgba(0, 0, 0, 0.45);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.modal-overlay-inner {
+  min-height: 100%;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+@media (min-width: 640px) {
+  .modal-overlay-inner {
+    justify-content: center;
+    padding: 2rem 1rem;
+  }
+}
+
+.modal-sheet {
+  width: 100%;
+  max-width: 28rem;
+  margin-left: auto;
+  margin-right: auto;
+  background: #fff;
+  border-radius: 1.5rem 1.5rem 0 0;
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.12);
+}
+
+@media (min-width: 640px) {
+  .modal-sheet {
+    border-radius: 1rem;
+    padding-bottom: 0;
+    max-height: none;
+  }
 }

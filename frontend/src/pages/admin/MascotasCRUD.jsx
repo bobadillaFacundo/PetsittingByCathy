@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Pencil, Trash2, Plus, X, Save, Syringe, FileText, UserCircle, BookHeart } from 'lucide-react';
 import DesparasitacionesTab from './DesparasitacionesTab';
 import LaboratoriosTab from './LaboratoriosTab';
@@ -123,6 +124,13 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
     setModalTab('basic');
     setIsModalOpen(true);
   };
+
+  useEffect(() => {
+    if (!isModalOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [isModalOpen]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -362,164 +370,172 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
         </div>
       )}
 
-      {/* Modal / Formulario */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full max-w-md overflow-hidden modal-sheet pb-safe sm:pb-0">
-            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-              <h3 className="text-lg font-bold text-gray-800">
-                {editingId ? 'Editar Mascota' : 'Nueva Mascota'}
-              </h3>
-              <button 
-                onClick={() => setIsModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600 hover:bg-gray-200 p-1 rounded-lg transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            
-            {editingId && (
-              <div 
-                className="flex border-b border-gray-100 px-2 mt-2 overflow-x-auto" 
-                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}
-              >
-                <style>{`
-                  .overflow-x-auto::-webkit-scrollbar { display: none; }
-                `}</style>
-                <button 
-                  onClick={() => setModalTab('basic')} 
-                  className={`flex items-center gap-2 px-4 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${modalTab === 'basic' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-                >
-                  <UserCircle size={18} /> Básicos
-                </button>
-                <button 
-                  onClick={() => setModalTab('libreta')} 
-                  className={`flex items-center gap-2 px-4 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${modalTab === 'libreta' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-                >
-                  <BookHeart size={18} /> Libreta Sanitaria
-                </button>
-                <button 
-                  onClick={() => setModalTab('deworming')} 
-                  className={`flex items-center gap-2 px-4 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${modalTab === 'deworming' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-                >
-                  <Syringe size={18} /> Desparasitaciones
-                </button>
-                <button 
-                  onClick={() => setModalTab('labs')} 
-                  className={`flex items-center gap-2 px-4 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${modalTab === 'labs' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-                >
-                  <FileText size={18} /> Laboratorios
-                </button>
-              </div>
-            )}
-
-            {modalTab === 'basic' && (
-              <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Nombre</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-gray-900"
-                  placeholder="Nombre de la mascota"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Especie</label>
-                <select
-                  required
-                  value={formData.species_id}
-                  onChange={(e) => setFormData({...formData, species_id: parseInt(e.target.value), breed_id: ''})}
-                  className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-gray-900"
-                >
-                  <option value="">Seleccione una especie</option>
-                  {speciesList.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Raza</label>
-                <select
-                  value={formData.breed_id}
-                  onChange={(e) => setFormData({...formData, breed_id: e.target.value ? parseInt(e.target.value) : null})}
-                  className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-gray-900"
-                >
-                  <option value="">Desconocida / Sin raza</option>
-                  {breedsList
-                    .filter(b => b.species_id === formData.species_id)
-                    .map(b => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Sexo</label>
-                <select
-                  value={formData.sex}
-                  onChange={(e) => setFormData({...formData, sex: e.target.value})}
-                  className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-gray-900"
-                >
-                  <option value="">No definido</option>
-                  <option value="M">Macho</option>
-                  <option value="F">Hembra</option>
-                </select>
-              </div>
-
-              <div className="flex items-center gap-2 mt-2">
-                <input
-                  type="checkbox"
-                  id="isCastrated"
-                  checked={formData.is_castrated}
-                  onChange={e => setFormData({...formData, is_castrated: e.target.checked})}
-                  className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
-                />
-                <label htmlFor="isCastrated" className="text-sm font-medium text-gray-700">
-                  Animal Castrado
-                </label>
-              </div>
-
-              <div className="flex items-center gap-2 mt-2">
-                <input
-                  type="checkbox"
-                  id="isActive"
-                  checked={formData.is_active}
-                  onChange={e => setFormData({...formData, is_active: e.target.checked})}
-                  className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
-                />
-                <label htmlFor="isActive" className="text-sm font-medium text-gray-700">
-                  Mascota Activa (Aparece en la guardia)
-                </label>
-              </div>
-
-              <div className="pt-4 flex justify-end gap-3">
+      {/* Modal / Formulario — portal a body para scroll en iOS */}
+      {isModalOpen && createPortal(
+        <div
+          className="modal-overlay"
+          onClick={(e) => { if (e.target === e.currentTarget) setIsModalOpen(false); }}
+        >
+          <div className="modal-overlay-inner">
+            <div className="modal-sheet" onClick={(e) => e.stopPropagation()}>
+              <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 sticky top-0 z-10">
+                <h3 className="text-lg font-bold text-gray-800">
+                  {editingId ? 'Editar Mascota' : 'Nueva Mascota'}
+                </h3>
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl font-medium transition-colors"
+                  className="text-gray-400 hover:text-gray-600 hover:bg-gray-200 p-2 rounded-lg transition-colors"
                 >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium flex items-center gap-2 shadow-sm transition-colors"
-                >
-                  <Save size={18} /> {editingId ? 'Guardar Cambios' : 'Crear Mascota'}
+                  <X size={20} />
                 </button>
               </div>
-            </form>
-            )}
 
-            {modalTab === 'libreta' && <LibretaTab animalId={editingId} token={token} />}
-            {modalTab === 'deworming' && <DesparasitacionesTab animalId={editingId} token={token} />}
-            {modalTab === 'labs' && <LaboratoriosTab animalId={editingId} token={token} />}
+              {editingId && (
+                <div
+                  className="flex border-b border-gray-100 px-2 overflow-x-auto scroll-touch"
+                  style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setModalTab('basic')}
+                    className={`flex items-center gap-2 px-4 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${modalTab === 'basic' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500'}`}
+                  >
+                    <UserCircle size={18} /> Básicos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalTab('libreta')}
+                    className={`flex items-center gap-2 px-4 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${modalTab === 'libreta' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500'}`}
+                  >
+                    <BookHeart size={18} /> Libreta
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalTab('deworming')}
+                    className={`flex items-center gap-2 px-4 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${modalTab === 'deworming' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500'}`}
+                  >
+                    <Syringe size={18} /> Desparas.
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalTab('labs')}
+                    className={`flex items-center gap-2 px-4 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${modalTab === 'labs' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500'}`}
+                  >
+                    <FileText size={18} /> Labs
+                  </button>
+                </div>
+              )}
+
+              {modalTab === 'basic' && (
+                <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Nombre</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.name}
+                      onChange={(e) => setFormData({...formData, name: e.target.value})}
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 text-base"
+                      placeholder="Nombre de la mascota"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Especie</label>
+                    <select
+                      required
+                      value={formData.species_id}
+                      onChange={(e) => setFormData({...formData, species_id: parseInt(e.target.value), breed_id: ''})}
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 text-base bg-white"
+                    >
+                      <option value="">Seleccione una especie</option>
+                      {speciesList.map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Raza</label>
+                    <select
+                      value={formData.breed_id}
+                      onChange={(e) => setFormData({...formData, breed_id: e.target.value ? parseInt(e.target.value) : null})}
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 text-base bg-white"
+                    >
+                      <option value="">Desconocida / Sin raza</option>
+                      {breedsList
+                        .filter(b => b.species_id === formData.species_id)
+                        .map(b => (
+                        <option key={b.id} value={b.id}>{b.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Sexo</label>
+                    <select
+                      value={formData.sex}
+                      onChange={(e) => setFormData({...formData, sex: e.target.value})}
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 text-base bg-white"
+                    >
+                      <option value="">No definido</option>
+                      <option value="M">Macho</option>
+                      <option value="F">Hembra</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="isCastrated"
+                      checked={formData.is_castrated}
+                      onChange={e => setFormData({...formData, is_castrated: e.target.checked})}
+                      className="w-5 h-5 text-indigo-600 rounded border-gray-300"
+                    />
+                    <label htmlFor="isCastrated" className="text-sm font-medium text-gray-700">
+                      Animal Castrado
+                    </label>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="isActive"
+                      checked={formData.is_active}
+                      onChange={e => setFormData({...formData, is_active: e.target.checked})}
+                      className="w-5 h-5 text-indigo-600 rounded border-gray-300"
+                    />
+                    <label htmlFor="isActive" className="text-sm font-medium text-gray-700">
+                      Mascota Activa (Aparece en la guardia)
+                    </label>
+                  </div>
+
+                  <div className="pt-2 flex gap-3 sticky bottom-0 bg-white pb-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsModalOpen(false)}
+                      className="flex-1 px-4 py-3 text-gray-600 bg-gray-100 rounded-xl font-bold"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl font-bold flex items-center justify-center gap-2"
+                    >
+                      <Save size={18} /> {editingId ? 'Guardar' : 'Crear'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {modalTab === 'libreta' && <LibretaTab animalId={editingId} token={token} />}
+              {modalTab === 'deworming' && <DesparasitacionesTab animalId={editingId} token={token} />}
+              {modalTab === 'labs' && <LaboratoriosTab animalId={editingId} token={token} />}
+            </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

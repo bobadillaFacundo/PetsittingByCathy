@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Plus, Edit2, Trash2, X } from 'lucide-react';
 
 export default function CatalogCRUD({ title, endpoint, columns, formFields, hideCreate, hideDelete, canDeleteItem }) {
@@ -42,6 +43,13 @@ export default function CatalogCRUD({ title, endpoint, columns, formFields, hide
     }
     setIsModalOpen(true);
   };
+
+  useEffect(() => {
+    if (!isModalOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [isModalOpen]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -163,61 +171,67 @@ export default function CatalogCRUD({ title, endpoint, columns, formFields, hide
         </div>
       )}
 
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex justify-center items-end sm:items-center p-0 sm:p-4">
-          <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md overflow-hidden shadow-2xl modal-sheet pb-safe sm:pb-0">
-            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-              <h3 className="font-bold text-lg text-gray-800">{editingId ? 'Editar' : 'Nuevo'} Registro</h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={20} />
-              </button>
-            </div>
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              {formFields.map(f => {
-                const lockName = editingId && formData.is_required && f.key === 'name';
-                return (
-                <div key={f.key}>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">{f.label}</label>
-                  {f.type === 'select' ? (
-                    <select
-                      value={formData[f.key] || ''}
-                      onChange={e => setFormData({...formData, [f.key]: e.target.value})}
-                      className="w-full px-4 py-2 rounded-xl border border-gray-200 text-gray-900 bg-white"
-                      required={f.required}
-                      disabled={lockName}
-                    >
-                      <option value="">Seleccione...</option>
-                      {f.options && f.options.map(opt => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      type={f.type || 'text'}
-                      value={formData[f.key] || ''}
-                      onChange={e => setFormData({...formData, [f.key]: e.target.value})}
-                      className={`w-full px-4 py-2 rounded-xl border border-gray-200 text-gray-900 ${lockName ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                      required={f.required}
-                      readOnly={lockName}
-                    />
-                  )}
-                  {lockName && (
-                    <p className="mt-1 text-xs text-amber-700">Este conjunto es obligatorio; solo se pueden editar las variantes.</p>
-                  )}
-                </div>
-                );
-              })}
-              <div className="pt-4 flex gap-3">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 px-4 py-2 bg-gray-100 text-gray-600 font-bold rounded-xl hover:bg-gray-200">
-                  Cancelar
-                </button>
-                <button type="submit" className="flex-1 px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700">
-                  Guardar
+      {isModalOpen && createPortal(
+        <div
+          className="modal-overlay"
+          onClick={(e) => { if (e.target === e.currentTarget) setIsModalOpen(false); }}
+        >
+          <div className="modal-overlay-inner">
+            <div className="modal-sheet" onClick={(e) => e.stopPropagation()}>
+              <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 sticky top-0">
+                <h3 className="font-bold text-lg text-gray-800">{editingId ? 'Editar' : 'Nuevo'} Registro</h3>
+                <button type="button" onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600 p-2">
+                  <X size={20} />
                 </button>
               </div>
-            </form>
+              <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                {formFields.map(f => {
+                  const lockName = editingId && formData.is_required && f.key === 'name';
+                  return (
+                  <div key={f.key}>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">{f.label}</label>
+                    {f.type === 'select' ? (
+                      <select
+                        value={formData[f.key] || ''}
+                        onChange={e => setFormData({...formData, [f.key]: e.target.value})}
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 text-gray-900 bg-white text-base"
+                        required={f.required}
+                        disabled={lockName}
+                      >
+                        <option value="">Seleccione...</option>
+                        {f.options && f.options.map(opt => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type={f.type || 'text'}
+                        value={formData[f.key] || ''}
+                        onChange={e => setFormData({...formData, [f.key]: e.target.value})}
+                        className={`w-full px-4 py-3 rounded-xl border border-gray-200 text-gray-900 text-base ${lockName ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                        required={f.required}
+                        readOnly={lockName}
+                      />
+                    )}
+                    {lockName && (
+                      <p className="mt-1 text-xs text-amber-700">Este conjunto es obligatorio; solo se pueden editar las variantes.</p>
+                    )}
+                  </div>
+                  );
+                })}
+                <div className="pt-2 flex gap-3">
+                  <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 px-4 py-3 bg-gray-100 text-gray-600 font-bold rounded-xl">
+                    Cancelar
+                  </button>
+                  <button type="submit" className="flex-1 px-4 py-3 bg-indigo-600 text-white font-bold rounded-xl">
+                    Guardar
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

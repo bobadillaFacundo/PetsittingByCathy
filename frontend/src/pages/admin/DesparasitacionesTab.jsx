@@ -67,7 +67,7 @@ export default function DesparasitacionesTab({ animalId, token }) {
   if (loading) return <div className="p-8 text-center text-gray-500">Cargando...</div>;
 
   return (
-    <div className="p-6 space-y-8 overflow-y-auto max-h-[60vh]">
+    <div className="p-6 space-y-8">
       {/* Internas */}
       <div>
         <h4 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
