@@ -80,9 +80,11 @@ export default function AnimalHistory({ animalId = 1 }) { // Hardcoded Theo for 
             {exportingPDF ? (
               <div className="text-sm font-medium text-indigo-600 animate-pulse py-1.5 px-4 bg-indigo-50 rounded-lg">Generando documento inteligente...</div>
             ) : (
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap justify-center">
                 <button onClick={() => downloadPDF('1month')} className="px-3 py-1.5 bg-gray-50 hover:bg-indigo-50 hover:text-indigo-700 text-gray-700 text-sm font-bold rounded-lg border transition">1 Mes</button>
                 <button onClick={() => downloadPDF('3months')} className="px-3 py-1.5 bg-gray-50 hover:bg-indigo-50 hover:text-indigo-700 text-gray-700 text-sm font-bold rounded-lg border transition">3 Meses</button>
+                <button onClick={() => downloadPDF('6months')} className="px-3 py-1.5 bg-gray-50 hover:bg-indigo-50 hover:text-indigo-700 text-gray-700 text-sm font-bold rounded-lg border transition">6 Meses</button>
+                <button onClick={() => downloadPDF('9months')} className="px-3 py-1.5 bg-gray-50 hover:bg-indigo-50 hover:text-indigo-700 text-gray-700 text-sm font-bold rounded-lg border transition">9 Meses</button>
                 <button onClick={() => downloadPDF('1year')} className="px-3 py-1.5 bg-gray-50 hover:bg-indigo-50 hover:text-indigo-700 text-gray-700 text-sm font-bold rounded-lg border transition">1 Año</button>
               </div>
             )}

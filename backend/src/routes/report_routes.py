@@ -341,6 +341,8 @@ def export_pdf(
         
     days = 30
     if range == "3months": days = 90
+    if range == "6months": days = 180
+    if range == "9months": days = 270
     if range == "1year": days = 365
     
     threshold_date = datetime.utcnow() - timedelta(days=days)
