@@ -21,6 +21,7 @@ Solo visible para el super-admin (`username === 'cathy'`). Los cuidadores en el 
 │  📊 Reportes por Mascota │  🥧 Distribución de Síntomas │
 │     (Barras)             │     (Donut)                  │
 ├──────────────────────────┴──────────────────────────────┤
+│  Filtros: Color (V/A/R) · Fechas · Mascota · Síntoma    │
 │  Historial de Auditoría (tabla / cards filtrables)      │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -112,13 +113,17 @@ Clic donut "Enfermedad"  ──►  filterSymptom = "Enfermedad"
 
 ## Colores Semánticos en el Feed (no en los gráficos)
 
-Los badges del historial usan las mismas reglas que el historial clínico (`color_rules`):
+Los badges y el tinte de fila/card usan las mismas reglas que el historial clínico:
 
 | Badge | Condición |
 |-------|-----------|
-| 🔴 Rojo | Enfermedad/Medicación, o valor con keyword roja |
-| 🟡 Amarillo | Valor con keyword amarilla (`poco`, `blanda`…) |
-| 🟢 Verde | Rutina normal |
+| 🔴 Rojo | Enfermedad/Medicación, o keyword roja |
+| 🟡 Amarillo | Tipo Observación/Observacion/Nota, o keyword amarilla |
+| 🟢 Verde | Rutina normal / sin hallazgos anómalos |
+
+El peor color de los eventos del reporte define el color del reporte (rojo > amarillo > verde).
+
+**Filtro de color** en el historial: botones Todos / Verde / Amarillo / Rojo.
 
 Configurables en **Panel Admin → Colores de Reporte**.
 
@@ -143,7 +148,7 @@ No es un gráfico Recharts; es resumen textual generado por IA:
 GET /api/animals/{id}/evolution-analysis
 ```
 
-Compara los últimos 2 reportes con Qwen y devuelve un párrafo de evolución clínica.
+Compara los últimos 2 reportes con Qwen 7B (servidor) y devuelve un **párrafo neutro y factual** (sin alarmismo ni diagnósticos inventados).
 
 ---
 

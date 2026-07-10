@@ -1,6 +1,6 @@
 # Frontend - Petsitting by Cathy
 
-Aplicación React + Vite para cuidadores y administradores de la guardería.
+Aplicación React + Vite (PWA) para cuidadores y administradores de la guardería.
 
 ## Stack
 
@@ -9,37 +9,70 @@ Aplicación React + Vite para cuidadores y administradores de la guardería.
 - React Router 7
 - Recharts (gráficos admin)
 - idb-keyval (reportes offline)
+- vite-plugin-pwa
 - Lucide React (iconos)
 
 ## Estructura
 
 ```
 src/
-├── App.jsx                 # Rutas, layout principal, tabs
+├── App.jsx                 # Rutas, AuthenticatedShell, tabs
 ├── components/
 │   ├── VoiceRecorder.jsx   # Reporte por voz + fotos + offline
 │   └── InstallPrompt.jsx   # Instalación PWA
 └── pages/
-    ├── Dashboard.jsx       # Tablero, alertas críticas, clima IA
+    ├── Dashboard.jsx       # Casita, alertas críticas, clima IA
     ├── AnimalHistory.jsx   # Historial, edición, fotos
-    ├── CalendarioPanel.jsx # Reservas
-    └── admin/              # Panel administrativo
+    ├── Login.jsx
+    └── admin/
         ├── AdminDashboard.jsx
+        ├── CalendarioPanel.jsx   # Tab Calendario (app principal)
+        ├── MascotasCRUD.jsx      # Guardería / Externas + portal iOS
+        ├── LibretaTab.jsx
+        ├── DesparasitacionesTab.jsx
+        ├── LaboratoriosTab.jsx
+        ├── CatalogsPanel.jsx / CatalogCRUD.jsx
         ├── DiccionarioPanel.jsx
         ├── ColoresPanel.jsx
+        ├── AnalisisPanel.jsx
         ├── AuditoriaPanel.jsx
-        └── ...
+        ├── ExportacionPanel.jsx
+        └── UsuariosPanel.jsx
 ```
 
-## Pantallas Principales
+## Pantallas Principales (App)
 
 | Tab / Ruta | Componente | Función |
 |------------|------------|---------|
-| Tablero | `Dashboard.jsx` | Especies, animales, alertas críticas, clima |
-| Nuevo Reporte | `VoiceRecorder.jsx` | Voz, fotos, wizard de confirmación |
-| Calendario | `CalendarioPanel.jsx` | Reservas |
-| `/admin` | `AdminDashboard.jsx` | Panel admin (solo rol `admin`) |
-| `/admin` → Auditoría | `AuditoriaPanel.jsx` | Gráficos Recharts + feed de reportes |
+| Tablero | `Dashboard.jsx` | Mascotas de guardería, alertas, clima |
+| Nuevo Reporte | `VoiceRecorder.jsx` | Voz, fotos, wizard, observación, offline |
+| Calendario | `admin/CalendarioPanel.jsx` | Reservas estadía + vet/baño |
+| `/admin` | `AdminDashboard.jsx` | Panel admin (rol `admin`) |
+| Historial | `AnimalHistory.jsx` | Timeline, editar, fotos, PDF |
+
+`AuthenticatedShell` mantiene casita y admin montados (hide/show) para no remount al cambiar de ruta.
+
+## Panel Admin (`/admin`)
+
+| Sección | Componente | Notas |
+|---------|------------|-------|
+| Diccionario IA | `DiccionarioPanel` | Solo super-admin (`cathy`) |
+| Colores de Reporte | `ColoresPanel` | Solo super-admin |
+| Análisis IA | `AnalisisPanel` | Solo super-admin |
+| Mascotas Guardería | `MascotasCRUD` (`is_daycare`) | Libreta / Labs / Desparasitaciones |
+| Mascotas Externas | `MascotasCRUD` | Idem |
+| Catálogos | `CatalogsPanel` | Especies, razas, labs, vacunas, productos, vets |
+| Exportar Historias | `ExportacionPanel` | PDF vía `/reports/export-pdf/{id}` |
+| Auditoría Reportes | `AuditoriaPanel` | Solo super-admin — ver [README_GRAFICOS.md](../README_GRAFICOS.md) |
+| Usuarios | `UsuariosPanel` | Solo super-admin |
+
+Modales de mascota/catálogo: `createPortal` a `document.body` para scroll en iOS.
+
+## Calendario
+
+- **Nueva Reserva / estadía** → animales `is_daycare = false`
+- **Vet / Baño** → animales `is_daycare = true`
+- API: `CRUD /reservations/`
 
 ## Gráficos (Admin)
 
@@ -50,28 +83,32 @@ Panel **Auditoría Reportes** — ver [README_GRAFICOS.md](../README_GRAFICOS.md
 | Reportes por Mascota | Barras | Clic → filtra por paciente |
 | Distribución de Síntomas | Donut | Clic → filtra por síntoma |
 
-Ambos sincronizan filtros con el historial de auditoría debajo.
+Filtros extra: color (V/A/R) y rango de fechas.
 
 ## Desarrollo
 
 ```powershell
 npm install
-npm run dev      # http://localhost:5173
-npm run build    # Producción
+npx vite --port 5173 --host 0.0.0.0 --strictPort
+# o con HTTPS local para PWA en LAN:
+$env:VITE_DEV_HTTPS=1; npm run dev
+npm run build
 ```
 
 El proxy en `vite.config.js` redirige `/api/*` → `http://localhost:8000`.
 
+Todo-en-uno (backend + frontend + DevTunnel): `PetsittingByCathy - START.bat` en la raíz del repo.
+
 ## Autenticación
 
 - Login en `/login` → token JWT en `localStorage`
-- Header en todas las peticiones: `Authorization: Bearer <token>`
+- Header: `Authorization: Bearer <token>`
 - Rol en `localStorage.role` (`admin` | `user`)
+- Super-admin UI: `localStorage.username === 'cathy'`
 
-## Funcionalidades Recientes
+## Documentación Relacionada
 
-- **Fotos en reportes:** input cámara/archivo en `VoiceRecorder`
-- **Alertas críticas:** banner rojo en `Dashboard`
-- **Editar transcripciones:** botón en cada reporte de `AnimalHistory`
-
-Ver documentación general en [../README.md](../README.md).
+- [../README.md](../README.md) — visión general y API
+- [../README_PWA.md](../README_PWA.md) — instalación, offline, iOS
+- [../README_NLP.md](../README_NLP.md) — pipeline de voz
+- [../README_GRAFICOS.md](../README_GRAFICOS.md) — auditoría visual

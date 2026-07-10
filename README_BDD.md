@@ -86,8 +86,13 @@ erDiagram
 | Campo | Razón |
 |-------|-------|
 | `attachments.animal_id` + `report_id` | Permite fotos sin reporte asociado |
-| `animals.severity` | Caché de lectura rápida para el dashboard |
+| `animals.severity` | Caché de lectura rápida para el dashboard (`normal` / `observation` / `critical`) |
+| `animals.is_daycare` | Distingue mascotas de guardería (casita) vs externas (solo calendario/reservas). Default `true` |
 | `data_dictionary.fields_config` | JSON de configuración de campos, no dato transaccional |
+
+### TagSets obligatorios
+
+Los conjuntos **Comida, Agua, Pis, Caca** se aseguran en migración/helpers (`REQUIRED_TAG_SETS`) y **no se pueden eliminar** por API. El resto de TagSets es opcional.
 
 ---
 
@@ -107,6 +112,29 @@ erDiagram
 
 ## Detalle de tablas principales
 
+### `users`
+- `username`, `hashed_password`, `role` (`admin` | `user`), `is_active`
+- Auth JWT (`SECRET_KEY`); CRUD en `/users/`
+
+### `animals`
+- `breed_id`, `veterinarian_id`, nombre, sexo, color, fechas, `is_active`
+- `is_daycare` (default `true`): casita vs solo calendario
+- `severity`: `normal` | `observation` | `critical` (caché dashboard)
+
+### `reservations`
+- `animal_id`, fechas, `status`, notas
+- Estados estadía: Pendiente, Confirmada, Ingresada, Finalizada, Cancelada → solo `is_daycare = false`
+- Estados servicio: Llevar Veterinaria, Viene Veterinaria, Llevar a Bañar → solo `is_daycare = true`
+
+### `reports` + `report_events` + `attachments`
+- Reporte: `animal_id`, `user_id`, `audio_transcript`, `cleaned_text`, timestamps
+- Eventos: `event_type_id`, `value`, UNIQUE(report_id, event_type_id)
+- Adjuntos: `animal_id`, `report_id` nullable, `file_path` / URL (fotos en `uploads/photos/`)
+
+### `lab_results`
+- `animal_id`, `laboratory_id`, `date`, `document_url` (`uploads/labs/`)
+- Incluidos en PDF clínico (`/reports/export-pdf/{id}`)
+
 ### `dewormings` (unificada)
 - `animal_id`, `product_id`, `date`, `next_due_date`
 - Tipo interno/externo: `veterinary_products.type` = `INTERNAL` | `EXTERNAL`
@@ -121,8 +149,13 @@ erDiagram
 - Sin columna `message` (se genera en runtime)
 
 ### Helpers
-- `backend/src/services/tag_helpers.py` — CRUD variantes/keywords
-- `backend/src/database/migrate_normalize.py` — migración one-shot
+- `backend/src/services/tag_helpers.py` — CRUD variantes/keywords + TagSets obligatorios
+- `backend/src/database/migrate_normalize.py` — migración one-shot (incluye `animals.is_daycare`)
+
+### Calendario y `is_daycare`
+- **Nueva Reserva** → solo animales con `is_daycare = false` (externas)
+- **Vet / Baño** → solo animales con `is_daycare = true` (guardería)
+- Validación también en `reservation_routes.py`
 
 ---
 

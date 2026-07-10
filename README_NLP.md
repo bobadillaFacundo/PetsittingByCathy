@@ -1,24 +1,24 @@
 # Flujo de Procesamiento de Audio a Texto (NLP Pipeline)
 
-Este documento detalla el motor de Inteligencia Artificial: cómo la voz se transforma en registros normalizados, cómo aprende vocabulario nuevo y cómo interactúan las funcionalidades de alertas, fotos y edición.
+Este documento detalla el motor de Inteligencia Artificial: cómo la voz se transforma en registros normalizados, cómo aprende vocabulario nuevo y cómo interactúan alertas, observaciones, fotos y edición.
 
 ## Arquitectura General
 
 ```
-[Micrófono] → Whisper → Qwen LLM → Auto-aprendizaje TagSet
-                    ↓
+[Micrófono] → Whisper (local) → Qwen 7B (vLLM servidor) → Auto-aprendizaje TagSet
+                         ↓
               Wizard Frontend → /confirm → PostgreSQL
-                    ↓
-         Alertas críticas + severity + attachments
+                         ↓
+         Alertas críticas + severity + attachments + observaciones
 ```
 
 Fases principales:
-1. **Captura y Transcripción** (voz → texto crudo)
-2. **Interpretación Semántica** (texto → JSON estructurado)
-3. **Auto-Aprendizaje** (actualización de diccionarios)
+1. **Captura y Transcripción** (voz → texto crudo) — Whisper local
+2. **Interpretación Semántica** (texto → JSON) — **Qwen en IP del servidor**
+3. **Auto-Aprendizaje** (diccionarios TagSet)
 4. **Validación e Inserción** (wizard → base de datos)
-5. **Analítica Global** (El Clima de la Guardería)
-6. **Post-procesamiento** (alertas críticas, fotos, edición)
+5. **Analítica** (Clima + análisis por animal neutro)
+6. **Post-procesamiento** (alertas, fotos, edición, colores)
 
 ---
 
@@ -26,114 +26,109 @@ Fases principales:
 
 **Frontend (`VoiceRecorder.jsx`):**
 - Selección de especie → paciente → grabación `.webm`
-- Opcional: adjuntar fotos (cámara o galería) antes de confirmar
-- Si no hay red: guardado en IndexedDB y sync con `/reports/analyze-and-confirm-batch`
+- Opcional: adjuntar fotos (cámara o galería)
+- Si no hay red: IndexedDB + sync con `/reports/analyze-and-confirm-batch`
 
 **Backend (`audio_service.py`):**
-- Modelo: **`faster-whisper` medium** (CPU, `int8`)
+- Modelo: **`faster-whisper` medium** (CPU, `int8`) — solo transcripción
 - Endpoint: `POST /reports/analyze-voice`
-- Salida: texto crudo con posibles muletillas y errores de pronunciación
+- Salida: texto crudo
 
 ---
 
-## Fase 2: Interpretación Semántica (Qwen 2.5 7B)
+## Fase 2: Interpretación Semántica (Qwen 2.5 7B en servidor)
 
-**Modelo:** `Qwen/Qwen2.5-7B-Instruct-AWQ` vía vLLM (WSL/GPU) o **Groq** como alternativa cloud.
+El **postproceso NLP no usa un modelo chico local**. Llama al vLLM remoto:
 
-1. **Prompt con restricciones:** se cargan `TagSet` y `DataDictionary` de la BD. La IA no puede inventar categorías fuera del vocabulario permitido.
-2. **Salida JSON:**
-   ```json
-   {
-     "cleaned_text": "Kira comió la mitad y vomitó agua.",
-     "data": [{
-       "animal": "Kira",
-       "severity": "observation",
-       "inserts": [
-         { "standard_set": "Comida", "spoken_variant": "comió", "value": "mitad" },
-         { "standard_set": "Enfermedad", "spoken_variant": "vomitó", "value": "agua" }
-       ]
-     }]
-   }
-   ```
-3. **Mapeo legacy:** `Enfermedad` → `AnimalDiagnosis`, `Medicación` → `AnimalMedication`, resto → `ReportEvent`.
+| Variable | Default |
+|----------|---------|
+| `VLLM_BASE_URL` | `http://100.82.178.56:8010/v1` |
+| `VLLM_MODEL` | `Qwen/Qwen2.5-7B-Instruct-AWQ` |
+| `USE_GROQ` | vacío (solo si `1` + `GROQ_API_KEY` usa Groq) |
 
-También disponible: `POST /reports/analyze-text` (mismo NLP sin audio).
+Al arrancar el backend se imprime: `[IA] Postproceso NLP -> ...`
+
+1. **Prompt con restricciones:** TagSets y diccionarios de la BD. No inventa categorías fuera del vocabulario.
+2. **Salida JSON** con `cleaned_text`, `severity` y `inserts` (`standard_set`, `spoken_variant`, `value`).
+3. **Mapeo:** `Enfermedad` → diagnóstico, `Medicación` → medicación, `Observación`/`Observacion` → evento + observación, resto → `ReportEvent`.
+
+También: `POST /reports/analyze-text` (mismo NLP sin audio).
 
 ---
 
 ## Fase 3: Auto-Aprendizaje (TagSet)
 
-Tras recibir el JSON de Qwen:
-- Se compara cada `spoken_variant` con las variantes existentes en `tag_sets`
-- Si es nueva (*"se atragantó"*), se agrega automáticamente al conjunto correspondiente
-- El admin puede auditar/editar en **Panel → Diccionario IA** (`GET /dashboard/dictionary`)
+- Se comparan `spoken_variant` con variantes en `tag_sets`
+- Variantes nuevas se agregan al conjunto correspondiente
+- Admin audita en **Panel → Diccionarios IA**
+
+### TagSets obligatorios
+
+Siempre presentes y **no eliminables**:
+
+- Comida  
+- Agua  
+- Pis  
+- Caca  
+
+El resto de conjuntos son opcionales.
 
 ---
 
-## Fase 4: Validación e Inserción
+## Fase 4: Validación e Inserción (Wizard)
 
-1. **Wizard:** el frontend muestra `cleaned_text` editable y un paso por cada evento detectado
-2. **Confirmación:** `POST /reports/confirm` persiste en:
-   - `reports` (transcripción)
-   - `report_events` (comida, pis, caca…)
-   - `animal_diagnoses`, `animal_medications`, `animal_observations`
-3. **Fotos:** tras confirmar, el frontend sube cada imagen con `POST /reports/{report_id}/attach-photo` → tabla `attachments`
-4. **Severidad:** se calcula y actualiza `animals.severity` (`normal` / `observation` / `critical`)
-
----
-
-## Fase 5: Alertas Críticas (Palabras Rojo)
-
-Al confirmar o editar un reporte, `report_helpers.py` escanea la transcripción y valores de eventos contra `color_rules` (color = `red`):
-
-| match_type | Ejemplo |
-|------------|---------|
-| `exact` | `"no"`, `"nada"` |
-| `partial` | `"sangre"`, `"vómito"`, `"diarrea"` |
-
-Si hay coincidencia:
-- Se crea un registro en `critical_alerts`
-- El animal pasa a `severity = critical`
-- El **Dashboard** muestra un banner rojo fijado hasta `PATCH /dashboard/critical-alerts/{id}/resolve`
-
-Las reglas se configuran en **Panel Admin → Colores** (`PUT /catalogs/color-rules/{id}`).
+1. **Rutina diaria siempre visible:** Comida, Agua, Pis, Caca aparecen en el formulario de confirmación aunque el audio no los mencione.
+2. **No son obligatorios:** si quedan vacíos, **no se guardan** en BD.
+3. **Observación:** botón *Agregar como observación* guarda el texto como evento `Observacion` + `AnimalObservation` y `severity = observation` (amarillo).
+4. **Confirmación:** `POST /reports/confirm`
+5. **Fotos:** `POST /reports/{report_id}/attach-photo`
+6. **Severidad:** `normal` / `observation` / `critical` (tipos Observación → observation; Enfermedad/Medicación → critical)
 
 ---
 
-## Fase 6: Edición Manual de Transcripciones
+## Fase 5: Alertas Críticas
 
-Cuando Whisper o Qwen transcriben mal por ruido de fondo:
+`report_helpers.py` escanea transcripción y valores contra `color_rules` (rojo).
 
-1. En el historial clínico, botón **Editar** en cualquier reporte
-2. `PUT /reports/{id}/edit` con la transcripción corregida
-3. El backend:
-   - Borra los `report_events` anteriores del reporte
-   - Re-ejecuta el NLP sobre el texto nuevo
-   - Recalcula severidad y colores
-   - Genera alertas críticas si corresponde
+Si hay match → `critical_alerts` + `severity = critical` hasta `PATCH /dashboard/critical-alerts/{id}/resolve`.
 
 ---
 
-## Fase 7: Analítica Global (El Clima)
+## Fase 6: Edición Manual
 
-- Botón **Analizar Clima** → `GET /dashboard/weather`
-- Lee reportes de las últimas **48 horas**
-- Qwen genera resumen neutral + alertas estructuradas por animal
-- Actualiza `animals.severity` según severidad IA (`high` → critical, `medium` → observation)
+`PUT /reports/{id}/edit` → borra eventos previos, re-ejecuta NLP, recalcula severidad/colores/alertas.
+
+---
+
+## Fase 7: Analítica
+
+### Clima de la Guardería
+- `GET /dashboard/weather`
+- Resumen + alertas JSON (sin exagerar síntomas leves)
+
+### Análisis por animal
+- `GET /animals/{id}/evolution-analysis`
+- Prompt **neutro y factual**: sin alarmismo, sin diagnósticos inventados, temperatura baja (`0.1`)
+- Un párrafo corto basado solo en el historial reciente
+
+### Exportación PDF (historia clínica)
+- `GET /reports/export-pdf/{animal_id}?range=1month|3months|6months|9months|1year`
+- La IA resume reportes del período + texto extraído de PDFs de laboratorio (`pypdf`)
+- UI: **Admin → Exportar Historias** (`ExportacionPanel.jsx`)
 
 ---
 
 ## Colores Semánticos en el Frontend
 
-El historial y la auditoría aplican colores según `color_rules`:
-
 | Color | Condición |
 |-------|-----------|
-| **Verde** | Valor normal (default) |
-| **Amarillo** | `"poco"`, `"blanda"`, `"mitad"`, etc. |
-| **Rojo** | `"no"`, `"sangre"`, `"diarrea"`, o tipos Enfermedad/Medicación |
+| **Verde** | Default / rutina normal |
+| **Amarillo** | Tipo `Observacion` / `Observación` / `Nota`, o keywords amarillas |
+| **Rojo** | Tipo Enfermedad / Medicación, o keywords rojas |
 
-Prioridad: Enfermedad y Medicación → siempre rojo.
+Prioridad: rojo > amarillo > verde (el peor color del reporte gana en auditoría).
+
+El historial de auditoría permite filtrar por **Verde / Amarillo / Rojo** y por rango de fechas (texto negro en inputs `type=date`).
 
 ---
 
@@ -141,12 +136,15 @@ Prioridad: Enfermedad y Medicación → siempre rojo.
 
 | Archivo | Rol |
 |---------|-----|
-| `frontend/src/components/VoiceRecorder.jsx` | Grabación, fotos, wizard, sync offline |
-| `backend/src/services/audio_service.py` | Whisper + Qwen + clima global |
-| `backend/src/services/report_helpers.py` | Severidad, alertas críticas, keywords |
+| `frontend/src/components/VoiceRecorder.jsx` | Grabación, fotos, wizard, observación, offline |
+| `backend/src/services/audio_service.py` | Whisper + Qwen (servidor) + clima + evolución |
+| `backend/src/services/report_helpers.py` | Severidad, alertas, TagSets requeridos |
 | `backend/src/routes/report_routes.py` | analyze, confirm, edit, attach-photo |
-| `frontend/src/pages/AnimalHistory.jsx` | Timeline, edición, fotos |
-| `frontend/src/pages/Dashboard.jsx` | Tablero, alertas críticas, clima |
+| `frontend/src/pages/AnimalHistory.jsx` | Timeline y colores |
+| `frontend/src/pages/admin/AuditoriaPanel.jsx` | Feed, filtros color/fecha |
+| `frontend/src/pages/admin/AnalisisPanel.jsx` | Análisis por animal |
+| `frontend/src/pages/admin/ExportacionPanel.jsx` | PDF clínico por rango |
+| `frontend/src/pages/Dashboard.jsx` | Casita, observación amarilla |
 
 ---
 
@@ -155,8 +153,10 @@ Prioridad: Enfermedad y Medicación → siempre rojo.
 | Variable | Descripción |
 |----------|-------------|
 | `GROQ_API_KEY` | API key de Groq (solo si `USE_GROQ=1`) |
-| `USE_GROQ` | `1` para forzar Groq; por defecto usa vLLM del servidor |
-| `VLLM_BASE_URL` | URL base del vLLM (default: `http://100.82.178.56:8010/v1`) |
-| `VLLM_MODEL` | Modelo en el servidor (default: `Qwen/Qwen2.5-7B-Instruct-AWQ`) |
+| `USE_GROQ` | `1` para forzar Groq; por defecto vLLM del servidor |
+| `GROQ_MODEL` | Default: `llama-3.1-8b-instant` |
+| `VLLM_BASE_URL` | Default: `http://100.82.178.56:8010/v1` |
+| `VLLM_MODEL` | Default: `Qwen/Qwen2.5-7B-Instruct-AWQ` |
+| `SECRET_KEY` | Firma JWT (cambiar en producción) |
 
-La conexión PostgreSQL se configura en `backend/src/database/session.py`.
+PostgreSQL se configura en `backend/src/database/session.py`.
