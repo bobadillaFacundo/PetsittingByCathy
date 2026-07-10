@@ -111,10 +111,17 @@ export default function AnimalHistory({ animalId = 1 }) { // Hardcoded Theo for 
               
               <div className="flex flex-wrap gap-2 mt-2">
                 {report.events.map((evt, idx) => {
-                  // Determinamos color de pill según el evento o valor
-                  const isNegative = evt.value?.toLowerCase() === 'no' || evt.value?.toLowerCase() === 'poco';
-                  const colorClass = isNegative ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-green-50 text-green-700 border-green-200';
-                  const dotColor = isNegative ? 'bg-amber-400' : 'bg-green-400';
+                  const val = evt.value?.toLowerCase() || '';
+                  let colorClass = 'bg-green-50 text-green-700 border-green-200';
+                  let dotColor = 'bg-green-400';
+
+                  if (val === 'no' || val === 'nada' || val === 'ninguno') {
+                    colorClass = 'bg-red-50 text-red-700 border-red-200';
+                    dotColor = 'bg-red-400';
+                  } else if (val === 'poco' || val === 'un poco' || val === 'mitad' || val === 'regular' || val === 'blanda') {
+                    colorClass = 'bg-amber-50 text-amber-700 border-amber-200';
+                    dotColor = 'bg-amber-400';
+                  }
                   
                   return (
                     <span key={idx} className={`inline-flex items-center gap-2 px-3 py-1 rounded-xl text-xs font-bold border shadow-sm ${colorClass}`}>

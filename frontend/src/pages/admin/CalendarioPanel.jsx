@@ -64,7 +64,7 @@ export default function CalendarioPanel() {
         // Mapear a formato que usa react-big-calendar
         const calendarEvents = data.map(r => ({
           id: r.id,
-          title: r.animal?.name || `Paciente #${r.animal_id}`,
+          title: `${r.animal?.name || `Paciente #${r.animal_id}`} - ${r.status}`,
           start: new Date(r.start_date),
           end: new Date(r.end_date),
           resource: r
@@ -78,13 +78,6 @@ export default function CalendarioPanel() {
 
   const handleSelectSlot = ({ start, end }) => {
     if (!isAdmin) return;
-    // start y end vienen como objetos Date
-    // Formatear a 'YYYY-MM-DDTHH:mm' para input datetime-local
-    const formatForInput = (d) => {
-      const offset = d.getTimezoneOffset() * 60000;
-      return new Date(d.getTime() - offset).toISOString().slice(0, 16);
-    };
-
     setFormData({
       animal_id: '',
       start_date: formatForInput(start),
@@ -98,13 +91,6 @@ export default function CalendarioPanel() {
 
   const handleSelectEvent = (event) => {
     const r = event.resource;
-    
-    const formatForInput = (d) => {
-      const dateObj = new Date(d);
-      const offset = dateObj.getTimezoneOffset() * 60000;
-      return new Date(dateObj.getTime() - offset).toISOString().slice(0, 16);
-    };
-
     setFormData({
       animal_id: r.animal_id,
       start_date: formatForInput(r.start_date),
@@ -176,20 +162,32 @@ export default function CalendarioPanel() {
     }
   };
 
+  const formatForInput = (d) => {
+    const dateObj = new Date(d);
+    const offset = dateObj.getTimezoneOffset() * 60000;
+    return new Date(dateObj.getTime() - offset).toISOString().slice(0, 16);
+  };
+
   const eventStyleGetter = (event) => {
     let backgroundColor = '#3b82f6'; // blue-500
     if (event.resource.status === 'Confirmada') backgroundColor = '#10b981'; // green-500
     if (event.resource.status === 'Ingresada') backgroundColor = '#8b5cf6'; // violet-500
+    if (event.resource.status === 'Llevar Veterinaria') backgroundColor = '#f97316'; // orange-500
+    if (event.resource.status === 'Viene Veterinaria') backgroundColor = '#eab308'; // yellow-500
+    if (event.resource.status === 'Llevar a Bañar') backgroundColor = '#06b6d4'; // cyan-500
     if (event.resource.status === 'Cancelada') backgroundColor = '#ef4444'; // red-500
+    if (event.resource.status === 'Finalizada') backgroundColor = '#9ca3af'; // gray-400
     
     return {
       style: {
         backgroundColor,
         borderRadius: '5px',
-        opacity: 0.8,
+        opacity: 0.9,
         color: 'white',
         border: '0px',
-        display: 'block'
+        display: 'block',
+        fontWeight: 'bold',
+        fontSize: '0.8rem'
       }
     };
   };
@@ -210,16 +208,54 @@ export default function CalendarioPanel() {
           </p>
         </div>
         {isAdmin && (
-          <button 
-            onClick={() => {
-              const now = new Date();
-              const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
-              handleSelectSlot({ start: now, end: tomorrow });
-            }}
-            className="bg-indigo-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-indigo-700 transition"
-          >
-            <Plus className="w-4 h-4" /> Nueva Reserva
-          </button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <button 
+              onClick={() => {
+                const now = new Date();
+                const in1h = new Date(now); in1h.setHours(now.getHours() + 1);
+                setFormData({ animal_id: '', start_date: formatForInput(now), end_date: formatForInput(in1h), status: 'Llevar Veterinaria', notes: ''});
+                setEditingId(null);
+                setIsModalOpen(true);
+              }}
+              className="bg-orange-500 text-white px-3 py-2 rounded-xl text-sm font-bold flex items-center gap-1 hover:bg-orange-600 transition"
+            >
+              <Plus className="w-4 h-4" /> Llevar Vet
+            </button>
+            <button 
+              onClick={() => {
+                const now = new Date();
+                const in1h = new Date(now); in1h.setHours(now.getHours() + 1);
+                setFormData({ animal_id: '', start_date: formatForInput(now), end_date: formatForInput(in1h), status: 'Viene Veterinaria', notes: ''});
+                setEditingId(null);
+                setIsModalOpen(true);
+              }}
+              className="bg-yellow-500 text-white px-3 py-2 rounded-xl text-sm font-bold flex items-center gap-1 hover:bg-yellow-600 transition"
+            >
+              <Plus className="w-4 h-4" /> Viene Vet
+            </button>
+            <button 
+              onClick={() => {
+                const now = new Date();
+                const in1h = new Date(now); in1h.setHours(now.getHours() + 1);
+                setFormData({ animal_id: '', start_date: formatForInput(now), end_date: formatForInput(in1h), status: 'Llevar a Bañar', notes: ''});
+                setEditingId(null);
+                setIsModalOpen(true);
+              }}
+              className="bg-cyan-500 text-white px-3 py-2 rounded-xl text-sm font-bold flex items-center gap-1 hover:bg-cyan-600 transition"
+            >
+              <Plus className="w-4 h-4" /> Bañar
+            </button>
+            <button 
+              onClick={() => {
+                const now = new Date();
+                const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
+                handleSelectSlot({ start: now, end: tomorrow });
+              }}
+              className="bg-indigo-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-indigo-700 transition"
+            >
+              <Plus className="w-4 h-4" /> Nueva Reserva
+            </button>
+          </div>
         )}
       </div>
 
@@ -307,7 +343,7 @@ export default function CalendarioPanel() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Estado / Tipo de Evento</label>
                 <select 
                   className="w-full border border-gray-300 rounded-lg p-2 bg-gray-50 text-gray-800 disabled:opacity-70 disabled:bg-gray-100"
                   value={formData.status}
@@ -317,6 +353,9 @@ export default function CalendarioPanel() {
                   <option value="Pendiente">Pendiente (Azul)</option>
                   <option value="Confirmada">Confirmada (Verde)</option>
                   <option value="Ingresada">Ingresada en Guardería (Violeta)</option>
+                  <option value="Llevar Veterinaria">Llevar Veterinaria (Naranja)</option>
+                  <option value="Viene Veterinaria">Viene Veterinaria (Amarillo)</option>
+                  <option value="Llevar a Bañar">Llevar a Bañar (Celeste)</option>
                   <option value="Finalizada">Finalizada (Gris)</option>
                   <option value="Cancelada">Cancelada (Rojo)</option>
                 </select>
