@@ -181,13 +181,15 @@ export default function CalendarioPanel() {
     return {
       style: {
         backgroundColor,
-        borderRadius: '5px',
-        opacity: 0.9,
+        borderRadius: '6px',
+        opacity: 1,
         color: 'white',
-        border: '0px',
+        border: '2px solid #ffffff',
         display: 'block',
         fontWeight: 'bold',
-        fontSize: '0.8rem'
+        fontSize: '0.8rem',
+        padding: '2px 4px',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
       }
     };
   };
@@ -275,6 +277,7 @@ export default function CalendarioPanel() {
           view={currentView}
           onView={(newView) => setCurrentView(newView)}
           culture="es"
+          dayLayoutAlgorithm="no-overlap"
           messages={{
             next: "Sig",
             previous: "Ant",
