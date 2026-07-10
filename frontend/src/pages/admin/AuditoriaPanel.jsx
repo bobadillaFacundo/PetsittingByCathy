@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Send, RefreshCw, Activity, CheckCircle2, Filter, Mic, Square, Download, Database, Sun, CloudSun, AlertTriangle } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Send, RefreshCw, Activity, CheckCircle2, Filter, Mic, Square, Download, Database, Sun, CloudSun, AlertTriangle, X } from 'lucide-react';
 import VoiceRecorder from '../../components/VoiceRecorder';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
@@ -17,6 +18,7 @@ export default function AuditoriaPanel() {
   const [weatherData, setWeatherData] = useState(null);
   const [loadingWeather, setLoadingWeather] = useState(false);
   const [colorRules, setColorRules] = useState([]);
+  const [transcriptModal, setTranscriptModal] = useState(null); // { animal_name, transcript, created_at, user_name }
 
   const getEventColor = (e) => {
     const type = (e.type || '').toLowerCase();
@@ -126,6 +128,30 @@ export default function AuditoriaPanel() {
   useEffect(() => {
     fetchReports();
   }, []);
+
+  useEffect(() => {
+    if (!transcriptModal) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e) => {
+      if (e.key === 'Escape') setTranscriptModal(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [transcriptModal]);
+
+  const openTranscript = (r) => {
+    if (!r?.transcript) return;
+    setTranscriptModal({
+      animal_name: r.animal_name,
+      transcript: r.transcript,
+      created_at: r.created_at,
+      user_name: r.user_name,
+    });
+  };
 
   const filteredReports = useMemo(() => {
     return reports.filter(r => {
@@ -485,8 +511,15 @@ export default function AuditoriaPanel() {
                           <td className="px-6 py-4 font-black text-indigo-900">
                             {r.animal_name}
                           </td>
-                          <td className="px-6 py-4 text-sm text-gray-700 max-w-xs truncate italic" title={r.transcript}>
-                            "{r.transcript}"
+                          <td className="px-6 py-4 text-sm text-gray-700 max-w-xs">
+                            <button
+                              type="button"
+                              onClick={() => openTranscript(r)}
+                              className="w-full text-left italic text-gray-700 hover:text-indigo-700 hover:underline underline-offset-2 line-clamp-2 cursor-pointer"
+                              title="Ver transcripción completa"
+                            >
+                              "{r.transcript || 'Sin transcripción'}"
+                            </button>
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex flex-wrap gap-1.5">
@@ -542,9 +575,18 @@ export default function AuditoriaPanel() {
                         </div>
                       </div>
 
-                      <div className="bg-white/80 p-4 rounded-2xl mb-4 text-sm text-gray-700 italic border border-gray-100 relative">
-                        "{r.transcript}"
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => openTranscript(r)}
+                        className="w-full text-left bg-white/80 p-4 rounded-2xl mb-4 text-sm text-gray-700 italic border border-gray-100 hover:border-indigo-200 hover:bg-indigo-50/40 transition-colors"
+                      >
+                        <span className="line-clamp-3">"{r.transcript || 'Sin transcripción'}"</span>
+                        {r.transcript && (
+                          <span className="mt-2 block text-[11px] font-bold not-italic text-indigo-600 uppercase tracking-wide">
+                            Tocá para ver completo
+                          </span>
+                        )}
+                      </button>
 
                       <div className="flex flex-wrap gap-1.5 mb-3">
                         {r.events.map((e, idx) => {
@@ -571,6 +613,64 @@ export default function AuditoriaPanel() {
           )}
         </div>
       </div>
+
+      {transcriptModal && createPortal(
+        <div
+          className="modal-overlay fixed inset-0 z-[100] bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto"
+          onClick={() => setTranscriptModal(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="transcript-modal-title"
+        >
+          <div
+            className="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[90dvh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 p-4 sm:p-5 border-b border-gray-100 shrink-0">
+              <div className="min-w-0">
+                <h3 id="transcript-modal-title" className="text-lg font-black text-gray-900 truncate">
+                  {transcriptModal.animal_name}
+                </h3>
+                <p className="text-xs font-bold text-gray-500 mt-1 uppercase tracking-wide">
+                  Reporte original ·{' '}
+                  {transcriptModal.created_at
+                    ? new Date(transcriptModal.created_at).toLocaleString('es-ES', {
+                        day: 'numeric',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })
+                    : '—'}
+                  {transcriptModal.user_name ? ` · ${transcriptModal.user_name}` : ''}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTranscriptModal(null)}
+                className="p-2 rounded-xl text-gray-500 hover:bg-gray-100 hover:text-gray-800 shrink-0"
+                aria-label="Cerrar"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-4 sm:p-6 overflow-y-auto scroll-touch flex-1">
+              <p className="text-base text-gray-800 leading-relaxed whitespace-pre-wrap">
+                {transcriptModal.transcript}
+              </p>
+            </div>
+            <div className="p-4 border-t border-gray-100 shrink-0">
+              <button
+                type="button"
+                onClick={() => setTranscriptModal(null)}
+                className="w-full py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
