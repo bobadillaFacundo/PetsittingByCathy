@@ -4,6 +4,7 @@ import { Pencil, Trash2, Plus, X, Save, Syringe, FileText, UserCircle, BookHeart
 import DesparasitacionesTab from './DesparasitacionesTab';
 import LaboratoriosTab from './LaboratoriosTab';
 import LibretaTab from './LibretaTab';
+import MedicacionTab from './MedicacionTab';
 import { redirectToLogin } from '../../lib/auth';
 
 const SPECIES_INFO = {
@@ -42,6 +43,7 @@ const emptyForm = (daycareOnly, speciesId = '') => ({
   no_smell: false,
   has_neurological: false,
   has_involuntary_movements: false,
+  residence: ''
 });
 
 function formatAge(m) {
@@ -164,6 +166,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
         no_smell: Boolean(mascota.no_smell),
         has_neurological: Boolean(mascota.has_neurological),
         has_involuntary_movements: Boolean(mascota.has_involuntary_movements),
+        residence: mascota.residence || ''
       });
     } else {
       setEditingId(null);
@@ -355,6 +358,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                     )}
                     <p className="text-xs text-gray-500 mt-1">
                       {[formatAge(m), m.coat_color].filter(Boolean).join(' · ') || 'Sin edad / pelaje'}
+                      {m.residence && ` · ${m.residence}`}
                     </p>
                     {traitLabels(m).length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-2">
@@ -419,6 +423,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                   <th className="px-6 py-4 font-medium">Edad</th>
                   <th className="px-6 py-4 font-medium">Pelaje</th>
                   <th className="px-6 py-4 font-medium">Sexo</th>
+                  {!daycareOnly && <th className="px-6 py-4 font-medium">Residencia</th>}
                   <th className="px-6 py-4 font-medium">Estado</th>
                   <th className="px-6 py-4 font-medium text-right">Acciones</th>
                 </tr>
@@ -455,6 +460,11 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                     <td className="px-6 py-4 text-gray-600 text-sm font-medium">
                       {m.sex === 'M' ? 'Macho' : m.sex === 'F' ? 'Hembra' : 'No definido'}
                     </td>
+                    {!daycareOnly && (
+                      <td className="px-6 py-4 text-gray-600 text-sm font-medium">
+                        {m.residence || '—'}
+                      </td>
+                    )}
                     <td className="px-6 py-4">
                       {m.is_active ? (
                         <span className="inline-flex items-center gap-1.5 text-xs text-green-700 font-bold bg-green-50 px-2 py-1 rounded-full border border-green-100">
@@ -551,6 +561,13 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                     className={`flex items-center gap-2 px-4 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${modalTab === 'labs' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500'}`}
                   >
                     <FileText size={18} /> Labs
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalTab('medicacion')}
+                    className={`flex items-center gap-2 px-4 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${modalTab === 'medicacion' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500'}`}
+                  >
+                    <Syringe size={18} /> Medicación
                   </button>
                 </div>
               )}
@@ -738,6 +755,22 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                     </label>
                   </div>
 
+                  {!daycareOnly && (
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-1">Residencia</label>
+                      <select
+                        value={formData.residence}
+                        onChange={(e) => setFormData({...formData, residence: e.target.value})}
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 text-base bg-white"
+                      >
+                        <option value="">No definida</option>
+                        <option value="BOUQUET">BOUQUET</option>
+                        <option value="LA HERRADURA">LA HERRADURA</option>
+                        <option value="EL BARRANCO">EL BARRANCO</option>
+                      </select>
+                    </div>
+                  )}
+
                   <div className="pt-2 flex gap-3 sticky bottom-0 bg-white pb-2">
                     <button
                       type="button"
@@ -759,6 +792,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
               {modalTab === 'libreta' && <LibretaTab animalId={editingId} token={token} />}
               {modalTab === 'deworming' && <DesparasitacionesTab animalId={editingId} token={token} />}
               {modalTab === 'labs' && <LaboratoriosTab animalId={editingId} token={token} />}
+              {modalTab === 'medicacion' && <MedicacionTab animalId={editingId} />}
             </div>
           </div>
         </div>,

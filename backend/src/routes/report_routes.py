@@ -16,7 +16,7 @@ from sqlalchemy.orm import joinedload
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from pydantic import BaseModel
 from typing import List, Optional, Any
 import os
@@ -56,6 +56,34 @@ async def analyze_and_confirm_batch(
     
     # 3. Confirmar y guardar en BD
     return confirm_report(confirm_request, db, current_user)
+
+@router.post("/recalculate-alerts")
+def recalculate_alerts(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    # 1. Obtener reportes de las últimas 48 hs
+    yesterday = datetime.utcnow() - timedelta(hours=48)
+    recent_reports = db.query(Report).filter(Report.created_at >= yesterday).all()
+
+    # 2. Borrar alertas críticas no resueltas de los últimos 2 días (para no duplicar)
+    from src.models.models import CriticalAlert
+    db.query(CriticalAlert).filter(
+        CriticalAlert.created_at >= yesterday,
+        CriticalAlert.is_resolved == False
+    ).delete(synchronize_session=False)
+    
+    # 3. Regenerar alertas para cada reporte
+    from src.services.report_helpers import create_critical_alerts_for_report
+    for r in recent_reports:
+        animal = db.query(Animal).filter(Animal.id == r.animal_id).first()
+        if not animal: continue
+        
+        # Extraer los valores de los eventos de este reporte
+        events = db.query(ReportEvent).filter(ReportEvent.report_id == r.id).all()
+        event_values = [e.value for e in events if e.value]
+        
+        create_critical_alerts_for_report(db, animal, r.id, r.audio_transcript, event_values)
+        
+    db.commit()
+    return {"status": "ok", "message": "Alertas recalculadas exitosamente."}
 
 @router.post("/analyze-voice")
 async def analyze_voice_report(

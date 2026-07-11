@@ -9,6 +9,7 @@ class ReservationBase(BaseModel):
     end_date: datetime
     status: Optional[str] = "Pendiente"
     notes: Optional[str] = None
+    belongings_photos: Optional[str] = None
 
 class ReservationCreate(ReservationBase):
     pass
@@ -19,6 +20,7 @@ class ReservationUpdate(BaseModel):
     end_date: Optional[datetime] = None
     status: Optional[str] = None
     notes: Optional[str] = None
+    belongings_photos: Optional[str] = None
 
 class ReservationResponse(ReservationBase):
     id: int

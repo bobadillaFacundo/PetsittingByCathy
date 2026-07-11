@@ -24,6 +24,7 @@ class CriticalAlertDTO(BaseModel):
     report_id: Optional[int] = None
     message: str
     keyword_detected: str
+    severity: str
     created_at: datetime
 
 class DashboardResponse(BaseModel):
@@ -98,6 +99,7 @@ def get_dashboard(db: Session = Depends(get_db)):
                 report_id=ca.report_id,
                 message=format_critical_alert_message(ca.keyword_detected),
                 keyword_detected=ca.keyword_detected,
+                severity=ca.severity or "red",
                 created_at=ca.created_at,
             ))
 

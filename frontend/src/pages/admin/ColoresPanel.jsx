@@ -40,6 +40,16 @@ export default function ColoresPanel() {
       });
       if (res.ok) {
         setRules(rules.map(r => r.id === id ? { ...r, keywords: newKeywords } : r));
+        
+        // Recalcular alertas
+        try {
+          await fetch('https://petsittingbycathy.onrender.com/reports/recalculate-alerts', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+          });
+        } catch (e) {
+          console.error("Error al recalcular alertas", e);
+        }
       }
     } catch (err) {
       console.error(err);

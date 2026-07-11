@@ -86,17 +86,20 @@ export default function Dashboard() {
   const obsAnimals = selectedSpeciesId ? data.observation_animals.filter(a => a.species_id === selectedSpeciesId) : [];
   const normalAnimals = selectedSpeciesId ? data.normal_animals.filter(a => a.species_id === selectedSpeciesId) : [];
 
+  const red_alerts = (data.critical_alerts || []).filter(a => a.severity === 'red');
+  const yellow_alerts = (data.critical_alerts || []).filter(a => a.severity === 'yellow');
+
   return (
     <div className="max-w-5xl mx-auto space-y-8">
 
-      {/* ALERTAS CRÍTICAS (palabras clave rojas) — fijadas hasta resolver */}
-      {data.critical_alerts && data.critical_alerts.length > 0 && (
+      {/* ALERTAS ROJAS (palabras clave rojas) — fijadas hasta resolver */}
+      {red_alerts.length > 0 && (
         <div className="bg-red-600 border-2 border-red-700 p-6 rounded-2xl shadow-lg animate-fade-in-up">
           <h2 className="text-xl font-black text-white flex items-center gap-2 mb-4">
-            🚨 Alertas Críticas — Requieren Atención
+            🚨 Alertas Rojas — Atención Inmediata
           </h2>
           <div className="space-y-3">
-            {data.critical_alerts.map((alert) => (
+            {red_alerts.map((alert) => (
               <div key={alert.id} className="bg-white/95 p-4 rounded-xl flex items-start justify-between gap-4 border border-red-200">
                 <div className="flex items-start gap-3">
                   <span className="text-2xl">🔴</span>
@@ -112,6 +115,45 @@ export default function Dashboard() {
                   <button
                     onClick={() => setSelectedAnimal(alert.animal_id)}
                     className="px-3 py-1.5 bg-red-100 text-red-700 text-xs font-bold rounded-lg border border-red-300 hover:bg-red-200 transition"
+                  >
+                    Ver Ficha
+                  </button>
+                  <button
+                    onClick={() => resolveCriticalAlert(alert.id)}
+                    className="px-3 py-1.5 bg-green-600 text-white text-xs font-bold rounded-lg hover:bg-green-700 transition"
+                  >
+                    ✓ Marcar Resuelta
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ALERTAS AMARILLAS (palabras clave amarillas) — fijadas hasta resolver */}
+      {yellow_alerts.length > 0 && (
+        <div className="bg-amber-500 border-2 border-amber-600 p-6 rounded-2xl shadow-lg animate-fade-in-up">
+          <h2 className="text-xl font-black text-white flex items-center gap-2 mb-4">
+            🟡 Alertas Amarillas — Observación
+          </h2>
+          <div className="space-y-3">
+            {yellow_alerts.map((alert) => (
+              <div key={alert.id} className="bg-white/95 p-4 rounded-xl flex items-start justify-between gap-4 border border-amber-200">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl">⚠️</span>
+                  <div>
+                    <div className="font-black text-amber-900 text-lg">{alert.animal_name}</div>
+                    <div className="text-sm text-amber-800 mt-1">{alert.message}</div>
+                    <div className="text-xs text-amber-600 mt-1 font-medium">
+                      Palabra detectada: "{alert.keyword_detected}" · {new Date(alert.created_at).toLocaleString('es-ES')}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2 shrink-0">
+                  <button
+                    onClick={() => setSelectedAnimal(alert.animal_id)}
+                    className="px-3 py-1.5 bg-amber-100 text-amber-700 text-xs font-bold rounded-lg border border-amber-300 hover:bg-amber-200 transition"
                   >
                     Ver Ficha
                   </button>

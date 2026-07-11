@@ -134,6 +134,7 @@ class Animal(Base):
     is_active = Column(Boolean, default=True)
     is_daycare = Column(Boolean, default=True, nullable=False)
     severity = Column(String, default="normal")
+    residence = Column(String, nullable=True)
 
     # Perfil físico / rescate
     coat_color = Column(String, nullable=True)
@@ -173,6 +174,7 @@ class Reservation(Base):
     end_date = Column(DateTime, nullable=False)
     status = Column(String, default="Pendiente")
     notes = Column(Text, nullable=True)
+    belongings_photos = Column(Text, nullable=True)
 
     animal = relationship("Animal", back_populates="reservations")
 
@@ -294,6 +296,9 @@ class AnimalMedication(Base):
     dosage = Column(String, nullable=False)
     frequency = Column(String, nullable=False)
     is_current = Column(Boolean, default=True)
+    amount_per_day = Column(String, nullable=True)
+    duration_days = Column(Integer, nullable=True)
+    is_forever = Column(Boolean, default=False)
 
     animal = relationship("Animal", back_populates="medications")
     medication = relationship("MedicationCatalog")
@@ -374,6 +379,7 @@ class CriticalAlert(Base):
     animal_id = Column(Integer, ForeignKey("animals.id"), nullable=False)
     report_id = Column(Integer, ForeignKey("reports.id"), nullable=True)
     keyword_detected = Column(String, nullable=False)
+    severity = Column(String, default="red")
     is_resolved = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     resolved_at = Column(DateTime, nullable=True)

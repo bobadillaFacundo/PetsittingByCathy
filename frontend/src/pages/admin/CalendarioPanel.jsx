@@ -25,17 +25,35 @@ const SERVICE_STATUSES = new Set([
 
 const isServiceEvent = (status) => SERVICE_STATUSES.has(status);
 
+const SPECIES_INFO = {
+  1: { name: "Perros", emoji: "🐶" },
+  2: { name: "Gatos", emoji: "🐱" },
+  3: { name: "Loros", emoji: "🦜" },
+  4: { name: "Conejos", emoji: "🐰" },
+  5: { name: "Tortugas", emoji: "🐢" },
+  6: { name: "Erizos", emoji: "🦔" }
+};
+
 export default function CalendarioPanel() {
   const [events, setEvents] = useState([]);
   const [animals, setAnimals] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  
+  // For multiple animal selection
+  const [selectedSpecies, setSelectedSpecies] = useState('');
+  const [selectedAnimalIds, setSelectedAnimalIds] = useState([]);
+  
+  // For photos upload
+  const [photosToUpload, setPhotosToUpload] = useState([]);
+
   const [formData, setFormData] = useState({
     animal_id: '',
     start_date: '',
     end_date: '',
     status: 'Pendiente',
-    notes: ''
+    notes: '',
+    belongings_photos: null
   });
 
   const token = localStorage.getItem('token');
@@ -45,7 +63,7 @@ export default function CalendarioPanel() {
 
   useEffect(() => {
     fetchAnimals();
-    fetchReservations();
+    fetchReservationsAndAlerts();
   }, []);
 
   const fetchAnimals = async () => {
@@ -62,24 +80,49 @@ export default function CalendarioPanel() {
     }
   };
 
-  const fetchReservations = async () => {
+  const fetchReservationsAndAlerts = async () => {
     try {
-      const res = await fetch(`https://petsittingbycathy.onrender.com/reservations/`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const calendarEvents = data.map(r => ({
+      const [resRes, resAlerts] = await Promise.all([
+        fetch(`https://petsittingbycathy.onrender.com/reservations/`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch(`https://petsittingbycathy.onrender.com/calendar/alerts`, { headers: { 'Authorization': `Bearer ${token}` } })
+      ]);
+
+      let calendarEvents = [];
+      
+      if (resRes.ok) {
+        const data = await resRes.json();
+        const resEvents = data.map(r => ({
           id: r.id,
           title: `${r.animal?.name || `Paciente #${r.animal_id}`} - ${r.status}`,
           start: new Date(r.start_date),
           end: new Date(r.end_date),
-          resource: r
+          resource: r,
+          isAlert: false
         }));
-        setEvents(calendarEvents);
+        calendarEvents = [...calendarEvents, ...resEvents];
       }
+      
+      if (resAlerts.ok) {
+        const data = await resAlerts.json();
+        const alertEvents = data.map(a => {
+          const date = new Date(a.due_date + 'T12:00:00'); // set to noon to avoid timezone shift
+          return {
+            id: a.id,
+            title: `Vto. ${a.alert_type}: ${a.animal_name} (${a.product_name})`,
+            start: date,
+            end: date,
+            allDay: true,
+            status: 'Alerta',
+            isAlert: true,
+            resource: a
+          };
+        });
+        calendarEvents = [...calendarEvents, ...alertEvents];
+      }
+
+      setEvents(calendarEvents);
     } catch (err) {
-      console.error("Error fetching reservations:", err);
+      console.error("Error fetching calendar data:", err);
     }
   };
 
@@ -95,6 +138,9 @@ export default function CalendarioPanel() {
   const openModal = (data, id = null) => {
     setFormData(data);
     setEditingId(id);
+    setSelectedSpecies('');
+    setSelectedAnimalIds([]);
+    setPhotosToUpload([]);
     setIsModalOpen(true);
   };
 
@@ -105,18 +151,24 @@ export default function CalendarioPanel() {
       start_date: formatForInput(start),
       end_date: formatForInput(end),
       status: 'Pendiente',
-      notes: ''
+      notes: '',
+      belongings_photos: null
     });
   };
 
   const handleSelectEvent = (event) => {
+    if (event.isAlert) {
+      alert(`${event.title}\n\nEste es un evento generado automáticamente por vencimientos.`);
+      return;
+    }
     const r = event.resource;
     openModal({
       animal_id: r.animal_id,
       start_date: formatForInput(r.start_date),
       end_date: formatForInput(r.end_date),
       status: r.status,
-      notes: r.notes || ''
+      notes: r.notes || '',
+      belongings_photos: r.belongings_photos || null
     }, r.id);
   };
 
@@ -134,53 +186,85 @@ export default function CalendarioPanel() {
 
   const saveReservation = async () => {
     if (!isAdmin) return;
-    if (!formData.animal_id || !formData.start_date || !formData.end_date) {
-      alert("Por favor, completa paciente y fechas.");
+    const isMultiple = !editingId && isServiceEvent(formData.status) && selectedAnimalIds.length > 0;
+    
+    if (!isMultiple && !formData.animal_id) {
+      alert("Por favor, selecciona un paciente.");
+      return;
+    }
+    if (!formData.start_date || !formData.end_date) {
+      alert("Por favor, completa las fechas.");
       return;
     }
 
-    const selected = animals.find(a => String(a.id) === String(formData.animal_id));
-    if (isServiceEvent(formData.status)) {
-      if (!selected || selected.is_daycare !== true) {
-        alert("Vet / Baño solo se puede asignar a mascotas de guardería.");
+    const animalIdsToSave = isMultiple ? selectedAnimalIds : [parseInt(formData.animal_id)];
+
+    for (const aId of animalIdsToSave) {
+      const selected = animals.find(a => String(a.id) === String(aId));
+      if (isServiceEvent(formData.status)) {
+        if (!selected || selected.is_daycare !== true) {
+          alert("Vet / Baño solo se puede asignar a mascotas de guardería.");
+          return;
+        }
+      } else if (!selected || selected.is_daycare !== false) {
+        alert("Las reservas solo se pueden asignar a mascotas externas.");
         return;
       }
-    } else if (!selected || selected.is_daycare !== false) {
-      alert("Las reservas solo se pueden asignar a mascotas externas.");
-      return;
     }
 
-    const payload = {
-      animal_id: parseInt(formData.animal_id),
-      start_date: new Date(formData.start_date).toISOString(),
-      end_date: new Date(formData.end_date).toISOString(),
-      status: formData.status,
-      notes: formData.notes
-    };
-
     try {
-      const url = editingId ? `https://petsittingbycathy.onrender.com/reservations/${editingId}` : `https://petsittingbycathy.onrender.com/reservations/`;
       const method = editingId ? "PUT" : "POST";
       
-      const res = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(payload)
-      });
+      for (const aId of animalIdsToSave) {
+        const payload = {
+          animal_id: aId,
+          start_date: new Date(formData.start_date).toISOString(),
+          end_date: new Date(formData.end_date).toISOString(),
+          status: formData.status,
+          notes: formData.notes
+        };
 
-      if (res.ok) {
-        setIsModalOpen(false);
-        fetchReservations();
-      } else {
-        const errText = await res.text();
-        alert(errText || "Error al guardar reserva");
+        const url = editingId 
+          ? `https://petsittingbycathy.onrender.com/reservations/${editingId}` 
+          : `https://petsittingbycathy.onrender.com/reservations/`;
+          
+        const res = await fetch(url, {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          alert(errText || "Error al guardar reserva");
+          return;
+        }
+        
+        const savedData = await res.json();
+        
+        // Upload photos if any
+        if (photosToUpload.length > 0) {
+          const formDataObj = new FormData();
+          photosToUpload.forEach(p => formDataObj.append('photos', p));
+          
+          await fetch(`https://petsittingbycathy.onrender.com/reservations/${savedData.id}/photos`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            },
+            body: formDataObj
+          });
+        }
       }
+      
+      setIsModalOpen(false);
+      fetchReservations();
     } catch (err) {
       console.error(err);
-      alert("Error de red");
+      alert("Error de red al guardar");
     }
   };
 
@@ -218,6 +302,7 @@ export default function CalendarioPanel() {
     if (event.resource.status === 'Llevar a Bañar') backgroundColor = '#06b6d4';
     if (event.resource.status === 'Cancelada') backgroundColor = '#ef4444';
     if (event.resource.status === 'Finalizada') backgroundColor = '#9ca3af';
+    if (event.status === 'Alerta') backgroundColor = '#ec4899'; // Pink color for alerts
     
     return {
       style: {
@@ -351,20 +436,91 @@ export default function CalendarioPanel() {
             
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{patientLabel}</label>
-                <select 
-                  className="w-full border border-gray-300 rounded-lg p-2 bg-gray-50 text-gray-800 disabled:opacity-70 disabled:bg-gray-100"
-                  value={formData.animal_id}
-                  onChange={(e) => setFormData({...formData, animal_id: e.target.value})}
-                  disabled={!isAdmin}
-                >
-                  <option value="">Seleccione...</option>
-                  {selectableAnimals.map(a => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}{a.is_daycare ? ' (guardería)' : ''}
-                    </option>
-                  ))}
-                </select>
+                {!editingId && isServiceEvent(formData.status) ? (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Especie</label>
+                      <select 
+                        className="w-full border border-gray-300 rounded-lg p-2 bg-gray-50 text-gray-800 disabled:opacity-70 disabled:bg-gray-100"
+                        value={selectedSpecies}
+                        onChange={(e) => {
+                          setSelectedSpecies(e.target.value);
+                          setSelectedAnimalIds([]);
+                        }}
+                        disabled={!isAdmin}
+                      >
+                        <option value="">Todas las especies</option>
+                        {Object.entries(SPECIES_INFO).map(([id, info]) => (
+                          <option key={id} value={id}>
+                            {info.emoji} {info.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    <div className="border border-gray-200 rounded-lg p-3 max-h-40 overflow-y-auto bg-gray-50">
+                      <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-200">
+                        <input 
+                          type="checkbox" 
+                          id="select-all"
+                          checked={
+                            selectableAnimals.filter(a => !selectedSpecies || String(a.species_id) === selectedSpecies).length > 0 &&
+                            selectedAnimalIds.length === selectableAnimals.filter(a => !selectedSpecies || String(a.species_id) === selectedSpecies).length
+                          }
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              const ids = selectableAnimals
+                                .filter(a => !selectedSpecies || String(a.species_id) === selectedSpecies)
+                                .map(a => a.id);
+                              setSelectedAnimalIds(ids);
+                            } else {
+                              setSelectedAnimalIds([]);
+                            }
+                          }}
+                        />
+                        <label htmlFor="select-all" className="text-sm font-bold text-gray-800">Seleccionar todos</label>
+                      </div>
+                      {selectableAnimals
+                        .filter(a => !selectedSpecies || String(a.species_id) === selectedSpecies)
+                        .map(a => (
+                          <div key={a.id} className="flex items-center gap-2 mb-1.5 last:mb-0">
+                            <input 
+                              type="checkbox" 
+                              id={`animal-${a.id}`}
+                              checked={selectedAnimalIds.includes(a.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedAnimalIds(prev => [...prev, a.id]);
+                                } else {
+                                  setSelectedAnimalIds(prev => prev.filter(id => id !== a.id));
+                                }
+                              }}
+                            />
+                            <label htmlFor={`animal-${a.id}`} className="text-sm text-gray-700">
+                              {a.name}
+                            </label>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{patientLabel}</label>
+                    <select 
+                      className="w-full border border-gray-300 rounded-lg p-2 bg-gray-50 text-gray-800 disabled:opacity-70 disabled:bg-gray-100"
+                      value={formData.animal_id}
+                      onChange={(e) => setFormData({...formData, animal_id: e.target.value})}
+                      disabled={!isAdmin}
+                    >
+                      <option value="">Seleccione...</option>
+                      {selectableAnimals.map(a => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}{a.is_daycare ? ' (guardería)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                )}
               </div>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -419,6 +575,44 @@ export default function CalendarioPanel() {
                   placeholder="Ej. Viene con su propia comida..."
                   disabled={!isAdmin}
                 ></textarea>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Fotos de pertenencias (Opcional)</label>
+                <input 
+                  type="file" 
+                  multiple
+                  accept="image/*"
+                  className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                  onChange={(e) => setPhotosToUpload(Array.from(e.target.files))}
+                  disabled={!isAdmin}
+                />
+                {photosToUpload.length > 0 && (
+                  <p className="text-xs text-gray-500 mt-1">{photosToUpload.length} foto(s) seleccionada(s)</p>
+                )}
+                {formData.belongings_photos && (() => {
+                  try {
+                    const urls = typeof formData.belongings_photos === 'string' 
+                      ? JSON.parse(formData.belongings_photos)
+                      : formData.belongings_photos;
+                    if (!Array.isArray(urls) || urls.length === 0) return null;
+                    return (
+                      <div className="mt-2 grid grid-cols-3 gap-2">
+                        {urls.map((url, i) => (
+                          <div key={i} className="relative aspect-square">
+                            <img 
+                              src={`https://petsittingbycathy.onrender.com${url}`} 
+                              alt="Pertenencia" 
+                              className="w-full h-full object-cover rounded-lg border border-gray-200"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  } catch (e) {
+                    return null;
+                  }
+                })()}
               </div>
               
               {isAdmin && (

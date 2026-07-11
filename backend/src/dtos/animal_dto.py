@@ -28,6 +28,8 @@ class AnimalBase(BaseModel):
     has_neurological: bool = False
     has_involuntary_movements: bool = False
 
+    residence: Optional[str] = None
+
     @model_validator(mode="after")
     def validate_age_fields(self):
         if self.is_rescue:
@@ -66,6 +68,8 @@ class AnimalUpdate(BaseModel):
     no_smell: Optional[bool] = None
     has_neurological: Optional[bool] = None
     has_involuntary_movements: Optional[bool] = None
+    
+    residence: Optional[str] = None
 
 
 class AnimalResponse(AnimalBase):
@@ -137,3 +141,35 @@ class ReportHistoryDTO(BaseModel):
 class AnimalHistoryResponse(BaseModel):
     animal: AnimalResponse
     reports: List[ReportHistoryDTO]
+
+class AnimalMedicationResponse(BaseModel):
+    id: int
+    medication_id: int
+    medication_name: str
+    dosage: str
+    frequency: str
+    is_current: bool
+    amount_per_day: Optional[str] = None
+    duration_days: Optional[int] = None
+    is_forever: bool = False
+
+    class Config:
+        from_attributes = True
+
+class AnimalMedicationCreate(BaseModel):
+    medication_name: str
+    dosage: str
+    frequency: str
+    is_current: bool = True
+    amount_per_day: Optional[str] = None
+    duration_days: Optional[int] = None
+    is_forever: bool = False
+
+class AnimalMedicationUpdate(BaseModel):
+    medication_name: Optional[str] = None
+    dosage: Optional[str] = None
+    frequency: Optional[str] = None
+    is_current: Optional[bool] = None
+    amount_per_day: Optional[str] = None
+    duration_days: Optional[int] = None
+    is_forever: Optional[bool] = None

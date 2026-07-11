@@ -89,3 +89,56 @@ def delete_reservation(reservation_id: int, db: Session = Depends(get_db), curre
     db.delete(db_reservation)
     db.commit()
     return None
+
+from fastapi import UploadFile, File
+import os
+import uuid
+from typing import List
+
+@router.post("/{reservation_id}/photos")
+async def upload_reservation_photos(
+    reservation_id: int,
+    photos: List[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+    current_admin = Depends(get_current_user)
+):
+    db_reservation = db.query(Reservation).filter(Reservation.id == reservation_id).first()
+    if not db_reservation:
+        raise HTTPException(status_code=404, detail="Reserva no encontrada")
+
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    photos_dir = os.path.join(base_dir, "uploads", "photos")
+    os.makedirs(photos_dir, exist_ok=True)
+
+    uploaded_urls = []
+    
+    if db_reservation.belongings_photos:
+        try:
+            import json
+            uploaded_urls = json.loads(db_reservation.belongings_photos)
+        except:
+            if db_reservation.belongings_photos.strip():
+                uploaded_urls = [db_reservation.belongings_photos]
+
+    allowed = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+    for photo in photos:
+        ext = os.path.splitext(photo.filename or "photo.jpg")[1].lower()
+        if ext not in allowed:
+            continue
+            
+        filename = f"{uuid.uuid4()}{ext}"
+        file_path = os.path.join(photos_dir, filename)
+        content = await photo.read()
+        with open(file_path, "wb") as f:
+            f.write(content)
+            
+        file_url = f"/uploads/photos/{filename}"
+        uploaded_urls.append(file_url)
+
+    import json
+    db_reservation.belongings_photos = json.dumps(uploaded_urls)
+    db.commit()
+    db.refresh(db_reservation)
+    
+    return {"status": "success", "belongings_photos": uploaded_urls}
+

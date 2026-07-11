@@ -96,6 +96,106 @@ def delete_animal(animal_id: int, db: Session = Depends(get_db), current_admin =
     db.commit()
     return None
 
+from src.models.models import AnimalMedication, MedicationCatalog
+from src.dtos.animal_dto import AnimalMedicationCreate, AnimalMedicationUpdate, AnimalMedicationResponse
+
+@router.get("/{animal_id}/medications", response_model=List[AnimalMedicationResponse])
+def get_animal_medications(animal_id: int, db: Session = Depends(get_db)):
+    medications = db.query(AnimalMedication).join(MedicationCatalog).filter(AnimalMedication.animal_id == animal_id).all()
+    result = []
+    for m in medications:
+        result.append({
+            "id": m.id,
+            "medication_id": m.medication_id,
+            "medication_name": m.medication.name,
+            "dosage": m.dosage,
+            "frequency": m.frequency,
+            "is_current": m.is_current,
+            "amount_per_day": m.amount_per_day,
+            "duration_days": m.duration_days,
+            "is_forever": m.is_forever,
+        })
+    return result
+
+@router.post("/{animal_id}/medications", response_model=AnimalMedicationResponse)
+def add_animal_medication(animal_id: int, med_in: AnimalMedicationCreate, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
+    catalog = db.query(MedicationCatalog).filter(MedicationCatalog.name.ilike(med_in.medication_name)).first()
+    if not catalog:
+        catalog = MedicationCatalog(name=med_in.medication_name)
+        db.add(catalog)
+        db.commit()
+        db.refresh(catalog)
+        
+    db_med = AnimalMedication(
+        animal_id=animal_id,
+        medication_id=catalog.id,
+        dosage=med_in.dosage,
+        frequency=med_in.frequency,
+        is_current=med_in.is_current,
+        amount_per_day=med_in.amount_per_day,
+        duration_days=med_in.duration_days,
+        is_forever=med_in.is_forever
+    )
+    db.add(db_med)
+    db.commit()
+    db.refresh(db_med)
+    return {
+        "id": db_med.id,
+        "medication_id": db_med.medication_id,
+        "medication_name": catalog.name,
+        "dosage": db_med.dosage,
+        "frequency": db_med.frequency,
+        "is_current": db_med.is_current,
+        "amount_per_day": db_med.amount_per_day,
+        "duration_days": db_med.duration_days,
+        "is_forever": db_med.is_forever,
+    }
+
+@router.put("/{animal_id}/medications/{medication_id}", response_model=AnimalMedicationResponse)
+def update_animal_medication(animal_id: int, medication_id: int, med_update: AnimalMedicationUpdate, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
+    db_med = db.query(AnimalMedication).filter(AnimalMedication.id == medication_id, AnimalMedication.animal_id == animal_id).first()
+    if not db_med:
+        raise HTTPException(status_code=404, detail="Medicacion no encontrada")
+        
+    if med_update.medication_name is not None:
+        catalog = db.query(MedicationCatalog).filter(MedicationCatalog.name.ilike(med_update.medication_name)).first()
+        if not catalog:
+            catalog = MedicationCatalog(name=med_update.medication_name)
+            db.add(catalog)
+            db.commit()
+            db.refresh(catalog)
+        db_med.medication_id = catalog.id
+        
+    update_data = med_update.model_dump(exclude_unset=True, exclude={"medication_name"})
+    for k, v in update_data.items():
+        setattr(db_med, k, v)
+        
+    db.commit()
+    db.refresh(db_med)
+    
+    catalog_name = db.query(MedicationCatalog).filter(MedicationCatalog.id == db_med.medication_id).first().name
+    
+    return {
+        "id": db_med.id,
+        "medication_id": db_med.medication_id,
+        "medication_name": catalog_name,
+        "dosage": db_med.dosage,
+        "frequency": db_med.frequency,
+        "is_current": db_med.is_current,
+        "amount_per_day": db_med.amount_per_day,
+        "duration_days": db_med.duration_days,
+        "is_forever": db_med.is_forever,
+    }
+
+@router.delete("/{animal_id}/medications/{medication_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_animal_medication(animal_id: int, medication_id: int, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
+    db_med = db.query(AnimalMedication).filter(AnimalMedication.id == medication_id, AnimalMedication.animal_id == animal_id).first()
+    if not db_med:
+        raise HTTPException(status_code=404, detail="Medicacion no encontrada")
+    db.delete(db_med)
+    db.commit()
+    return None
+
 from src.dtos.animal_dto import AnimalHistoryResponse, ReportHistoryDTO, EventDTO
 from sqlalchemy.orm import joinedload
 

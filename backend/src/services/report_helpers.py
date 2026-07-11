@@ -37,18 +37,44 @@ def create_critical_alerts_for_report(
     event_values: list[str],
 ) -> list[CriticalAlert]:
     all_text = transcript + " " + " ".join(event_values)
+    
     red_rules = load_color_rules(db, color="red")
-    keywords = detect_keywords_in_text(all_text, red_rules)
+    yellow_rules = load_color_rules(db, color="yellow")
+    
+    red_keywords = detect_keywords_in_text(all_text, red_rules)
+    yellow_keywords = detect_keywords_in_text(all_text, yellow_rules)
+    
     alerts = []
-    for kw in keywords:
+    has_red = False
+    
+    for kw in red_keywords:
         alert = CriticalAlert(
             animal_id=animal.id,
             report_id=report_id,
             keyword_detected=kw,
+            severity="red",
         )
         db.add(alert)
         alerts.append(alert)
+        has_red = True
+        
+    for kw in yellow_keywords:
+        # Evitamos duplicar si la misma palabra está en ambas reglas, aunque es raro
+        if kw not in red_keywords:
+            alert = CriticalAlert(
+                animal_id=animal.id,
+                report_id=report_id,
+                keyword_detected=kw,
+                severity="yellow",
+            )
+            db.add(alert)
+            alerts.append(alert)
+
+    if has_red:
         animal.severity = "critical"
+    elif alerts and animal.severity != "critical":
+        animal.severity = "observation"
+        
     return alerts
 
 
