@@ -4,34 +4,68 @@ import requests
 import json
 from fastapi import UploadFile
 from typing import Dict, Any
+from dotenv import load_dotenv
 
-try:
-    from faster_whisper import WhisperModel
-    # Usar el modelo medium a pedido del usuario (buen balance entre velocidad y precisión)
-    whisper_model = WhisperModel("medium", device="cpu", compute_type="int8")
-except ImportError:
-    whisper_model = None
-    print("ADVERTENCIA: faster-whisper no está instalado. Ejecute 'pip install faster-whisper'.")
+load_dotenv()
 
 UPLOAD_DIR = "uploads/audios"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# Configuración de Modelos
-# Postproceso NLP: siempre el vLLM del servidor (Qwen 7B), no el modelo chico local.
+# ---------------------------------------------------------------------------
+# Configuración de claves y modelos (leídas del entorno)
+# ---------------------------------------------------------------------------
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
-USE_GROQ = os.getenv("USE_GROQ", "").strip().lower() in ("1", "true", "yes")
+USE_GROQ     = os.getenv("USE_GROQ", "").strip().lower() in ("1", "true", "yes")
 
+# Modelo STT de Groq para transcripción de audio
+GROQ_STT_MODEL = os.getenv("GROQ_STT_MODEL", "whisper-large-v3-turbo")
+GROQ_STT_URL   = "https://api.groq.com/openai/v1/audio/transcriptions"
+
+# Modelo de chat/NLP de Groq
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_URL   = "https://api.groq.com/openai/v1/chat/completions"
 
-# Servidor vLLM (Tailscale). Override con VLLM_BASE_URL / VLLM_MODEL si hace falta.
-_VLLM_BASE = os.getenv("VLLM_BASE_URL", "http://100.82.178.56:8010/v1").rstrip("/")
+# Servidor vLLM local (Tailscale). Override con env vars si hace falta.
+_VLLM_BASE = os.getenv("VLLM_BASE_URL", "").rstrip("/")
 VLLM_MODEL = os.getenv("VLLM_MODEL", "Qwen/Qwen2.5-7B-Instruct-AWQ")
-VLLM_URL = f"{_VLLM_BASE}/chat/completions"
+VLLM_URL   = f"{_VLLM_BASE}/chat/completions"
 
-print(f"[IA] Postproceso NLP -> {VLLM_URL} (modelo={VLLM_MODEL})")
+# ---------------------------------------------------------------------------
+# Whisper local — solo se carga si NO hay GROQ_API_KEY disponible
+# ---------------------------------------------------------------------------
+whisper_model = None
+if not GROQ_API_KEY:
+    try:
+        from faster_whisper import WhisperModel
+        _whisper_size = os.getenv("WHISPER_MODEL", "medium")
+        whisper_model = WhisperModel(_whisper_size, device="cpu", compute_type="int8")
+        print(f"[STT] Usando Whisper local ({_whisper_size}) — no se encontró GROQ_API_KEY.")
+    except ImportError:
+        print("ADVERTENCIA: faster-whisper no está instalado. Ejecute 'pip install faster-whisper'.")
+else:
+    print(f"[STT] Usando Groq STT -> modelo={GROQ_STT_MODEL}")
+
+print(f"[NLP] Postproceso -> {VLLM_URL} (modelo={VLLM_MODEL})")
 if USE_GROQ and GROQ_API_KEY:
-    print("[IA] USE_GROQ=1: se usara Groq en lugar del vLLM del servidor")
+    print(f"[NLP] USE_GROQ=1: se usará Groq ({GROQ_MODEL}) en lugar del vLLM del servidor")
+
+
+def _transcribe_with_groq(file_path: str) -> str:
+    """Transcribe audio usando la API de Groq (whisper-large-v3-turbo)."""
+    with open(file_path, "rb") as audio_file:
+        response = requests.post(
+            GROQ_STT_URL,
+            headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+            files={"file": (os.path.basename(file_path), audio_file)},
+            data={
+                "model": GROQ_STT_MODEL,
+                "language": "es",          # fuerza español para mayor precisión
+                "response_format": "json",
+            },
+            timeout=60,
+        )
+    response.raise_for_status()
+    return response.json().get("text", "").strip()
 
 
 class AudioService:
@@ -44,29 +78,39 @@ class AudioService:
 
     @staticmethod
     def transcribe_audio(file_path: str) -> str:
+        # ── Prioridad 1: Groq STT (whisper-large-v3-turbo) ──────────────────
+        if GROQ_API_KEY:
+            try:
+                transcript = _transcribe_with_groq(file_path)
+                if not transcript:
+                    return "Silencio o ruido de fondo (no se detectó voz real)."
+                return transcript
+            except Exception as e:
+                print(f"[STT] Error con Groq, intentando fallback local: {e}")
+
+        # ── Prioridad 2: Whisper local (faster-whisper) ──────────────────────
         if whisper_model:
-            # Transcripción real usando Whisper Local con VAD (Voice Activity Detection)
-            # Ajustado para ser menos sensible al ruido de fondo y priorizar la voz principal
-            segments, info = whisper_model.transcribe(
-                file_path, 
-                beam_size=5, 
+            segments, _ = whisper_model.transcribe(
+                file_path,
+                beam_size=5,
                 vad_filter=True,
-                vad_parameters=dict(threshold=0.7), # 0.7 exige que la voz sea más clara/fuerte para ser grabada
-                no_speech_threshold=0.4, # Si la probabilidad de silencio/ruido pasa el 40%, ignora el audio
-                condition_on_previous_text=False, # Reduce alucinaciones basadas en frases anteriores
-                temperature=0.0 # Evita la creatividad del modelo (no intenta buscarle sentido al ruido)
+                vad_parameters=dict(threshold=0.7),
+                no_speech_threshold=0.4,
+                condition_on_previous_text=False,
+                temperature=0.0,
             )
-            transcript = " ".join([segment.text for segment in segments]).strip()
-            
-            # Filtro secundario de seguridad para alucinaciones comunes muy cortas
+            transcript = " ".join([seg.text for seg in segments]).strip()
+
+            # Filtro de alucinaciones comunes
             lower_t = transcript.lower()
             hallucinations = ["thanks for watching", "thank you for watching", "subscribe", "subscríbete", "suscríbete"]
             if any(h in lower_t for h in hallucinations) and len(transcript) < 40:
                 return "Silencio o ruido de fondo (no se detectó voz real)."
-                
+
             return transcript if transcript else "Silencio o ruido de fondo (no se detectó voz real)."
-        else:
-            return "Theo comió, tomó agua, hizo pis, no hizo caca. Cleopatra tomó poca agua y tuvo caca blanda."
+
+        # ── Sin modelo disponible ────────────────────────────────────────────
+        return "Theo comió, tomó agua, hizo pis, no hizo caca. Cleopatra tomó poca agua y tuvo caca blanda."
 
 
 class NLPService:

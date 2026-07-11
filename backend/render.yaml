@@ -1,13 +1,54 @@
 services:
   - type: web
-    name: asis-vet-backend
+    name: petsitting-by-cathy-backend
     env: python
+    region: oregon          # us-west-2 — cambiá a "frankfurt" si preferís Europa
+    plan: free              # cambiá a "starter" para evitar cold starts (~$7/mes)
+    rootDir: backend        # render.yaml está en /backend, el código también
     buildCommand: "pip install -r requirements.txt"
     startCommand: "uvicorn src.main:app --host 0.0.0.0 --port $PORT"
+
     envVars:
+      # ── Python ────────────────────────────────────────────────────────────
       - key: PYTHON_VERSION
-        value: 3.9.0
+        value: "3.11.0"
+
+      # ── JWT ───────────────────────────────────────────────────────────────
+      - key: SECRET_KEY
+        sync: false           # se carga desde Render Dashboard > Environment
+
+      # ── Supabase (Base de datos relacional) ───────────────────────────────
       - key: DATABASE_URL
         sync: false
-      - key: GEMINI_API_KEY
+      - key: SUPABASE_URL
         sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+
+      # ── Groq (STT + NLP) ──────────────────────────────────────────────────
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_STT_MODEL
+        value: whisper-large-v3-turbo
+      - key: USE_GROQ
+        value: "1"            # en producción siempre Groq (no hay vLLM local)
+      - key: GROQ_MODEL
+        value: llama-3.1-8b-instant
+
+      # ── Qdrant Cloud (vectores / RAG) ─────────────────────────────────────
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
+
+      # ── Whisper local (NO se usa en Render — solo por compatibilidad) ─────
+      # En producción GROQ_API_KEY está definida, así que Whisper local
+      # nunca se carga. Esta variable no es necesaria en Render.
+      # - key: WHISPER_MODEL
+      #   value: medium
+
+      # ── vLLM remoto (NO se usa en Render — USE_GROQ=1) ───────────────────
+      # - key: VLLM_BASE_URL
+      # - key: VLLM_MODEL
