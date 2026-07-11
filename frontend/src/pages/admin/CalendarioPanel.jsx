@@ -159,7 +159,7 @@ export default function CalendarioPanel() {
     };
 
     try {
-      const url = editingId ? `/api/reservations/${editingId}` : `/api/reservations/`;
+      const url = editingId ? `https://petsittingbycathy.onrender.com/reservations/${editingId}` : `https://petsittingbycathy.onrender.com/reservations/`;
       const method = editingId ? "PUT" : "POST";
       
       const res = await fetch(url, {
