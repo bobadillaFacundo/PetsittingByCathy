@@ -31,19 +31,14 @@ VLLM_MODEL = os.getenv("VLLM_MODEL", "Qwen/Qwen2.5-7B-Instruct-AWQ")
 VLLM_URL   = f"{_VLLM_BASE}/chat/completions"
 
 # ---------------------------------------------------------------------------
-# Whisper local — solo se carga si NO hay GROQ_API_KEY disponible
+# Whisper local — desactivado para evitar OOM en Render (usa Groq)
 # ---------------------------------------------------------------------------
 whisper_model = None
-if not GROQ_API_KEY:
-    try:
-        from faster_whisper import WhisperModel
-        _whisper_size = os.getenv("WHISPER_MODEL", "medium")
-        whisper_model = WhisperModel(_whisper_size, device="cpu", compute_type="int8")
-        print(f"[STT] Usando Whisper local ({_whisper_size}) — no se encontró GROQ_API_KEY.")
-    except ImportError:
-        print("ADVERTENCIA: faster-whisper no está instalado. Ejecute 'pip install faster-whisper'.")
-else:
+
+if GROQ_API_KEY:
     print(f"[STT] Usando Groq STT -> modelo={GROQ_STT_MODEL}")
+else:
+    print("ADVERTENCIA: GROQ_API_KEY no configurado. STT fallará o usará mock.")
 
 print(f"[NLP] Postproceso -> {VLLM_URL} (modelo={VLLM_MODEL})")
 if USE_GROQ and GROQ_API_KEY:
@@ -88,26 +83,8 @@ class AudioService:
             except Exception as e:
                 print(f"[STT] Error con Groq, intentando fallback local: {e}")
 
-        # ── Prioridad 2: Whisper local (faster-whisper) ──────────────────────
-        if whisper_model:
-            segments, _ = whisper_model.transcribe(
-                file_path,
-                beam_size=5,
-                vad_filter=True,
-                vad_parameters=dict(threshold=0.7),
-                no_speech_threshold=0.4,
-                condition_on_previous_text=False,
-                temperature=0.0,
-            )
-            transcript = " ".join([seg.text for seg in segments]).strip()
-
-            # Filtro de alucinaciones comunes
-            lower_t = transcript.lower()
-            hallucinations = ["thanks for watching", "thank you for watching", "subscribe", "subscríbete", "suscríbete"]
-            if any(h in lower_t for h in hallucinations) and len(transcript) < 40:
-                return "Silencio o ruido de fondo (no se detectó voz real)."
-
-            return transcript if transcript else "Silencio o ruido de fondo (no se detectó voz real)."
+        # ── Prioridad 2: Eliminado para evitar OOM en Render ──────────────────────
+        # Si llega aquí sin GROQ_API_KEY, usamos el mock por defecto.
 
         # ── Sin modelo disponible ────────────────────────────────────────────
         return "Theo comió, tomó agua, hizo pis, no hizo caca. Cleopatra tomó poca agua y tuvo caca blanda."
