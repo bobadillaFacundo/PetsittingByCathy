@@ -2,7 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
-import basicSsl from '@vitejs/plugin-basic-ssl'
+// import basicSsl from '@vitejs/plugin-basic-ssl' // <-- Comentado temporalmente
 
 // HTTPS local solo si lo pedís: VITE_DEV_HTTPS=1 npm run dev
 // Con localtunnel no hace falta: el túnel ya da https://xxx.loca.lt
@@ -12,7 +12,7 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    ...(useDevHttps ? [basicSsl()] : []),
+    // ...(useDevHttps ? [basicSsl()] : []), // <-- Comentado temporalmente
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
