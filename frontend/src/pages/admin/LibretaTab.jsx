@@ -17,9 +17,9 @@ export default function LibretaTab({ animalId, token }) {
   const fetchData = async () => {
     try {
       const [resVac, resCat, resVet] = await Promise.all([
-        fetch(`/api/animals/${animalId}/vaccines`, { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch(`/api/animals/catalogs/vaccines`, { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch(`/api/animals/veterinarians`, { headers: { 'Authorization': `Bearer ${token}` } })
+        fetch(`https://petsittingbycathy.onrender.com/animals/${animalId}/vaccines`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch(`https://petsittingbycathy.onrender.com/animals/catalogs/vaccines`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch(`https://petsittingbycathy.onrender.com/animals/veterinarians`, { headers: { 'Authorization': `Bearer ${token}` } })
       ]);
       if (resVac.ok) setVaccines(await resVac.json());
       if (resCat.ok) setCatalogs(await resCat.json());
@@ -38,7 +38,7 @@ export default function LibretaTab({ animalId, token }) {
   const handleAdd = async () => {
     if (!newVaccine.vaccine_id) return alert("El nombre de la vacuna es obligatorio.");
     try {
-      const res = await fetch(`/api/animals/${animalId}/vaccines`, {
+      const res = await fetch(`https://petsittingbycathy.onrender.com/animals/${animalId}/vaccines`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

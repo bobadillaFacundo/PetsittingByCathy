@@ -10,12 +10,12 @@ export default function LaboratoriosTab({ animalId, token }) {
 
   const fetchLabs = async () => {
     try {
-      const resLabs = await fetch(`/api/animals/${animalId}/lab_results`, {
+      const resLabs = await fetch(`https://petsittingbycathy.onrender.com/animals/${animalId}/lab_results`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (resLabs.ok) setLabs(await resLabs.json());
 
-      const resCat = await fetch(`/api/animals/catalogs/laboratories`, {
+      const resCat = await fetch(`https://petsittingbycathy.onrender.com/animals/catalogs/laboratories`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (resCat.ok) setCatalogs(await resCat.json());
@@ -40,7 +40,7 @@ export default function LaboratoriosTab({ animalId, token }) {
     if (newLab.date) formData.append("date", newLab.date);
 
     try {
-      const res = await fetch(`/api/animals/${animalId}/lab_results/upload?laboratory_id=${newLab.laboratory_id}&date=${newLab.date}`, {
+      const res = await fetch(`https://petsittingbycathy.onrender.com/animals/${animalId}/lab_results/upload?laboratory_id=${newLab.laboratory_id}&date=${newLab.date}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`

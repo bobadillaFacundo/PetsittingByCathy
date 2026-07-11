@@ -13,7 +13,7 @@ export default function SmartSearch() {
     setResponse("");
 
     try {
-      const res = await fetch(`/api/chat/`, {
+      const res = await fetch(`https://petsittingbycathy.onrender.com/chat/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query })

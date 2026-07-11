@@ -90,7 +90,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
 
   const fetchMascotas = async () => {
     try {
-      const res = await fetch(`/api/animals/?is_daycare=${daycareOnly}`, {
+      const res = await fetch(`https://petsittingbycathy.onrender.com/animals/?is_daycare=${daycareOnly}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) {
@@ -111,7 +111,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
 
   const fetchSpecies = async () => {
     try {
-      const res = await fetch(`/api/animals/species`, {
+      const res = await fetch(`https://petsittingbycathy.onrender.com/animals/species`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) {
@@ -130,7 +130,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
 
   const fetchBreeds = async () => {
     try {
-      const res = await fetch(`/api/animals/breeds`, {
+      const res = await fetch(`https://petsittingbycathy.onrender.com/animals/breeds`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -249,7 +249,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
   const handleDelete = async (id, name) => {
     if (window.confirm(`¿Estás seguro de que deseas eliminar (desactivar) a ${name}?`)) {
       try {
-        const res = await fetch(`/api/animals/${id}`, {
+        const res = await fetch(`https://petsittingbycathy.onrender.com/animals/${id}`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${token}`

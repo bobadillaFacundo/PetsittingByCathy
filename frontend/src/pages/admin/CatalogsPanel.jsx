@@ -7,7 +7,7 @@ export default function CatalogsPanel() {
 
   // Fetch species only for the breeds dropdown
   useEffect(() => {
-    fetch('/api/catalogs/species', {
+    fetch('https://petsittingbycathy.onrender.com/catalogs/species', {
       headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
     })
       .then(res => res.json())

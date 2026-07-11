@@ -19,7 +19,7 @@ export default function Dashboard() {
   const [selectedSpeciesId, setSelectedSpeciesId] = useState(null);
 
   const fetchData = () => {
-    fetch(`/api/dashboard/?t=${Date.now()}`, {
+    fetch(`https://petsittingbycathy.onrender.com/dashboard/?t=${Date.now()}`, {
       headers: { 
         "Authorization": `Bearer ${localStorage.getItem("token")}`,
         "Cache-Control": "no-cache"
@@ -54,7 +54,7 @@ export default function Dashboard() {
   const fetchWeather = async () => {
     setLoadingWeather(true);
     try {
-      const res = await fetch(`/api/dashboard/weather`, {
+      const res = await fetch(`https://petsittingbycathy.onrender.com/dashboard/weather`, {
         headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
       });
       if (!res.ok) return;
@@ -70,7 +70,7 @@ export default function Dashboard() {
 
   const resolveCriticalAlert = async (alertId) => {
     try {
-      await fetch(`/api/dashboard/critical-alerts/${alertId}/resolve`, {
+      await fetch(`https://petsittingbycathy.onrender.com/dashboard/critical-alerts/${alertId}/resolve`, {
         method: "PATCH",
         headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
       });

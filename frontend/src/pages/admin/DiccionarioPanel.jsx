@@ -12,7 +12,7 @@ export default function DiccionarioPanel() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch('/api/dashboard/dictionary', {
+      const res = await fetch('https://petsittingbycathy.onrender.com/dashboard/dictionary', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Error al cargar el diccionario');

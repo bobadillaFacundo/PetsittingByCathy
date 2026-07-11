@@ -25,7 +25,7 @@ export default function AnalisisPanel() {
   const fetchAnimals = async () => {
     try {
       setLoadingAnimals(true);
-      const res = await fetch('/api/animals/', {
+      const res = await fetch('https://petsittingbycathy.onrender.com/animals/', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) throw new Error();
@@ -47,7 +47,7 @@ export default function AnalisisPanel() {
     }));
 
     try {
-      const res = await fetch(`/api/animals/${animalId}/evolution-analysis`, {
+      const res = await fetch(`https://petsittingbycathy.onrender.com/animals/${animalId}/evolution-analysis`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) throw new Error();

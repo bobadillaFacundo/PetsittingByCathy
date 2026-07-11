@@ -14,9 +14,9 @@ export default function DesparasitacionesTab({ animalId, token }) {
   const fetchData = async () => {
     try {
       const [resInt, resExt, resCat] = await Promise.all([
-        fetch(`/api/animals/${animalId}/internal_dewormings`, { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch(`/api/animals/${animalId}/external_dewormings`, { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch(`/api/animals/catalogs/products`, { headers: { 'Authorization': `Bearer ${token}` } })
+        fetch(`https://petsittingbycathy.onrender.com/animals/${animalId}/internal_dewormings`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch(`https://petsittingbycathy.onrender.com/animals/${animalId}/external_dewormings`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch(`https://petsittingbycathy.onrender.com/animals/catalogs/products`, { headers: { 'Authorization': `Bearer ${token}` } })
       ]);
       if (resInt.ok) setInternas(await resInt.json());
       if (resExt.ok) setExternas(await resExt.json());

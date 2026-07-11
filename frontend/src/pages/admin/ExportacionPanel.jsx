@@ -12,7 +12,7 @@ export default function ExportacionPanel() {
 
   const fetchAnimals = async () => {
     try {
-      const res = await fetch('/api/animals/', {
+      const res = await fetch('https://petsittingbycathy.onrender.com/animals/', {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       if (res.ok) {

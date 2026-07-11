@@ -70,7 +70,7 @@ export default function AuditoriaPanel() {
   const fetchWeather = async () => {
     setLoadingWeather(true);
     try {
-      const res = await fetch(`/api/dashboard/weather`, {
+      const res = await fetch(`https://petsittingbycathy.onrender.com/dashboard/weather`, {
         headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
       });
       const d = await res.json();
@@ -88,15 +88,15 @@ export default function AuditoriaPanel() {
     setIsLoading(true);
     try {
       const [reportsRes, animalsRes, rulesRes] = await Promise.all([
-        fetch('/api/reports/all', {
+        fetch('https://petsittingbycathy.onrender.com/reports/all', {
           headers: {
             "Authorization": `Bearer ${localStorage.getItem("token")}`
           }
         }),
-        fetch('/api/animals/', {
+        fetch('https://petsittingbycathy.onrender.com/animals/', {
           headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
         }),
-        fetch('/api/catalogs/color-rules', {
+        fetch('https://petsittingbycathy.onrender.com/catalogs/color-rules', {
           headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
         })
       ]);

@@ -50,7 +50,7 @@ export default function CalendarioPanel() {
 
   const fetchAnimals = async () => {
     try {
-      const res = await fetch(`/api/animals/`, {
+      const res = await fetch(`https://petsittingbycathy.onrender.com/animals/`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -64,7 +64,7 @@ export default function CalendarioPanel() {
 
   const fetchReservations = async () => {
     try {
-      const res = await fetch(`/api/reservations/`, {
+      const res = await fetch(`https://petsittingbycathy.onrender.com/reservations/`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -189,7 +189,7 @@ export default function CalendarioPanel() {
     if (!editingId || !window.confirm("¿Seguro que deseas cancelar/borrar esta reserva?")) return;
     
     try {
-      const res = await fetch(`/api/reservations/${editingId}`, {
+      const res = await fetch(`https://petsittingbycathy.onrender.com/reservations/${editingId}`, {
         method: "DELETE",
         headers: { 'Authorization': `Bearer ${token}` }
       });

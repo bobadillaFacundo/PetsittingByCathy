@@ -9,7 +9,7 @@ export default function ColoresPanel() {
   const fetchRules = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/catalogs/color-rules', {
+      const res = await fetch('https://petsittingbycathy.onrender.com/catalogs/color-rules', {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       if (res.ok) {
@@ -30,7 +30,7 @@ export default function ColoresPanel() {
   const handleUpdate = async (id, newKeywords) => {
     setSavingId(id);
     try {
-      const res = await fetch(`/api/catalogs/color-rules/${id}`, {
+      const res = await fetch(`https://petsittingbycathy.onrender.com/catalogs/color-rules/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

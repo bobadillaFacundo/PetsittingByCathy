@@ -92,7 +92,7 @@ export default function VoiceRecorder({ onSave }) {
     checkPending();
     window.addEventListener('online', checkPending);
     
-    fetch(`/api/animals/?t=${Date.now()}`, {
+    fetch(`https://petsittingbycathy.onrender.com/animals/?t=${Date.now()}`, {
       headers: { 
         "Authorization": `Bearer ${localStorage.getItem("token")}`,
         "Cache-Control": "no-cache"
@@ -149,7 +149,7 @@ export default function VoiceRecorder({ onSave }) {
     formData.append("animal_name", selectedAnimal.name);
     
     try {
-      const response = await fetch(`/api/reports/analyze-voice`, {
+      const response = await fetch(`https://petsittingbycathy.onrender.com/reports/analyze-voice`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${localStorage.getItem("token")}`
@@ -232,7 +232,7 @@ export default function VoiceRecorder({ onSave }) {
         formData.append("animal_name", item.animal_name);
         
         try {
-          const response = await fetch(`/api/reports/analyze-and-confirm-batch`, {
+          const response = await fetch(`https://petsittingbycathy.onrender.com/reports/analyze-and-confirm-batch`, {
             method: "POST",
             headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` },
             body: formData,
@@ -273,7 +273,7 @@ export default function VoiceRecorder({ onSave }) {
     };
 
     try {
-      const response = await fetch(`/api/reports/confirm`, {
+      const response = await fetch(`https://petsittingbycathy.onrender.com/reports/confirm`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -292,7 +292,7 @@ export default function VoiceRecorder({ onSave }) {
             for (const photo of attachedPhotos) {
               const formData = new FormData();
               formData.append("photo", photo);
-              await fetch(`/api/reports/${saved.report_id}/attach-photo`, {
+              await fetch(`https://petsittingbycathy.onrender.com/reports/${saved.report_id}/attach-photo`, {
                 method: "POST",
                 headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` },
                 body: formData,

@@ -24,7 +24,7 @@ export default function Login() {
       formData.append('username', username);
       formData.append('password', password);
 
-      const response = await fetch(`/api/auth/login`, {
+      const response = await fetch(`https://petsittingbycathy.onrender.com/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: formData

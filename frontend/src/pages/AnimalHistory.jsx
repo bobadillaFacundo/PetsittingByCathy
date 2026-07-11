@@ -54,8 +54,8 @@ export default function AnimalHistory({ animalId = 1 }) {
   const fetchHistory = useCallback(() => {
     setLoading(true);
     Promise.all([
-      fetch(`/api/animals/${animalId}/history`, { headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` } }),
-      fetch('/api/catalogs/color-rules', { headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` } })
+      fetch(`https://petsittingbycathy.onrender.com/animals/${animalId}/history`, { headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` } }),
+      fetch('https://petsittingbycathy.onrender.com/catalogs/color-rules', { headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` } })
     ])
     .then(async ([histRes, rulesRes]) => {
       if (histRes.ok) setData(await histRes.json());
@@ -75,7 +75,7 @@ export default function AnimalHistory({ animalId = 1 }) {
   const downloadPDF = async (range) => {
     setExportingPDF(true);
     try {
-      const res = await fetch(`/api/reports/export-pdf/${animalId}?range=${range}`, {
+      const res = await fetch(`https://petsittingbycathy.onrender.com/reports/export-pdf/${animalId}?range=${range}`, {
         headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
       });
       if (!res.ok) throw new Error("Error generating PDF");
@@ -105,7 +105,7 @@ export default function AnimalHistory({ animalId = 1 }) {
     if (!editingReport) return;
     setSavingEdit(true);
     try {
-      const res = await fetch(`/api/reports/${editingReport}/edit`, {
+      const res = await fetch(`https://petsittingbycathy.onrender.com/reports/${editingReport}/edit`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
