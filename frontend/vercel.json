@@ -4,7 +4,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://petsitting-by-cathy-backend.onrender.com/api/:path*"
+      "destination": "https://petsittingbycathy.onrender.com/api/:path*"
     },
     {
       "source": "/(.*)",
