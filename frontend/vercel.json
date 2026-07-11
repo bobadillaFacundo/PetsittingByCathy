@@ -1,0 +1,4 @@
+{
+  "installCommand": "npm install --no-package-lock",
+  "buildCommand": "npm run build"
+}
