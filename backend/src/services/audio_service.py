@@ -93,8 +93,9 @@ class AudioService:
 class NLPService:
     @staticmethod
     def _call_llm(messages: list, json_format: bool = False, temperature: float = None) -> str:
-        """Llama al LLM del servidor (vLLM). Solo usa Groq si USE_GROQ=1."""
-        is_groq = USE_GROQ and bool(GROQ_API_KEY)
+        """Llama al LLM del servidor (vLLM) o Groq."""
+        vllm_base = os.getenv("VLLM_BASE_URL", "").strip()
+        is_groq = (USE_GROQ or not vllm_base) and bool(GROQ_API_KEY)
 
         headers = {
             "Content-Type": "application/json"
@@ -314,26 +315,13 @@ Reglas estrictas:
 Reportes de las últimas 24 horas:
 {reports_text}
 """
-        payload = {
-            "model": VLLM_MODEL,
-            "messages": [
-                {"role": "system", "content": "Eres un asistente JSON de uso veterinario que no alucina."},
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.0,
-            "max_tokens": 800,
-            "response_format": {"type": "json_object"}
-        }
+        messages = [
+            {"role": "system", "content": "Eres un asistente JSON de uso veterinario que no alucina."},
+            {"role": "user", "content": prompt}
+        ]
 
         try:
-            response = requests.post(
-                VLLM_URL,
-                json=payload,
-                headers={"Content-Type": "application/json"},
-                timeout=30
-            )
-            response.raise_for_status()
-            ai_text = response.json()["choices"][0]["message"]["content"]
+            ai_text = NLPService._call_llm(messages, json_format=True, temperature=0.0)
             return json.loads(ai_text)
         except Exception as e:
             print(f"Error generando clima: {e}")

@@ -227,6 +227,9 @@ def _upsert_report_event(db, report_id: int, event_type_id: int, value: str) -> 
 def _map_nlp_to_extracted_data(nlp_result, animal_name, db):
     """Mapea resultado NLP al formato legacy del frontend."""
     extracted_data = nlp_result.get("data", []) if isinstance(nlp_result, dict) else []
+    if isinstance(extracted_data, dict):
+        extracted_data = [extracted_data]
+        
     mapped_extracted_data = []
     for animal_d in extracted_data:
         mapped_inserts = []
