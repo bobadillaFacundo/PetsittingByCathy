@@ -261,7 +261,7 @@ export default function CalendarioPanel() {
       }
       
       setIsModalOpen(false);
-      fetchReservations();
+      fetchReservationsAndAlerts();
     } catch (err) {
       console.error(err);
       alert("Error de red al guardar");
@@ -280,7 +280,7 @@ export default function CalendarioPanel() {
       
       if (res.ok) {
         setIsModalOpen(false);
-        fetchReservations();
+        fetchReservationsAndAlerts();
       }
     } catch (err) {
       console.error(err);
