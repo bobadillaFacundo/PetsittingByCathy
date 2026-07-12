@@ -88,6 +88,8 @@ export default function Dashboard() {
 
   const red_alerts = (data.critical_alerts || []).filter(a => a.severity === 'red');
   const yellow_alerts = (data.critical_alerts || []).filter(a => a.severity === 'yellow');
+  const health_red_alerts = (data.alerts || []).filter(a => a.severity === 'high');
+  const health_yellow_alerts = (data.alerts || []).filter(a => a.severity !== 'high');
 
   return (
     <div className="max-w-5xl mx-auto space-y-8">
@@ -171,15 +173,34 @@ export default function Dashboard() {
       )}
       
       {/* ALERTAS DE SALUD (Vacunas y Desparasitación) */}
-      {data.alerts && data.alerts.length > 0 && (
+      {health_red_alerts.length > 0 && (
+        <div className="bg-red-50 border border-red-200 p-6 rounded-2xl shadow-sm animate-fade-in-up">
+          <h2 className="text-xl font-bold text-red-800 flex items-center gap-2 mb-4">
+            🚨 Alertas de Salud Urgentes
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {health_red_alerts.map((alert, idx) => (
+              <div key={idx} className="p-4 rounded-xl border flex items-start gap-3 bg-white border-red-200 text-red-900">
+                <div className="text-2xl mt-0.5">🚨</div>
+                <div>
+                  <div className="font-bold leading-tight">{alert.animal_name}</div>
+                  <div className="text-sm opacity-90 mt-1 leading-snug">{alert.message}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {health_yellow_alerts.length > 0 && (
         <div className="bg-yellow-50 border border-yellow-200 p-6 rounded-2xl shadow-sm animate-fade-in-up">
           <h2 className="text-xl font-bold text-yellow-800 flex items-center gap-2 mb-4">
             ⚠️ Alertas de Salud y Vacunación
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {data.alerts.map((alert, idx) => (
-              <div key={idx} className={`p-4 rounded-xl border flex items-start gap-3 ${alert.severity === 'high' ? 'bg-red-50 border-red-200 text-red-900' : 'bg-white border-yellow-200 text-yellow-900'}`}>
-                <div className="text-2xl mt-0.5">{alert.severity === 'high' ? '🚨' : '💉'}</div>
+            {health_yellow_alerts.map((alert, idx) => (
+              <div key={idx} className="p-4 rounded-xl border flex items-start gap-3 bg-white border-yellow-200 text-yellow-900">
+                <div className="text-2xl mt-0.5">💉</div>
                 <div>
                   <div className="font-bold leading-tight">{alert.animal_name}</div>
                   <div className="text-sm opacity-90 mt-1 leading-snug">{alert.message}</div>
