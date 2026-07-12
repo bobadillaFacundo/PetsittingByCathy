@@ -197,8 +197,8 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const url = editingId 
-      ? `/api/animals/${editingId}`
-      : `/api/animals/`;
+      ? `https://petsittingbycathy.onrender.com/animals/${editingId}`
+      : `https://petsittingbycathy.onrender.com/animals/`;
     
     const method = editingId ? 'PUT' : 'POST';
 

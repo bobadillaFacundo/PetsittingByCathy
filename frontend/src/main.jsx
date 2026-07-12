@@ -11,7 +11,7 @@ window.fetch = async function (...args) {
     const url = typeof args[0] === 'string'
       ? args[0]
       : (args[0] && args[0].url ? args[0].url : '');
-    if (!String(url).includes('/api/auth/login')) {
+    if (!String(url).includes('auth/login')) {
       redirectToLogin();
     }
   }

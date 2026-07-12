@@ -47,7 +47,7 @@ export default function CatalogsPanel() {
         {activeCatalog === 'species' && (
           <CatalogCRUD
             title="Especies"
-            endpoint="/api/catalogs/species"
+            endpoint="https://petsittingbycathy.onrender.com/catalogs/species"
             columns={[{ key: 'name', label: 'Nombre' }]}
             formFields={[{ key: 'name', label: 'Nombre de Especie', required: true }]}
           />
@@ -56,7 +56,7 @@ export default function CatalogsPanel() {
         {activeCatalog === 'breeds' && (
           <CatalogCRUD
             title="Razas"
-            endpoint="/api/catalogs/breeds"
+            endpoint="https://petsittingbycathy.onrender.com/catalogs/breeds"
             columns={[
               { key: 'name', label: 'Nombre' },
               { key: 'species_id', label: 'Especie', render: (val) => {
@@ -74,7 +74,7 @@ export default function CatalogsPanel() {
         {activeCatalog === 'laboratories' && (
           <CatalogCRUD
             title="Catálogo de Laboratorios"
-            endpoint="/api/catalogs/laboratories"
+            endpoint="https://petsittingbycathy.onrender.com/catalogs/laboratories"
             columns={[{ key: 'name', label: 'Nombre' }]}
             formFields={[{ key: 'name', label: 'Nombre del Estudio', required: true }]}
           />
@@ -83,7 +83,7 @@ export default function CatalogsPanel() {
         {activeCatalog === 'vaccines' && (
           <CatalogCRUD
             title="Catálogo de Vacunas"
-            endpoint="/api/catalogs/vaccines"
+            endpoint="https://petsittingbycathy.onrender.com/catalogs/vaccines"
             columns={[{ key: 'name', label: 'Nombre' }]}
             formFields={[{ key: 'name', label: 'Nombre de Vacuna', required: true }]}
           />
@@ -92,7 +92,7 @@ export default function CatalogsPanel() {
         {activeCatalog === 'products' && (
           <CatalogCRUD
             title="Productos Veterinarios"
-            endpoint="/api/catalogs/products"
+            endpoint="https://petsittingbycathy.onrender.com/catalogs/products"
             columns={[
               { key: 'name', label: 'Nombre' },
               { key: 'type', label: 'Tipo' }
@@ -110,7 +110,7 @@ export default function CatalogsPanel() {
         {activeCatalog === 'veterinarians' && (
           <CatalogCRUD
             title="Veterinarios"
-            endpoint="/api/catalogs/veterinarians"
+            endpoint="https://petsittingbycathy.onrender.com/catalogs/veterinarians"
             columns={[
               { key: 'name', label: 'Nombre' },
               { key: 'phone', label: 'Teléfono' },
@@ -127,7 +127,7 @@ export default function CatalogsPanel() {
         {activeCatalog === 'tagsets' && (
           <CatalogCRUD
             title="Diccionarios IA (TagSets)"
-            endpoint="/api/catalogs/tagsets"
+            endpoint="https://petsittingbycathy.onrender.com/catalogs/tagsets"
             columns={[
               { key: 'name', label: 'Conjunto' },
               { key: 'variants_text', label: 'Variantes / Palabras clave' }

@@ -41,8 +41,8 @@ export default function DesparasitacionesTab({ animalId, token }) {
   const handleAdd = async (type, data, setter) => {
     if (!data.product_id) return alert("Debes seleccionar un producto.");
     const url = type === 'interna' 
-      ? `/api/animals/${animalId}/internal_dewormings`
-      : `/api/animals/${animalId}/external_dewormings`;
+      ? `https://petsittingbycathy.onrender.com/animals/${animalId}/internal_dewormings`
+      : `https://petsittingbycathy.onrender.com/animals/${animalId}/external_dewormings`;
 
     try {
       const res = await fetch(url, {
