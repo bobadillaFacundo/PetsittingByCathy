@@ -104,6 +104,7 @@ def get_animal_medications(animal_id: int, db: Session = Depends(get_db)):
     medications = db.query(AnimalMedication).join(MedicationCatalog).filter(AnimalMedication.animal_id == animal_id).all()
     result = []
     for m in medications:
+        schedules = [s.scheduled_time.strftime("%H:%M") for s in m.schedules] if m.schedules else []
         result.append({
             "id": m.id,
             "medication_id": m.medication_id,
@@ -114,11 +115,14 @@ def get_animal_medications(animal_id: int, db: Session = Depends(get_db)):
             "amount_per_day": m.amount_per_day,
             "duration_days": m.duration_days,
             "is_forever": m.is_forever,
+            "schedules": schedules,
         })
     return result
 
 @router.post("/{animal_id}/medications", response_model=AnimalMedicationResponse)
 def add_animal_medication(animal_id: int, med_in: AnimalMedicationCreate, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
+    from src.models.models import AnimalMedicationSchedule
+    from datetime import datetime
     catalog = db.query(MedicationCatalog).filter(MedicationCatalog.name.ilike(med_in.medication_name)).first()
     if not catalog:
         catalog = MedicationCatalog(name=med_in.medication_name)
@@ -139,6 +143,16 @@ def add_animal_medication(animal_id: int, med_in: AnimalMedicationCreate, db: Se
     db.add(db_med)
     db.commit()
     db.refresh(db_med)
+    
+    if med_in.schedules:
+        for t_str in med_in.schedules:
+            try:
+                t = datetime.strptime(t_str, "%H:%M").time()
+                db.add(AnimalMedicationSchedule(animal_medication_id=db_med.id, scheduled_time=t))
+            except ValueError:
+                pass
+        db.commit()
+        
     return {
         "id": db_med.id,
         "medication_id": db_med.medication_id,
@@ -149,10 +163,13 @@ def add_animal_medication(animal_id: int, med_in: AnimalMedicationCreate, db: Se
         "amount_per_day": db_med.amount_per_day,
         "duration_days": db_med.duration_days,
         "is_forever": db_med.is_forever,
+        "schedules": med_in.schedules,
     }
 
 @router.put("/{animal_id}/medications/{medication_id}", response_model=AnimalMedicationResponse)
 def update_animal_medication(animal_id: int, medication_id: int, med_update: AnimalMedicationUpdate, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
+    from src.models.models import AnimalMedicationSchedule
+    from datetime import datetime
     db_med = db.query(AnimalMedication).filter(AnimalMedication.id == medication_id, AnimalMedication.animal_id == animal_id).first()
     if not db_med:
         raise HTTPException(status_code=404, detail="Medicacion no encontrada")
@@ -166,14 +183,24 @@ def update_animal_medication(animal_id: int, medication_id: int, med_update: Ani
             db.refresh(catalog)
         db_med.medication_id = catalog.id
         
-    update_data = med_update.model_dump(exclude_unset=True, exclude={"medication_name"})
+    update_data = med_update.model_dump(exclude_unset=True, exclude={"medication_name", "schedules"})
     for k, v in update_data.items():
         setattr(db_med, k, v)
         
+    if med_update.schedules is not None:
+        db.query(AnimalMedicationSchedule).filter(AnimalMedicationSchedule.animal_medication_id == db_med.id).delete()
+        for t_str in med_update.schedules:
+            try:
+                t = datetime.strptime(t_str, "%H:%M").time()
+                db.add(AnimalMedicationSchedule(animal_medication_id=db_med.id, scheduled_time=t))
+            except ValueError:
+                pass
+
     db.commit()
     db.refresh(db_med)
     
     catalog_name = db.query(MedicationCatalog).filter(MedicationCatalog.id == db_med.medication_id).first().name
+    schedules = [s.scheduled_time.strftime("%H:%M") for s in db_med.schedules] if db_med.schedules else []
     
     return {
         "id": db_med.id,
@@ -185,6 +212,7 @@ def update_animal_medication(animal_id: int, medication_id: int, med_update: Ani
         "amount_per_day": db_med.amount_per_day,
         "duration_days": db_med.duration_days,
         "is_forever": db_med.is_forever,
+        "schedules": schedules,
     }
 
 @router.delete("/{animal_id}/medications/{medication_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -250,6 +278,7 @@ def get_animal_history(animal_id: int, db: Session = Depends(get_db)):
             amount_per_day=m.amount_per_day,
             duration_days=m.duration_days,
             is_forever=m.is_forever,
+            schedules=[s.scheduled_time.strftime("%H:%M") for s in m.schedules] if m.schedules else []
         )
         for m in active_meds
     ]

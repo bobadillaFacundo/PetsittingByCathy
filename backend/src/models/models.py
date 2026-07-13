@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Float, Text, Date, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Float, Text, Date, UniqueConstraint, Time
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from src.database.session import Base
@@ -277,6 +277,14 @@ class EventType(Base):
 
 # ----------------- TABLAS INTERMEDIAS ----------------- #
 
+class AnimalMedicationSchedule(Base):
+    __tablename__ = "animal_medication_schedules"
+    id = Column(Integer, primary_key=True, index=True)
+    animal_medication_id = Column(Integer, ForeignKey("animal_medications.id", ondelete="CASCADE"), nullable=False)
+    scheduled_time = Column(Time, nullable=False)
+
+    animal_medication = relationship("AnimalMedication", back_populates="schedules")
+
 class AnimalDiagnosis(Base):
     __tablename__ = "animal_diagnoses"
     id = Column(Integer, primary_key=True, index=True)
@@ -302,6 +310,7 @@ class AnimalMedication(Base):
 
     animal = relationship("Animal", back_populates="medications")
     medication = relationship("MedicationCatalog")
+    schedules = relationship("AnimalMedicationSchedule", back_populates="animal_medication", cascade="all, delete-orphan")
 
 
 class AnimalObservation(Base):

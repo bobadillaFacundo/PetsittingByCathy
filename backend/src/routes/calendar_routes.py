@@ -6,7 +6,7 @@ from src.models.models import Deworming, Animal, VeterinaryProduct, Vaccine, Hea
 from src.auth import get_current_user
 from typing import List
 from pydantic import BaseModel
-from datetime import date
+from datetime import date, datetime
 
 router = APIRouter(prefix="/calendar", tags=["Calendar"])
 
@@ -15,7 +15,7 @@ class CalendarAlertResponse(BaseModel):
     animal_name: str
     alert_type: str
     product_name: str
-    due_date: date
+    due_date: datetime
 
     class Config:
         from_attributes = True
@@ -84,13 +84,27 @@ def get_calendar_alerts(db: Session = Depends(get_db), current_admin = Depends(g
         Animal.is_active == True
     ).all()
     
+    today = date.today()
     for m in active_meds:
-        alerts.append({
-            "id": f"alert-med-{m.id}",
-            "animal_name": m.animal.name,
-            "alert_type": "Medicación activa",
-            "product_name": f"{m.medication.name} ({m.dosage}, {m.frequency})",
-            "due_date": date.today()
-        })
-        
+        alert_type_str = f"Medicación activa{' (Crónico)' if m.is_forever else ''}"
+        if m.schedules:
+            for i, s in enumerate(m.schedules):
+                dt = datetime.combine(today, s.scheduled_time)
+                alerts.append({
+                    "id": f"alert-med-{m.id}-{i}",
+                    "animal_name": m.animal.name,
+                    "alert_type": alert_type_str,
+                    "product_name": f"{m.medication.name} ({m.dosage}, {m.frequency})",
+                    "due_date": dt
+                })
+        else:
+            dt = datetime.combine(today, datetime.min.time())
+            alerts.append({
+                "id": f"alert-med-{m.id}",
+                "animal_name": m.animal.name,
+                "alert_type": alert_type_str,
+                "product_name": f"{m.medication.name} ({m.dosage}, {m.frequency})",
+                "due_date": dt
+            })
+            
     return alerts

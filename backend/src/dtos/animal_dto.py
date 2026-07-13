@@ -153,6 +153,7 @@ class AnimalMedicationResponse(BaseModel):
     amount_per_day: Optional[str] = None
     duration_days: Optional[int] = None
     is_forever: bool = False
+    schedules: List[str] = []
 
     class Config:
         from_attributes = True
@@ -165,6 +166,7 @@ class AnimalMedicationCreate(BaseModel):
     amount_per_day: Optional[str] = None
     duration_days: Optional[int] = None
     is_forever: bool = False
+    schedules: List[str] = []
 
 class AnimalMedicationUpdate(BaseModel):
     medication_name: Optional[str] = None
@@ -174,3 +176,4 @@ class AnimalMedicationUpdate(BaseModel):
     amount_per_day: Optional[str] = None
     duration_days: Optional[int] = None
     is_forever: Optional[bool] = None
+    schedules: Optional[List[str]] = None

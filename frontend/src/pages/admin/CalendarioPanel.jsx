@@ -105,13 +105,23 @@ export default function CalendarioPanel() {
       if (resAlerts.ok) {
         const data = await resAlerts.json();
         const alertEvents = data.map(a => {
-          const date = new Date(a.due_date + 'T12:00:00'); // set to noon to avoid timezone shift
+          const isAllDay = !a.due_date.includes('T') || a.due_date.endsWith('T00:00:00') || a.due_date.endsWith('T00:00:00.000Z') || a.due_date.endsWith('T00:00:00Z');
+          let start = new Date(a.due_date);
+          let end = start;
+          
+          if (isAllDay) {
+            start = new Date(start.getFullYear(), start.getMonth(), start.getDate(), 12, 0, 0);
+            end = start;
+          } else {
+            end = new Date(start.getTime() + 30 * 60000); // 30 minutes duration for visual purpose
+          }
+
           return {
             id: a.id,
-            title: `Vto. ${a.alert_type}: ${a.animal_name} (${a.product_name})`,
-            start: date,
-            end: date,
-            allDay: true,
+            title: `${a.alert_type}: ${a.animal_name} (${a.product_name})`,
+            start: start,
+            end: end,
+            allDay: isAllDay,
             status: 'Alerta',
             isAlert: true,
             resource: a
