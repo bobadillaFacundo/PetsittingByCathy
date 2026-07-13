@@ -21,6 +21,10 @@ USE_GROQ     = os.getenv("USE_GROQ", "").strip().lower() in ("1", "true", "yes")
 GROQ_STT_MODEL = os.getenv("GROQ_STT_MODEL", "whisper-large-v3-turbo")
 GROQ_STT_URL   = "https://api.groq.com/openai/v1/audio/transcriptions"
 
+# Custom Whisper server (OpenAI compatible API)
+USE_CUSTOM_WHISPER = os.getenv("USE_CUSTOM_WHISPER", "0").strip().lower() in ("1", "true", "yes")
+CUSTOM_WHISPER_URL = os.getenv("CUSTOM_WHISPER_URL", "http://100.82.178.56:9000/v1/audio/transcriptions")
+
 # Modelo de chat/NLP de Groq
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 GROQ_URL   = "https://api.groq.com/openai/v1/chat/completions"
@@ -35,29 +39,38 @@ VLLM_URL   = f"{_VLLM_BASE}/chat/completions"
 # ---------------------------------------------------------------------------
 whisper_model = None
 
-if GROQ_API_KEY:
+if USE_CUSTOM_WHISPER:
+    print(f"[STT] Usando Whisper Custom -> url={CUSTOM_WHISPER_URL}")
+elif GROQ_API_KEY:
     print(f"[STT] Usando Groq STT -> modelo={GROQ_STT_MODEL}")
 else:
-    print("ADVERTENCIA: GROQ_API_KEY no configurado. STT fallará o usará mock.")
+    print("ADVERTENCIA: GROQ_API_KEY y USE_CUSTOM_WHISPER no configurados. STT fallará o usará mock.")
 
 print(f"[NLP] Postproceso -> {VLLM_URL} (modelo={VLLM_MODEL})")
 if USE_GROQ and GROQ_API_KEY:
     print(f"[NLP] USE_GROQ=1: se usará Groq ({GROQ_MODEL}) en lugar del vLLM del servidor")
 
 
-def _transcribe_with_groq(file_path: str) -> str:
-    """Transcribe audio usando la API de Groq (whisper-large-v3-turbo)."""
+def _transcribe_with_api(file_path: str) -> str:
+    """Transcribe audio usando la API de Groq o un servidor Whisper Custom (compatible OpenAI)."""
+    url = CUSTOM_WHISPER_URL if USE_CUSTOM_WHISPER else GROQ_STT_URL
+    headers = {}
+    if not USE_CUSTOM_WHISPER and GROQ_API_KEY:
+        headers["Authorization"] = f"Bearer {GROQ_API_KEY}"
+        
+    data = {
+        "model": "whisper-1" if USE_CUSTOM_WHISPER else GROQ_STT_MODEL,
+        "language": "es",
+        "response_format": "json",
+    }
+    
     with open(file_path, "rb") as audio_file:
         response = requests.post(
-            GROQ_STT_URL,
-            headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+            url,
+            headers=headers,
             files={"file": (os.path.basename(file_path), audio_file)},
-            data={
-                "model": GROQ_STT_MODEL,
-                "language": "es",          # fuerza español para mayor precisión
-                "response_format": "json",
-            },
-            timeout=60,
+            data=data,
+            timeout=120,
         )
     response.raise_for_status()
     return response.json().get("text", "").strip()
@@ -73,15 +86,15 @@ class AudioService:
 
     @staticmethod
     def transcribe_audio(file_path: str) -> str:
-        # ── Prioridad 1: Groq STT (whisper-large-v3-turbo) ──────────────────
-        if GROQ_API_KEY:
+        # ── Prioridad 1: API (Custom Whisper o Groq STT) ──────────────────
+        if USE_CUSTOM_WHISPER or GROQ_API_KEY:
             try:
-                transcript = _transcribe_with_groq(file_path)
+                transcript = _transcribe_with_api(file_path)
                 if not transcript:
                     return "Silencio o ruido de fondo (no se detectó voz real)."
                 return transcript
             except Exception as e:
-                print(f"[STT] Error con Groq, intentando fallback local: {e}")
+                print(f"[STT] Error con API de transcripción, intentando fallback local: {e}")
 
         # ── Prioridad 2: Eliminado para evitar OOM en Render ──────────────────────
         # Si llega aquí sin GROQ_API_KEY, usamos el mock por defecto.
