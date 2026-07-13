@@ -193,6 +193,32 @@ export default function AnimalHistory({ animalId = 1 }) {
         )}
       </div>
 
+      {/* MEDICACIONES ACTIVAS */}
+      {data.active_medications && data.active_medications.length > 0 && (
+        <div className="mb-6 bg-purple-50 border border-purple-200 p-4 rounded-2xl">
+          <h3 className="text-sm font-bold text-purple-800 uppercase tracking-wide mb-3 flex items-center gap-2">
+            💊 Medicación Activa
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {data.active_medications.map((med) => (
+              <div key={med.id} className="bg-white p-3 rounded-xl border border-purple-100 shadow-sm">
+                <div className="font-bold text-purple-900 text-sm">{med.medication_name}</div>
+                <div className="text-xs text-gray-600 mt-1">
+                  <span className="font-semibold text-gray-700">Dosis:</span> {med.dosage} · 
+                  <span className="font-semibold text-gray-700 ml-1">Frec.:</span> {med.frequency}
+                </div>
+                {(med.amount_per_day || med.duration_days || med.is_forever) && (
+                  <div className="text-xs text-gray-500 mt-0.5">
+                    {med.amount_per_day && <><span className="font-semibold">Cant/día:</span> {med.amount_per_day} · </>}
+                    <span className="font-semibold">Duración:</span> {med.is_forever ? 'Crónico (por siempre)' : `${med.duration_days} días`}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="relative border-l-2 border-indigo-200 pl-6 ml-4 space-y-8 pb-4">
         {data.reports.map((report) => (
           <div key={report.id} className="relative group">

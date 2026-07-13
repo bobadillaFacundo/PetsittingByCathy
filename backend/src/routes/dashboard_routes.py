@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 from typing import List, Optional
@@ -49,40 +50,63 @@ def get_dashboard(db: Session = Depends(get_db)):
     
     threshold_date = datetime.utcnow().date() + timedelta(days=15)
     
-    # Vacunas
-    expiring_vaccines = db.query(Vaccine).join(HealthRecord).filter(
-        Vaccine.next_due_date <= threshold_date
+    # Vacunas — solo la última por animal+vacuna (evita duplicados)
+    latest_vaccine_ids = (
+        db.query(func.max(Vaccine.id))
+        .join(HealthRecord)
+        .join(Animal, HealthRecord.animal_id == Animal.id)
+        .filter(
+            Vaccine.next_due_date <= threshold_date,
+            Animal.is_active == True
+        )
+        .group_by(HealthRecord.animal_id, Vaccine.vaccine_id)
     ).all()
-    for v in expiring_vaccines:
-        hr = db.query(HealthRecord).filter(HealthRecord.id == v.health_record_id).first()
-        if hr:
-            animal = db.query(Animal).filter(Animal.id == hr.animal_id, Animal.is_active == True).first()
+    latest_vax_ids = [row[0] for row in latest_vaccine_ids]
+    
+    if latest_vax_ids:
+        expiring_vaccines = db.query(Vaccine).filter(Vaccine.id.in_(latest_vax_ids)).all()
+        for v in expiring_vaccines:
+            hr = db.query(HealthRecord).filter(HealthRecord.id == v.health_record_id).first()
+            if hr:
+                animal = db.query(Animal).filter(Animal.id == hr.animal_id, Animal.is_active == True).first()
+                if animal:
+                    days_left = (v.next_due_date - datetime.utcnow().date()).days
+                    msg = f"Vacuna vence en {days_left} días" if days_left >= 0 else f"Vacuna VENCIDA hace {-days_left} días"
+                    alerts_list.append(AlertDTO(
+                        animal_id=animal.id,
+                        animal_name=animal.name,
+                        message=msg,
+                        severity="high" if days_left < 0 else "medium"
+                    ))
+                
+    # Desparasitaciones — solo la última por animal+producto (evita duplicados)
+    latest_deworming_ids = (
+        db.query(func.max(Deworming.id))
+        .join(Animal)
+        .filter(
+            Deworming.next_due_date <= threshold_date,
+            Animal.is_active == True
+        )
+        .group_by(Deworming.animal_id, Deworming.product_id)
+    ).all()
+    latest_dew_ids = [row[0] for row in latest_deworming_ids]
+    
+    if latest_dew_ids:
+        expiring_dewormings = db.query(Deworming).options(
+            joinedload(Deworming.product)
+        ).filter(Deworming.id.in_(latest_dew_ids)).all()
+        for de in expiring_dewormings:
+            animal = db.query(Animal).filter(Animal.id == de.animal_id, Animal.is_active == True).first()
             if animal:
-                days_left = (v.next_due_date - datetime.utcnow().date()).days
-                msg = f"Vacuna vence en {days_left} días" if days_left >= 0 else f"Vacuna VENCIDA hace {-days_left} días"
+                days_left = (de.next_due_date - datetime.utcnow().date()).days
+                tipo = "Interna" if de.product and de.product.type == "INTERNAL" else "Externa"
+                msg = f"Desparasitación {tipo} vence en {days_left} días" if days_left >= 0 else f"Desparasitación {tipo} VENCIDA hace {-days_left} días"
                 alerts_list.append(AlertDTO(
                     animal_id=animal.id,
                     animal_name=animal.name,
                     message=msg,
                     severity="high" if days_left < 0 else "medium"
                 ))
-                
-    # Desparasitaciones (tabla unificada)
-    expiring_dewormings = db.query(Deworming).options(
-        joinedload(Deworming.product)
-    ).filter(Deworming.next_due_date <= threshold_date).all()
-    for de in expiring_dewormings:
-        animal = db.query(Animal).filter(Animal.id == de.animal_id, Animal.is_active == True).first()
-        if animal:
-            days_left = (de.next_due_date - datetime.utcnow().date()).days
-            tipo = "Interna" if de.product and de.product.type == "INTERNAL" else "Externa"
-            msg = f"Desparasitación {tipo} vence en {days_left} días" if days_left >= 0 else f"Desparasitación {tipo} VENCIDA hace {-days_left} días"
-            alerts_list.append(AlertDTO(
-                animal_id=animal.id,
-                animal_name=animal.name,
-                message=msg,
-                severity="high" if days_left < 0 else "medium"
-            ))
 
     # 4. Alertas críticas no resueltas (palabras clave rojas)
     critical_alerts_list = []

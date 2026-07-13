@@ -302,7 +302,13 @@ export default function CalendarioPanel() {
     if (event.resource.status === 'Llevar a Bañar') backgroundColor = '#06b6d4';
     if (event.resource.status === 'Cancelada') backgroundColor = '#ef4444';
     if (event.resource.status === 'Finalizada') backgroundColor = '#9ca3af';
-    if (event.status === 'Alerta') backgroundColor = '#ec4899'; // Pink color for alerts
+    if (event.status === 'Alerta') {
+      if (event.id && typeof event.id === 'string' && event.id.startsWith('alert-med-')) {
+        backgroundColor = '#8b5cf6'; // Purple for medication
+      } else {
+        backgroundColor = '#ec4899'; // Pink for vaccine/deworming alerts
+      }
+    }
     
     return {
       style: {

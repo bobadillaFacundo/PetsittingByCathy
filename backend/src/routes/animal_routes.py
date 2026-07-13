@@ -196,7 +196,7 @@ def delete_animal_medication(animal_id: int, medication_id: int, db: Session = D
     db.commit()
     return None
 
-from src.dtos.animal_dto import AnimalHistoryResponse, ReportHistoryDTO, EventDTO
+from src.dtos.animal_dto import AnimalHistoryResponse, ReportHistoryDTO, EventDTO, AnimalMedicationResponse
 from sqlalchemy.orm import joinedload
 
 @router.get("/{animal_id}/history", response_model=AnimalHistoryResponse)
@@ -233,8 +233,28 @@ def get_animal_history(animal_id: int, db: Session = Depends(get_db)):
             events=event_dtos,
             attachments=attachment_dtos,
         ))
+
+    # Medicaciones activas del animal
+    active_meds = db.query(AnimalMedication).join(MedicationCatalog).filter(
+        AnimalMedication.animal_id == animal_id,
+        AnimalMedication.is_current == True
+    ).all()
+    med_dtos = [
+        AnimalMedicationResponse(
+            id=m.id,
+            medication_id=m.medication_id,
+            medication_name=m.medication.name,
+            dosage=m.dosage,
+            frequency=m.frequency,
+            is_current=m.is_current,
+            amount_per_day=m.amount_per_day,
+            duration_days=m.duration_days,
+            is_forever=m.is_forever,
+        )
+        for m in active_meds
+    ]
         
-    return AnimalHistoryResponse(animal=animal, reports=history)
+    return AnimalHistoryResponse(animal=animal, reports=history, active_medications=med_dtos)
 
 from pydantic import BaseModel
 class EvolutionAnalysisResponse(BaseModel):

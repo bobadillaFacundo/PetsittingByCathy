@@ -141,6 +141,7 @@ class ReportHistoryDTO(BaseModel):
 class AnimalHistoryResponse(BaseModel):
     animal: AnimalResponse
     reports: List[ReportHistoryDTO]
+    active_medications: List['AnimalMedicationResponse'] = []
 
 class AnimalMedicationResponse(BaseModel):
     id: int
