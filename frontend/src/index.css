@@ -70,7 +70,7 @@ input[type="date"].audit-date-input::-webkit-datetime-edit-year-field {
   padding-top: var(--safe-top);
 }
 @utility pb-safe {
-  padding-bottom: var(--safe-bottom);
+  padding-bottom: calc(var(--safe-bottom) + 2rem);
 }
 @utility px-safe {
   padding-left: var(--safe-left);

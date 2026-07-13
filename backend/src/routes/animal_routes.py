@@ -469,6 +469,24 @@ def add_lab_result(animal_id: int, data: dict, db: Session = Depends(get_db)):
     db.commit()
     return item
 
+@router.delete("/{animal_id}/lab_results/{lab_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_lab_result(animal_id: int, lab_id: int, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
+    db_lab = db.query(LabResult).filter(LabResult.id == lab_id, LabResult.animal_id == animal_id).first()
+    if not db_lab:
+        raise HTTPException(status_code=404, detail="Estudio no encontrado")
+    
+    if db_lab.document_url and not db_lab.document_url.startswith("http"):
+        file_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), db_lab.document_url.lstrip('/'))
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except Exception as e:
+                print(f"Failed to delete file: {e}")
+                
+    db.delete(db_lab)
+    db.commit()
+    return None
+
 from fastapi import UploadFile, File
 import os
 import uuid

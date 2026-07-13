@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, FileText, Link as LinkIcon } from 'lucide-react';
+import { Plus, FileText, Link as LinkIcon, Trash2 } from 'lucide-react';
 
 export default function LaboratoriosTab({ animalId, token }) {
   const [labs, setLabs] = useState([]);
@@ -62,6 +62,23 @@ export default function LaboratoriosTab({ animalId, token }) {
     }
   };
 
+  const handleDelete = async (id) => {
+    if (!window.confirm("¿Seguro que quieres eliminar este estudio?")) return;
+    try {
+      const res = await fetch(`https://petsittingbycathy.onrender.com/animals/${animalId}/lab_results/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        fetchLabs();
+      } else {
+        alert("Error al eliminar el estudio");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   if (loading) return <div className="p-8 text-center text-gray-500">Cargando...</div>;
 
   return (
@@ -103,9 +120,14 @@ export default function LaboratoriosTab({ animalId, token }) {
                 <h5 className="font-bold text-gray-900 text-sm">{lab.laboratory?.name || 'Estudio de laboratorio'}</h5>
                 <p className="text-xs text-gray-500">Fecha: {lab.date}</p>
               </div>
-              <a href={lab.document_url.startsWith('http') ? lab.document_url : `http://127.0.0.1:8000${lab.document_url}`} target="_blank" rel="noreferrer" className="text-blue-600 bg-blue-50 hover:bg-blue-100 p-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors">
-                <LinkIcon size={16} /> Ver Archivo
-              </a>
+              <div className="flex items-center gap-2">
+                <a href={lab.document_url.startsWith('http') ? lab.document_url : `https://petsittingbycathy.onrender.com${lab.document_url}`} target="_blank" rel="noreferrer" className="text-blue-600 bg-blue-50 hover:bg-blue-100 p-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors">
+                  <LinkIcon size={16} /> Ver Archivo
+                </a>
+                <button onClick={() => handleDelete(lab.id)} className="text-red-600 bg-red-50 hover:bg-red-100 p-2 rounded-lg flex items-center transition-colors" title="Eliminar estudio">
+                  <Trash2 size={16} />
+                </button>
+              </div>
             </li>
           ))}
         </ul>
