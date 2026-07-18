@@ -13,12 +13,28 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").rstrip("/")
-SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or ""
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY") or ""
-
 # Bucket público por defecto. Crearlo en Supabase → Storage → New bucket → Public.
 DEFAULT_BUCKET = os.getenv("SUPABASE_STORAGE_BUCKET", "uploads")
+
+
+def _normalize_supabase_url(raw: str) -> str:
+    """
+    Acepta Project URL limpia o con sufijos pegados por error
+    (/rest/v1, /storage/v1, barra final, etc.).
+    """
+    url = (raw or "").strip().rstrip("/")
+    if not url:
+        return ""
+    # Quitar sufijos de API que a veces se copian del dashboard
+    for suffix in ("/rest/v1", "/storage/v1", "/auth/v1", "/functions/v1"):
+        if url.endswith(suffix):
+            url = url[: -len(suffix)].rstrip("/")
+    return url
+
+
+SUPABASE_URL = _normalize_supabase_url(os.getenv("SUPABASE_URL") or "")
+SUPABASE_SERVICE_ROLE_KEY = (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
+SUPABASE_ANON_KEY = (os.getenv("SUPABASE_ANON_KEY") or "").strip()
 
 
 def storage_configured() -> bool:
@@ -47,6 +63,11 @@ def _content_type(filename: str, fallback: str = "application/octet-stream") -> 
 
 def _public_url(bucket: str, path: str) -> str:
     return f"{SUPABASE_URL}/storage/v1/object/public/{bucket}/{path}"
+
+
+def _encode_object_path(object_path: str) -> str:
+    # No encodear '.', '-', '_' (uuid.pdf debe quedar legible)
+    return "/".join(quote(part, safe=".-_") for part in object_path.split("/") if part)
 
 
 def _ensure_bucket(bucket: str) -> None:
@@ -79,6 +100,20 @@ def _ensure_bucket(bucket: str) -> None:
         print(f"ensure_bucket({bucket}): {e}")
 
 
+def _raise_storage_error(resp: requests.Response, action: str) -> None:
+    body = (resp.text or "")[:500]
+    hint = ""
+    if "PGRST125" in body or "Invalid path" in body:
+        hint = (
+            " | Revisá SUPABASE_URL en Render: debe ser solo "
+            "https://XXXX.supabase.co (sin /rest/v1). "
+            f"URL usada: {SUPABASE_URL}"
+        )
+    elif resp.status_code == 404 and "Bucket" in body:
+        hint = f" | Creá el bucket público '{DEFAULT_BUCKET}' en Supabase → Storage."
+    raise RuntimeError(f"Error Supabase Storage {action} ({resp.status_code}): {body}{hint}")
+
+
 def upload_bytes(
     data: bytes,
     folder: str,
@@ -90,15 +125,26 @@ def upload_bytes(
     Sube bytes a Supabase Storage y devuelve URL pública.
     Si Supabase no está configurado, guarda en disco local (dev) y devuelve path relativo.
     """
+    if not bucket or "/" in bucket:
+        raise RuntimeError(
+            f"SUPABASE_STORAGE_BUCKET inválido: {bucket!r}. Usá solo el nombre, ej: uploads"
+        )
+
     ext = os.path.splitext(original_filename or "")[1] or ""
     filename = f"{uuid.uuid4()}{ext}"
     object_path = f"{folder.strip('/')}/{filename}"
     mime = content_type or _content_type(original_filename or filename)
 
     if storage_configured():
+        parsed = urlparse(SUPABASE_URL)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            raise RuntimeError(
+                f"SUPABASE_URL inválida: {SUPABASE_URL!r}. "
+                "Debe ser https://XXXX.supabase.co"
+            )
+
         _ensure_bucket(bucket)
-        # Path segments encoded individually (keep '/')
-        encoded_path = "/".join(quote(part, safe="") for part in object_path.split("/"))
+        encoded_path = _encode_object_path(object_path)
         url = f"{SUPABASE_URL}/storage/v1/object/{bucket}/{encoded_path}"
         resp = requests.post(
             url,
@@ -110,9 +156,7 @@ def upload_bytes(
             timeout=120,
         )
         if resp.status_code not in (200, 201):
-            raise RuntimeError(
-                f"Error Supabase Storage ({resp.status_code}): {resp.text[:500]}"
-            )
+            _raise_storage_error(resp, "upload")
         return _public_url(bucket, object_path)
 
     # En Render el disco es efímero: no permitir fallback silencioso a local
@@ -141,7 +185,7 @@ def delete_by_url(url: Optional[str], bucket: str = DEFAULT_BUCKET) -> None:
         if url.startswith(prefix):
             object_path = url[len(prefix):]
             if storage_configured():
-                encoded_path = "/".join(quote(part, safe="") for part in object_path.split("/"))
+                encoded_path = _encode_object_path(object_path)
                 try:
                     requests.delete(
                         f"{SUPABASE_URL}/storage/v1/object/{bucket}/{encoded_path}",
