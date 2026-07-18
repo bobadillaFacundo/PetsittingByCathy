@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
-import { format, parse, startOfWeek, getDay } from 'date-fns';
+import { format, parse, startOfWeek, getDay, startOfMonth, endOfMonth, addMonths, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { Plus, X, Calendar as CalendarIcon, Save, Trash2 } from 'lucide-react';
@@ -61,11 +61,6 @@ export default function CalendarioPanel() {
   const role = localStorage.getItem('role');
   const isAdmin = role === 'admin';
 
-  useEffect(() => {
-    fetchAnimals();
-    fetchReservationsAndAlerts();
-  }, []);
-
   const fetchAnimals = async () => {
     try {
       const res = await fetch(`https://petsittingbycathy.onrender.com/animals/`, {
@@ -80,11 +75,16 @@ export default function CalendarioPanel() {
     }
   };
 
-  const fetchReservationsAndAlerts = async () => {
+  const fetchReservationsAndAlerts = useCallback(async (rangeStart, rangeEnd) => {
     try {
+      const start = rangeStart || startOfMonth(subMonths(new Date(), 1));
+      const end = rangeEnd || endOfMonth(addMonths(new Date(), 2));
+      const startStr = format(start, 'yyyy-MM-dd');
+      const endStr = format(end, 'yyyy-MM-dd');
+
       const [resRes, resAlerts] = await Promise.all([
         fetch(`https://petsittingbycathy.onrender.com/reservations/`, { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch(`https://petsittingbycathy.onrender.com/calendar/alerts`, { headers: { 'Authorization': `Bearer ${token}` } })
+        fetch(`https://petsittingbycathy.onrender.com/calendar/alerts?start=${startStr}&end=${endStr}`, { headers: { 'Authorization': `Bearer ${token}` } })
       ]);
 
       let calendarEvents = [];
@@ -106,21 +106,21 @@ export default function CalendarioPanel() {
         const data = await resAlerts.json();
         const alertEvents = data.map(a => {
           const isAllDay = !a.due_date.includes('T') || a.due_date.endsWith('T00:00:00') || a.due_date.endsWith('T00:00:00.000Z') || a.due_date.endsWith('T00:00:00Z');
-          let start = new Date(a.due_date);
-          let end = start;
+          let startEv = new Date(a.due_date);
+          let endEv = startEv;
           
           if (isAllDay) {
-            start = new Date(start.getFullYear(), start.getMonth(), start.getDate(), 12, 0, 0);
-            end = start;
+            startEv = new Date(startEv.getFullYear(), startEv.getMonth(), startEv.getDate(), 12, 0, 0);
+            endEv = startEv;
           } else {
-            end = new Date(start.getTime() + 30 * 60000); // 30 minutes duration for visual purpose
+            endEv = new Date(startEv.getTime() + 30 * 60000); // 30 minutes duration for visual purpose
           }
 
           return {
             id: a.id,
             title: `${a.alert_type}: ${a.animal_name} (${a.product_name})`,
-            start: start,
-            end: end,
+            start: startEv,
+            end: endEv,
             allDay: isAllDay,
             status: 'Alerta',
             isAlert: true,
@@ -134,7 +134,28 @@ export default function CalendarioPanel() {
     } catch (err) {
       console.error("Error fetching calendar data:", err);
     }
-  };
+  }, [token]);
+
+  const handleCalendarRangeChange = useCallback((range) => {
+    // month view: Date[]; week/day: { start, end }
+    let start;
+    let end;
+    if (Array.isArray(range)) {
+      start = range[0];
+      end = range[range.length - 1];
+    } else if (range?.start && range?.end) {
+      start = range.start;
+      end = range.end;
+    }
+    if (start && end) {
+      fetchReservationsAndAlerts(start, end);
+    }
+  }, [fetchReservationsAndAlerts]);
+
+  useEffect(() => {
+    fetchAnimals();
+    fetchReservationsAndAlerts();
+  }, [fetchReservationsAndAlerts]);
 
   const selectableAnimals = useMemo(() => {
     // Vet / baño: solo mascotas de guardería
@@ -417,6 +438,7 @@ export default function CalendarioPanel() {
             eventPropGetter={eventStyleGetter}
             date={currentDate}
             onNavigate={(newDate) => setCurrentDate(newDate)}
+            onRangeChange={handleCalendarRangeChange}
             view={currentView}
             onView={(newView) => setCurrentView(newView)}
             culture="es"

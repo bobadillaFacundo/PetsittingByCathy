@@ -47,7 +47,9 @@ export default function MedicacionTab({ animalId }) {
       ...newMed,
       amount_per_day: newMed.amount_per_day || null,
       duration_days: newMed.duration_days ? parseInt(newMed.duration_days) : null,
-      schedules: newMed.schedules ? newMed.schedules.filter(t => t.trim() !== '') : []
+      schedules: (newMed.schedules || [])
+        .map(t => (t || '').trim().slice(0, 5))
+        .filter(t => t !== '')
     };
 
     try {
@@ -149,10 +151,11 @@ export default function MedicacionTab({ animalId }) {
             <div key={index} className="flex gap-2 items-center">
               <input
                 type="time"
-                value={time}
+                value={time ? time.slice(0, 5) : ''}
                 onChange={e => {
                   const newSchedules = [...(newMed.schedules || [''])];
-                  newSchedules[index] = e.target.value;
+                  // Normalizar a HH:MM (algunos browsers mandan HH:MM:SS)
+                  newSchedules[index] = (e.target.value || '').slice(0, 5);
                   setNewMed({...newMed, schedules: newSchedules});
                 }}
                 className="w-32 border rounded-lg p-2 text-sm"
