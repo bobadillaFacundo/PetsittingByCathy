@@ -400,6 +400,34 @@ def edit_report_transcript(
     }
 
 
+@router.delete("/{report_id}", status_code=204)
+def delete_report_physically(
+    report_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Borra el reporte de la BD (físico), con eventos, adjuntos y alertas asociadas."""
+    from src.models.models import ReportMedication, CriticalAlert
+    from src.services.storage_service import delete_by_url
+
+    report = db.query(Report).filter(Report.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Reporte no encontrado")
+
+    attachments = db.query(Attachment).filter(Attachment.report_id == report_id).all()
+    for att in attachments:
+        delete_by_url(att.file_url)
+        db.delete(att)
+
+    db.query(ReportEvent).filter(ReportEvent.report_id == report_id).delete(synchronize_session=False)
+    db.query(ReportMedication).filter(ReportMedication.report_id == report_id).delete(synchronize_session=False)
+    db.query(CriticalAlert).filter(CriticalAlert.report_id == report_id).delete(synchronize_session=False)
+
+    db.delete(report)
+    db.commit()
+    return None
+
+
 @router.post("/{report_id}/attach-photo")
 async def attach_photo_to_report(
     report_id: int,

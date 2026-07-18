@@ -127,3 +127,32 @@ class TestReportsList:
         reports = res.json()
         assert isinstance(reports, list)
         assert any(r["animal_name"] == "Kira" for r in reports)
+
+
+@pytest.mark.api
+class TestReportsDelete:
+    def test_delete_report_physically(self, client, auth_headers, seed, sample_report, db):
+        from src.models.models import Report, ReportEvent, Attachment
+        rid = sample_report.id
+        db.add(Attachment(
+            animal_id=seed["animal"].id,
+            report_id=rid,
+            file_type="image",
+            file_url="/uploads/photos/fake.jpg",
+        ))
+        db.commit()
+
+        res = client.delete(f"/reports/{rid}", headers=auth_headers)
+        assert res.status_code == 204
+
+        assert db.query(Report).filter(Report.id == rid).first() is None
+        assert db.query(ReportEvent).filter(ReportEvent.report_id == rid).count() == 0
+        assert db.query(Attachment).filter(Attachment.report_id == rid).count() == 0
+
+    def test_delete_report_not_found(self, client, auth_headers):
+        res = client.delete("/reports/99999", headers=auth_headers)
+        assert res.status_code == 404
+
+    def test_delete_requires_auth(self, client, sample_report):
+        res = client.delete(f"/reports/{sample_report.id}")
+        assert res.status_code == 401

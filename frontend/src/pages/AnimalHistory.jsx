@@ -125,6 +125,26 @@ export default function AnimalHistory({ animalId = 1 }) {
     }
   };
 
+  const deleteReport = async (report) => {
+    const when = new Date(report.created_at).toLocaleString('es-AR');
+    if (!window.confirm(`¿Eliminar definitivamente este reporte del ${when}?\n\nEsta acción no se puede deshacer.`)) return;
+    try {
+      const res = await fetch(`https://petsittingbycathy.onrender.com/reports/${report.id}`, {
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` },
+      });
+      if (!res.ok) throw new Error("Error al eliminar");
+      if (editingReport === report.id) {
+        setEditingReport(null);
+        setEditTranscript("");
+      }
+      fetchHistory();
+    } catch (err) {
+      console.error(err);
+      alert("No se pudo eliminar el reporte. Intenta de nuevo.");
+    }
+  };
+
   if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse font-medium">Cargando historial clínico...</div>;
   if (!data || !data.animal) return <div className="p-8 text-center text-red-500 font-medium">No se encontró historial para este animal.</div>;
 
@@ -235,6 +255,13 @@ export default function AnimalHistory({ animalId = 1 }) {
                     className="text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg border border-indigo-200 transition"
                   >
                     ✏️ Editar
+                  </button>
+                  <button
+                    onClick={() => deleteReport(report)}
+                    className="text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 px-2.5 py-1 rounded-lg border border-red-200 transition"
+                    title="Eliminar reporte de forma permanente"
+                  >
+                    🗑️ Eliminar
                   </button>
                   <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Por {report.user_name}</span>
                 </div>

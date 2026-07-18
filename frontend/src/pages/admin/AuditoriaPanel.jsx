@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, RefreshCw, Activity, CheckCircle2, Filter, Mic, Square, Download, Database, Sun, CloudSun, AlertTriangle, X } from 'lucide-react';
+import { Send, RefreshCw, Activity, CheckCircle2, Filter, Mic, Square, Download, Database, Sun, CloudSun, AlertTriangle, X, Trash2 } from 'lucide-react';
 import VoiceRecorder from '../../components/VoiceRecorder';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
@@ -151,6 +151,22 @@ export default function AuditoriaPanel() {
       created_at: r.created_at,
       user_name: r.user_name,
     });
+  };
+
+  const deleteReport = async (r) => {
+    const when = new Date(r.created_at).toLocaleString('es-AR');
+    if (!window.confirm(`¿Eliminar definitivamente el reporte de ${r.animal_name} (${when})?\n\nSe borra de la base de datos. No se puede deshacer.`)) return;
+    try {
+      const res = await fetch(`https://petsittingbycathy.onrender.com/reports/${r.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      });
+      if (!res.ok) throw new Error('Error al eliminar');
+      setReports((prev) => prev.filter((x) => x.id !== r.id));
+    } catch (err) {
+      console.error(err);
+      alert('No se pudo eliminar el reporte.');
+    }
   };
 
   const filteredReports = useMemo(() => {
@@ -487,6 +503,7 @@ export default function AuditoriaPanel() {
                         <th className="px-6 py-4 font-medium">Reporte Original (Transcripción)</th>
                         <th className="px-6 py-4 font-medium w-64">Síntomas / Hallazgos</th>
                         <th className="px-6 py-4 font-medium w-32">Autor</th>
+                        <th className="px-4 py-4 font-medium w-20 text-center">Acciones</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 bg-white">
@@ -536,6 +553,16 @@ export default function AuditoriaPanel() {
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-500 font-bold">
                             <div className="bg-gray-100 inline-block px-2 py-1 rounded-md">{r.user_name}</div>
+                          </td>
+                          <td className="px-4 py-4 text-center">
+                            <button
+                              type="button"
+                              onClick={() => deleteReport(r)}
+                              className="inline-flex items-center justify-center p-2 rounded-lg text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors"
+                              title="Eliminar reporte definitivamente"
+                            >
+                              <Trash2 size={16} />
+                            </button>
                           </td>
                         </tr>
                         );
@@ -602,7 +629,17 @@ export default function AuditoriaPanel() {
 
                       <div className="flex justify-between items-center pt-3 border-t border-gray-50 mt-auto">
                         <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Autor</span>
-                        <span className="text-xs font-bold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-lg">{r.user_name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-lg">{r.user_name}</span>
+                          <button
+                            type="button"
+                            onClick={() => deleteReport(r)}
+                            className="inline-flex items-center justify-center p-2 rounded-lg text-red-600 bg-red-50 hover:bg-red-100 border border-red-200"
+                            title="Eliminar reporte definitivamente"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       </div>
                     </div>
                     );
