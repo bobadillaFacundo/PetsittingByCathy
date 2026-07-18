@@ -14,7 +14,7 @@ services:
         value: "3.11.0"
 
       # ── JWT ───────────────────────────────────────────────────────────────
-      - key: SECRET_KEY
+      - key: f5e3400ff1cf118e40eb8d84da2944c26bd842fdb5a1c4d162c0ddfc56b158c4
         sync: false           # se carga desde Render Dashboard > Environment
 
       # ── Supabase (Base de datos relacional) ───────────────────────────────
