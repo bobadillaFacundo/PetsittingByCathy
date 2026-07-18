@@ -1,4 +1,4 @@
-"""Persistencia de archivos en Supabase Storage (evita el disco efímero de Render)."""
+"""Persistencia de archivos en Supabase Storage (API HTTP directa; evita bugs del SDK)."""
 from __future__ import annotations
 
 import mimetypes
@@ -6,7 +6,7 @@ import os
 import tempfile
 import uuid
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 import requests
 from dotenv import load_dotenv
@@ -20,24 +20,24 @@ SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY") or ""
 # Bucket público por defecto. Crearlo en Supabase → Storage → New bucket → Public.
 DEFAULT_BUCKET = os.getenv("SUPABASE_STORAGE_BUCKET", "uploads")
 
-_client = None
-
 
 def storage_configured() -> bool:
     return bool(SUPABASE_URL and (SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY))
 
 
-def _get_client():
-    global _client
-    if _client is not None:
-        return _client
-    if not storage_configured():
-        return None
-    from supabase import create_client
+def _api_key() -> str:
+    return SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY
 
-    key = SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY
-    _client = create_client(SUPABASE_URL, key)
-    return _client
+
+def _auth_headers(extra: Optional[dict] = None) -> dict:
+    key = _api_key()
+    headers = {
+        "Authorization": f"Bearer {key}",
+        "apikey": key,
+    }
+    if extra:
+        headers.update(extra)
+    return headers
 
 
 def _content_type(filename: str, fallback: str = "application/octet-stream") -> str:
@@ -49,13 +49,33 @@ def _public_url(bucket: str, path: str) -> str:
     return f"{SUPABASE_URL}/storage/v1/object/public/{bucket}/{path}"
 
 
-def _ensure_bucket(client, bucket: str) -> None:
+def _ensure_bucket(bucket: str) -> None:
+    """Crea el bucket público si no existe (idempotente)."""
     try:
-        existing = {b.name for b in client.storage.list_buckets()}
-        if bucket not in existing:
-            client.storage.create_bucket(bucket, options={"public": True})
+        list_resp = requests.get(
+            f"{SUPABASE_URL}/storage/v1/bucket",
+            headers=_auth_headers(),
+            timeout=30,
+        )
+        if list_resp.ok:
+            buckets = list_resp.json()
+            names = {
+                (b.get("name") if isinstance(b, dict) else getattr(b, "name", None))
+                for b in (buckets or [])
+            }
+            if bucket in names:
+                return
+
+        create_resp = requests.post(
+            f"{SUPABASE_URL}/storage/v1/bucket",
+            headers=_auth_headers({"Content-Type": "application/json"}),
+            json={"id": bucket, "name": bucket, "public": True},
+            timeout=30,
+        )
+        # 200/201 ok; 409 already exists
+        if create_resp.status_code not in (200, 201, 409):
+            print(f"ensure_bucket({bucket}): {create_resp.status_code} {create_resp.text}")
     except Exception as e:
-        # Si ya existe o no hay permisos, el upload fallará con un error más claro
         print(f"ensure_bucket({bucket}): {e}")
 
 
@@ -75,14 +95,24 @@ def upload_bytes(
     object_path = f"{folder.strip('/')}/{filename}"
     mime = content_type or _content_type(original_filename or filename)
 
-    client = _get_client()
-    if client is not None:
-        _ensure_bucket(client, bucket)
-        client.storage.from_(bucket).upload(
-            object_path,
-            data,
-            file_options={"content-type": mime, "upsert": "false"},
+    if storage_configured():
+        _ensure_bucket(bucket)
+        # Path segments encoded individually (keep '/')
+        encoded_path = "/".join(quote(part, safe="") for part in object_path.split("/"))
+        url = f"{SUPABASE_URL}/storage/v1/object/{bucket}/{encoded_path}"
+        resp = requests.post(
+            url,
+            data=data,
+            headers=_auth_headers({
+                "Content-Type": mime,
+                "x-upsert": "false",
+            }),
+            timeout=120,
         )
+        if resp.status_code not in (200, 201):
+            raise RuntimeError(
+                f"Error Supabase Storage ({resp.status_code}): {resp.text[:500]}"
+            )
         return _public_url(bucket, object_path)
 
     # En Render el disco es efímero: no permitir fallback silencioso a local
@@ -110,10 +140,14 @@ def delete_by_url(url: Optional[str], bucket: str = DEFAULT_BUCKET) -> None:
         prefix = f"{SUPABASE_URL}/storage/v1/object/public/{bucket}/"
         if url.startswith(prefix):
             object_path = url[len(prefix):]
-            client = _get_client()
-            if client is not None:
+            if storage_configured():
+                encoded_path = "/".join(quote(part, safe="") for part in object_path.split("/"))
                 try:
-                    client.storage.from_(bucket).remove([object_path])
+                    requests.delete(
+                        f"{SUPABASE_URL}/storage/v1/object/{bucket}/{encoded_path}",
+                        headers=_auth_headers(),
+                        timeout=30,
+                    )
                 except Exception as e:
                     print(f"Failed to delete storage object: {e}")
         return
