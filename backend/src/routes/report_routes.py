@@ -17,6 +17,7 @@ from sqlalchemy.orm import joinedload
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
 from datetime import datetime, timedelta
+from src.timezone_ar import now_ar, today_ar
 from pydantic import BaseModel
 from typing import List, Optional, Any
 import os
@@ -60,7 +61,7 @@ async def analyze_and_confirm_batch(
 @router.post("/recalculate-alerts")
 def recalculate_alerts(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     # 1. Obtener reportes de las últimas 48 hs
-    yesterday = datetime.utcnow() - timedelta(hours=48)
+    yesterday = now_ar() - timedelta(hours=48)
     recent_reports = db.query(Report).filter(Report.created_at >= yesterday).all()
 
     # 2. Borrar alertas críticas no resueltas de los últimos 2 días (para no duplicar)
@@ -200,7 +201,7 @@ def confirm_report(
                     catalog = DiagnosisCatalog(name=diag_name)
                     db.add(catalog)
                     db.flush()
-                animal_diag = AnimalDiagnosis(animal_id=animal.id, diagnosis_id=catalog.id, date_diagnosed=datetime.utcnow())
+                animal_diag = AnimalDiagnosis(animal_id=animal.id, diagnosis_id=catalog.id, date_diagnosed=today_ar())
                 db.add(animal_diag)
                 
             elif table_name == "AnimalMedication":
@@ -319,7 +320,7 @@ def _apply_inserts_to_report(db, report, animal, inserts):
                 catalog = DiagnosisCatalog(name=diag_name)
                 db.add(catalog)
                 db.flush()
-            db.add(AnimalDiagnosis(animal_id=animal.id, diagnosis_id=catalog.id, date_diagnosed=datetime.utcnow()))
+            db.add(AnimalDiagnosis(animal_id=animal.id, diagnosis_id=catalog.id, date_diagnosed=today_ar()))
         elif table_name == "AnimalMedication":
             med_name = fields.get("medication_name")
             if not med_name:
@@ -416,17 +417,15 @@ async def attach_photo_to_report(
     if ext not in allowed:
         raise HTTPException(status_code=400, detail="Formato de imagen no soportado")
 
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    photos_dir = os.path.join(base_dir, "uploads", "photos")
-    os.makedirs(photos_dir, exist_ok=True)
-
-    filename = f"{uuid.uuid4()}{ext}"
-    file_path = os.path.join(photos_dir, filename)
+    from src.services.storage_service import upload_bytes
     content = await photo.read()
-    with open(file_path, "wb") as f:
-        f.write(content)
+    file_url = upload_bytes(
+        content,
+        folder="photos",
+        original_filename=photo.filename or f"photo{ext}",
+        content_type=photo.content_type,
+    )
 
-    file_url = f"/uploads/photos/{filename}"
     attachment = Attachment(
         animal_id=report.animal_id,
         report_id=report_id,
@@ -495,7 +494,7 @@ def export_pdf(
     if range == "9months": days = 270
     if range == "1year": days = 365
     
-    threshold_date = datetime.utcnow() - timedelta(days=days)
+    threshold_date = now_ar() - timedelta(days=days)
     
     reports = db.query(Report).filter(Report.animal_id == animal_id, Report.created_at >= threshold_date).order_by(Report.created_at.asc()).all()
     
@@ -517,22 +516,27 @@ def export_pdf(
     ).all()
 
     lab_results_data = []
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from src.services.storage_service import resolve_local_path_or_download
     for lab in labs:
         doc_url = lab.document_url
         if not doc_url: continue
-        # doc_url: "/uploads/labs/filename.pdf"
-        file_name = os.path.basename(doc_url)
-        file_path = os.path.join(base_dir, "uploads", "labs", file_name)
-        
+
+        file_path = resolve_local_path_or_download(doc_url)
         extracted_text = ""
-        if os.path.exists(file_path) and file_path.endswith(".pdf"):
+        if file_path and file_path.lower().endswith(".pdf"):
             try:
                 reader = pypdf.PdfReader(file_path)
                 text_pages = [page.extract_text() for page in reader.pages if page.extract_text()]
                 extracted_text = "\n".join(text_pages)
             except Exception as e:
                 extracted_text = f"[Error leyendo PDF: {e}]"
+            finally:
+                # Limpiar temporales descargados de Supabase
+                if doc_url.startswith("http") and file_path and os.path.exists(file_path):
+                    try:
+                        os.remove(file_path)
+                    except Exception:
+                        pass
                 
         if extracted_text:
             lab_results_data.append(f"Estudio: {lab.laboratory.name if lab.laboratory else 'Laboratorio'} - Fecha: {lab.date}\nContenido PDF:\n{extracted_text}\n---")
@@ -547,7 +551,7 @@ def export_pdf(
     pdf.set_font("Helvetica", 'B', 16)
     pdf.cell(200, 10, text=f"Historia Clinica: {animal.name}", new_x="LMARGIN", new_y="NEXT", align='C')
     pdf.set_font("Helvetica", size=10)
-    pdf.cell(200, 10, text=f"Generado el {datetime.utcnow().strftime('%Y-%m-%d')} - Periodo evaluado: ultimos {days} dias", new_x="LMARGIN", new_y="NEXT", align='C')
+    pdf.cell(200, 10, text=f"Generado el {today_ar().strftime('%Y-%m-%d')} - Periodo evaluado: ultimos {days} dias", new_x="LMARGIN", new_y="NEXT", align='C')
     pdf.ln(10)
     
     pdf.set_font("Helvetica", size=12)

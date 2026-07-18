@@ -45,6 +45,7 @@ export default function MedicacionTab({ animalId }) {
 
     const payload = {
       ...newMed,
+      amount_per_day: newMed.amount_per_day || null,
       duration_days: newMed.duration_days ? parseInt(newMed.duration_days) : null,
       schedules: newMed.schedules ? newMed.schedules.filter(t => t.trim() !== '') : []
     };

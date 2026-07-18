@@ -92,3 +92,98 @@ class TestHealthRecord:
         res = client.get(f"/animals/{seed['animal'].id}/health_record")
         assert res.status_code == 200
         assert res.json()["animal_id"] == seed["animal"].id
+
+
+@pytest.mark.api
+class TestVaccinesFrontendPayload:
+    """Simula el payload del frontend (IDs string / veterinario vacío)."""
+
+    def test_add_vaccine_with_empty_vet_and_string_ids(self, client, auth_headers, seed, db):
+        from src.models.models import VaccineCatalog, Vaccine
+        vc = VaccineCatalog(name="Antirrábica Payload")
+        db.add(vc)
+        db.commit()
+
+        payload = {
+            "vaccine_id": str(vc.id),
+            "date_administered": "",
+            "next_due_date": "",
+            "lot_number": "",
+            "veterinarian_id": "",
+        }
+        res = client.post(
+            f"/animals/{seed['animal'].id}/vaccines",
+            json=payload,
+            headers=auth_headers,
+        )
+        assert res.status_code == 200, res.text
+
+        saved = db.query(Vaccine).filter(Vaccine.vaccine_id == vc.id).all()
+        assert len(saved) == 1
+        assert saved[0].veterinarian_id is None
+        assert saved[0].date_administered is not None
+
+        listed = client.get(f"/animals/{seed['animal'].id}/vaccines").json()
+        assert any(v["vaccine_id"] == vc.id for v in listed)
+
+
+@pytest.mark.api
+class TestLabResultsPersistence:
+    def test_add_and_list_lab_result(self, client, auth_headers, seed, db):
+        from src.models.models import LaboratoryCatalog, LabResult
+        lab_cat = LaboratoryCatalog(name="Hemograma Persist")
+        db.add(lab_cat)
+        db.commit()
+
+        payload = {
+            "laboratory_id": str(lab_cat.id),
+            "date": "2025-06-01",
+            "document_url": "https://example.com/lab.pdf",
+        }
+        res = client.post(
+            f"/animals/{seed['animal'].id}/lab_results",
+            json=payload,
+            headers=auth_headers,
+        )
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert body["document_url"] == "https://example.com/lab.pdf"
+        assert body["laboratory"]["name"] == "Hemograma Persist"
+
+        in_db = db.query(LabResult).filter(LabResult.animal_id == seed["animal"].id).all()
+        assert len(in_db) >= 1
+
+        listed = client.get(f"/animals/{seed['animal'].id}/lab_results").json()
+        assert any(l["laboratory_id"] == lab_cat.id for l in listed)
+
+
+@pytest.mark.api
+class TestMedicationsPersistence:
+    def test_add_and_list_medication(self, client, auth_headers, seed, db):
+        from src.models.models import AnimalMedication
+        payload = {
+            "medication_name": "Amoxicilina",
+            "dosage": "1 comprimido",
+            "frequency": "cada 12 hs",
+            "is_current": True,
+            "amount_per_day": None,
+            "duration_days": 7,
+            "is_forever": False,
+            "schedules": ["08:00", "20:00"],
+        }
+        res = client.post(
+            f"/animals/{seed['animal'].id}/medications",
+            json=payload,
+            headers=auth_headers,
+        )
+        assert res.status_code == 200, res.text
+
+        saved = db.query(AnimalMedication).filter(AnimalMedication.animal_id == seed["animal"].id).all()
+        assert len(saved) == 1
+
+        listed = client.get(
+            f"/animals/{seed['animal'].id}/medications",
+            headers=auth_headers,
+        ).json()
+        assert listed[0]["medication_name"] == "Amoxicilina"
+        assert listed[0]["schedules"] == ["08:00", "20:00"]

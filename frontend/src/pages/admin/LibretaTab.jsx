@@ -38,13 +38,20 @@ export default function LibretaTab({ animalId, token }) {
   const handleAdd = async () => {
     if (!newVaccine.vaccine_id) return alert("El nombre de la vacuna es obligatorio.");
     try {
+      const payload = {
+        vaccine_id: Number(newVaccine.vaccine_id),
+        date_administered: newVaccine.date_administered || null,
+        next_due_date: newVaccine.next_due_date || null,
+        lot_number: newVaccine.lot_number || null,
+        veterinarian_id: newVaccine.veterinarian_id ? Number(newVaccine.veterinarian_id) : null,
+      };
       const res = await fetch(`https://petsittingbycathy.onrender.com/animals/${animalId}/vaccines`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(newVaccine)
+        body: JSON.stringify(payload)
       });
       if (res.ok) {
         setNewVaccine({ vaccine_id: '', date_administered: '', next_due_date: '', lot_number: '', veterinarian_id: '' });

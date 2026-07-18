@@ -1,10 +1,10 @@
 """Utilidades compartidas para reportes: severidad y alertas críticas."""
 
-from datetime import datetime
 from typing import Optional
 from sqlalchemy.orm import Session
 from src.models.models import CriticalAlert, Animal
 from src.services.tag_helpers import load_color_rules, detect_keywords_in_text
+from src.timezone_ar import now_ar
 
 
 def calculate_severity_from_inserts(inserts: list) -> str:
@@ -83,7 +83,7 @@ def resolve_critical_alert(db: Session, alert_id: int) -> Optional[CriticalAlert
     if not alert:
         return None
     alert.is_resolved = True
-    alert.resolved_at = datetime.utcnow()
+    alert.resolved_at = now_ar()
     return alert
 
 

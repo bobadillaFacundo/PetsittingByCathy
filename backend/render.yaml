@@ -26,6 +26,10 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: "uploads"
+      - key: TZ
+        value: "America/Argentina/Buenos_Aires"
 
       # ── Groq (STT + NLP) ──────────────────────────────────────────────────
       - key: GROQ_API_KEY

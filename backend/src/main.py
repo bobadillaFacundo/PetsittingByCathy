@@ -2,7 +2,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
+from src.timezone_ar import force_process_timezone
 from src.routes import animal_routes, report_routes, chat_routes, dashboard_routes, auth_routes, catalog_routes, user_routes, reservation_routes, calendar_routes
+
+force_process_timezone()
 
 app = FastAPI(title="Asistente Veterinario API", version="1.0.0")
 

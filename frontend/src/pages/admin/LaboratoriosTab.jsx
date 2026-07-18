@@ -5,8 +5,9 @@ export default function LaboratoriosTab({ animalId, token }) {
   const [labs, setLabs] = useState([]);
   const [catalogs, setCatalogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
   const [newLab, setNewLab] = useState({ date: '', laboratory_id: '' });
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedFiles, setSelectedFiles] = useState([]);
 
   const fetchLabs = async () => {
     try {
@@ -31,16 +32,18 @@ export default function LaboratoriosTab({ animalId, token }) {
   }, [animalId]);
 
   const handleAdd = async () => {
-    if (!selectedFile) return alert("Debes seleccionar un archivo PDF o imagen.");
+    if (!selectedFiles.length) return alert("Debes seleccionar al menos un archivo PDF o imagen.");
     if (!newLab.laboratory_id) return alert("Debes seleccionar el tipo de estudio.");
-    
-    const formData = new FormData();
-    formData.append("file", selectedFile);
-    formData.append("laboratory_id", newLab.laboratory_id);
-    if (newLab.date) formData.append("date", newLab.date);
 
+    const formData = new FormData();
+    selectedFiles.forEach((file) => formData.append("files", file));
+
+    const params = new URLSearchParams({ laboratory_id: String(newLab.laboratory_id) });
+    if (newLab.date) params.set('date', newLab.date);
+
+    setUploading(true);
     try {
-      const res = await fetch(`https://petsittingbycathy.onrender.com/animals/${animalId}/lab_results/upload?laboratory_id=${newLab.laboratory_id}&date=${newLab.date}`, {
+      const res = await fetch(`https://petsittingbycathy.onrender.com/animals/${animalId}/lab_results/upload?${params}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -48,17 +51,24 @@ export default function LaboratoriosTab({ animalId, token }) {
         body: formData
       });
       if (res.ok) {
+        const data = await res.json();
         setNewLab({ date: '', laboratory_id: '' });
-        setSelectedFile(null);
-        // Reseteamos el input file
+        setSelectedFiles([]);
         const fileInput = document.getElementById('labFileInput');
         if (fileInput) fileInput.value = '';
         fetchLabs();
+        if (data.errors?.length) {
+          alert(`Se subieron ${data.count} archivo(s). Algunos fallaron:\n${data.errors.join('\n')}`);
+        }
       } else {
-        alert("Error al subir el archivo de laboratorio");
+        const err = await res.json().catch(() => ({}));
+        alert(err.detail || "Error al subir los archivos de laboratorio");
       }
     } catch (err) {
       console.error(err);
+      alert("Error de conexión al subir archivos");
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -99,13 +109,29 @@ export default function LaboratoriosTab({ animalId, token }) {
           </div>
         </div>
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Subir Archivo PDF o Imagen</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Subir archivos PDF o imágenes (varios a la vez)</label>
             <div className="flex flex-col sm:flex-row gap-2">
-              <input type="file" id="labFileInput" accept=".pdf,image/*" onChange={e => setSelectedFile(e.target.files[0])} className="flex-1 text-sm file:mr-4 file:py-1.5 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 border border-gray-200 rounded-lg p-1 text-gray-900 w-full" />
-              <button onClick={handleAdd} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-1 w-full sm:w-auto">
-                <Plus size={16} /> Subir
+              <input
+                type="file"
+                id="labFileInput"
+                accept=".pdf,image/*"
+                multiple
+                onChange={e => setSelectedFiles(Array.from(e.target.files || []))}
+                className="flex-1 text-sm file:mr-4 file:py-1.5 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 border border-gray-200 rounded-lg p-1 text-gray-900 w-full"
+              />
+              <button
+                onClick={handleAdd}
+                disabled={uploading}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-1 w-full sm:w-auto disabled:opacity-60"
+              >
+                <Plus size={16} /> {uploading ? 'Subiendo...' : 'Subir'}
               </button>
             </div>
+            {selectedFiles.length > 0 && (
+              <p className="text-xs text-gray-500 mt-1">
+                {selectedFiles.length} archivo(s): {selectedFiles.map(f => f.name).join(', ')}
+              </p>
+            )}
           </div>
         </div>
 
@@ -116,11 +142,11 @@ export default function LaboratoriosTab({ animalId, token }) {
               <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
                 <FileText size={20} />
               </div>
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <h5 className="font-bold text-gray-900 text-sm">{lab.laboratory?.name || 'Estudio de laboratorio'}</h5>
                 <p className="text-xs text-gray-500">Fecha: {lab.date}</p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <a href={lab.document_url.startsWith('http') ? lab.document_url : `https://petsittingbycathy.onrender.com${lab.document_url}`} target="_blank" rel="noreferrer" className="text-blue-600 bg-blue-50 hover:bg-blue-100 p-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors">
                   <LinkIcon size={16} /> Ver Archivo
                 </a>

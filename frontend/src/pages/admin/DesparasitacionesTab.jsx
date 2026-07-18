@@ -44,6 +44,12 @@ export default function DesparasitacionesTab({ animalId, token }) {
       ? `https://petsittingbycathy.onrender.com/animals/${animalId}/internal_dewormings`
       : `https://petsittingbycathy.onrender.com/animals/${animalId}/external_dewormings`;
 
+    const payload = {
+      product_id: Number(data.product_id),
+      date: data.date || null,
+      next_due_date: data.next_due_date || null,
+    };
+
     try {
       const res = await fetch(url, {
         method: 'POST',
@@ -51,7 +57,7 @@ export default function DesparasitacionesTab({ animalId, token }) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(data)
+        body: JSON.stringify(payload)
       });
       if (res.ok) {
         setter({ date: '', product_id: '', next_due_date: '' });

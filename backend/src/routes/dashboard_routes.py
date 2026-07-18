@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from datetime import datetime, timedelta
+from src.timezone_ar import now_ar, today_ar
 from pydantic import BaseModel
 from typing import List, Optional
 
@@ -48,7 +49,7 @@ def get_dashboard(db: Session = Depends(get_db)):
     from src.models.models import Vaccine, Deworming, HealthRecord, VaccineCatalog, VeterinaryProduct
     from sqlalchemy.orm import joinedload
     
-    threshold_date = datetime.utcnow().date() + timedelta(days=15)
+    threshold_date = today_ar() + timedelta(days=15)
     
     # Vacunas — solo la última por animal+vacuna (evita duplicados)
     latest_vaccine_ids = (
@@ -70,7 +71,7 @@ def get_dashboard(db: Session = Depends(get_db)):
             if hr:
                 animal = db.query(Animal).filter(Animal.id == hr.animal_id, Animal.is_active == True).first()
                 if animal:
-                    days_left = (v.next_due_date - datetime.utcnow().date()).days
+                    days_left = (v.next_due_date - today_ar()).days
                     msg = f"Vacuna vence en {days_left} días" if days_left >= 0 else f"Vacuna VENCIDA hace {-days_left} días"
                     alerts_list.append(AlertDTO(
                         animal_id=animal.id,
@@ -98,7 +99,7 @@ def get_dashboard(db: Session = Depends(get_db)):
         for de in expiring_dewormings:
             animal = db.query(Animal).filter(Animal.id == de.animal_id, Animal.is_active == True).first()
             if animal:
-                days_left = (de.next_due_date - datetime.utcnow().date()).days
+                days_left = (de.next_due_date - today_ar()).days
                 tipo = "Interna" if de.product and de.product.type == "INTERNAL" else "Externa"
                 msg = f"Desparasitación {tipo} vence en {days_left} días" if days_left >= 0 else f"Desparasitación {tipo} VENCIDA hace {-days_left} días"
                 alerts_list.append(AlertDTO(
@@ -140,7 +141,7 @@ def get_weather_report(db: Session = Depends(get_db)):
     from src.services.audio_service import NLPService
     
     # Obtener reportes de las últimas 48hs
-    yesterday = datetime.utcnow() - timedelta(hours=48)
+    yesterday = now_ar() - timedelta(hours=48)
     recent_reports = db.query(Report).filter(Report.created_at >= yesterday).all()
     
     if not recent_reports:

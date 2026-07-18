@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Float, Text, Date, UniqueConstraint, Time
 from sqlalchemy.orm import relationship
-from datetime import datetime
 from src.database.session import Base
+from src.timezone_ar import now_ar, today_ar
 
 # ----------------- CONFIGURACIÓN IA (1FN normalizada) ----------------- #
 
@@ -185,7 +185,7 @@ class LabResult(Base):
     id = Column(Integer, primary_key=True, index=True)
     animal_id = Column(Integer, ForeignKey("animals.id"), nullable=False)
     laboratory_id = Column(Integer, ForeignKey("laboratory_catalog.id"), nullable=False)
-    date = Column(Date, default=datetime.utcnow, nullable=False)
+    date = Column(Date, default=today_ar, nullable=False)
     document_url = Column(String, nullable=False)
 
     animal = relationship("Animal", back_populates="lab_results")
@@ -198,7 +198,7 @@ class Deworming(Base):
     id = Column(Integer, primary_key=True, index=True)
     animal_id = Column(Integer, ForeignKey("animals.id"), nullable=False)
     product_id = Column(Integer, ForeignKey("veterinary_products.id"), nullable=False)
-    date = Column(Date, default=datetime.utcnow, nullable=False)
+    date = Column(Date, default=today_ar, nullable=False)
     next_due_date = Column(Date, nullable=True)
 
     animal = relationship("Animal", back_populates="dewormings")
@@ -209,7 +209,7 @@ class HealthRecord(Base):
     __tablename__ = "health_records"
     id = Column(Integer, primary_key=True, index=True)
     animal_id = Column(Integer, ForeignKey("animals.id"), unique=True, nullable=False)
-    creation_date = Column(Date, default=datetime.utcnow, nullable=False)
+    creation_date = Column(Date, default=today_ar, nullable=False)
     notes = Column(String, nullable=True)
 
     animal = relationship("Animal", back_populates="health_record")
@@ -221,7 +221,7 @@ class Vaccine(Base):
     id = Column(Integer, primary_key=True, index=True)
     health_record_id = Column(Integer, ForeignKey("health_records.id"), nullable=False)
     vaccine_id = Column(Integer, ForeignKey("vaccine_catalog.id"), nullable=False)
-    date_administered = Column(Date, default=datetime.utcnow, nullable=False)
+    date_administered = Column(Date, default=today_ar, nullable=False)
     next_due_date = Column(Date, nullable=True)
     lot_number = Column(String, nullable=True)
     veterinarian_id = Column(Integer, ForeignKey("veterinarians.id"), nullable=True)
@@ -318,7 +318,7 @@ class AnimalObservation(Base):
     id = Column(Integer, primary_key=True, index=True)
     animal_id = Column(Integer, ForeignKey("animals.id"), nullable=False)
     observation = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now_ar)
 
     animal = relationship("Animal", back_populates="observations")
 
@@ -327,7 +327,7 @@ class AnimalObservation(Base):
 class Report(Base):
     __tablename__ = "reports"
     id = Column(Integer, primary_key=True, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=now_ar, nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     animal_id = Column(Integer, ForeignKey("animals.id"), nullable=False)
     audio_transcript = Column(Text, nullable=True)
@@ -361,7 +361,7 @@ class ReportMedication(Base):
     id = Column(Integer, primary_key=True, index=True)
     report_id = Column(Integer, ForeignKey("reports.id"), nullable=False)
     animal_medication_id = Column(Integer, ForeignKey("animal_medications.id"), nullable=False)
-    time_administered = Column(DateTime, default=datetime.utcnow)
+    time_administered = Column(DateTime, default=now_ar)
     notes = Column(String, nullable=True)
 
     report = relationship("Report", back_populates="administered_meds")
@@ -376,7 +376,7 @@ class Attachment(Base):
     report_id = Column(Integer, ForeignKey("reports.id"), nullable=True)
     file_type = Column(String, nullable=False)
     file_url = Column(String, nullable=False)
-    uploaded_at = Column(DateTime, default=datetime.utcnow)
+    uploaded_at = Column(DateTime, default=now_ar)
 
     animal = relationship("Animal", back_populates="attachments")
     report = relationship("Report", back_populates="attachments")
@@ -390,7 +390,7 @@ class CriticalAlert(Base):
     keyword_detected = Column(String, nullable=False)
     severity = Column(String, default="red")
     is_resolved = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now_ar)
     resolved_at = Column(DateTime, nullable=True)
 
     animal = relationship("Animal")

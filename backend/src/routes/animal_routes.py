@@ -333,13 +333,40 @@ def get_evolution_analysis(animal_id: int, db: Session = Depends(get_db)):
 from typing import Any
 from sqlalchemy.orm import joinedload
 from src.models.models import LabResult, HealthRecord, Vaccine, VeterinaryProduct, LaboratoryCatalog, VaccineCatalog, Deworming, Veterinarian
+from src.timezone_ar import today_ar
+from datetime import datetime, date
+
+
+def _parse_optional_int(value):
+    if value is None or value == "":
+        return None
+    return int(value)
+
+
+def _parse_date(value, fallback=None):
+    if value is None or value == "":
+        return fallback
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    return datetime.strptime(str(value).strip(), "%Y-%m-%d").date()
+
+
+def _serialize_lab(item: LabResult) -> dict:
+    return {
+        "id": item.id,
+        "animal_id": item.animal_id,
+        "laboratory_id": item.laboratory_id,
+        "date": item.date.isoformat() if item.date else None,
+        "document_url": item.document_url,
+        "laboratory": {"id": item.laboratory.id, "name": item.laboratory.name} if item.laboratory else None,
+    }
+
 
 @router.get("/{animal_id}/health_record")
 def get_health_record(animal_id: int, db: Session = Depends(get_db)):
     record = db.query(HealthRecord).filter(HealthRecord.animal_id == animal_id).first()
     if not record:
-        from datetime import datetime
-        record = HealthRecord(animal_id=animal_id, creation_date=datetime.utcnow().date())
+        record = HealthRecord(animal_id=animal_id, creation_date=today_ar())
         db.add(record)
         db.commit()
         db.refresh(record)
@@ -357,8 +384,8 @@ def get_vaccines(animal_id: int, db: Session = Depends(get_db)):
     return [{
         "id": v.id,
         "vaccine_id": v.vaccine_id,
-        "date_administered": v.date_administered,
-        "next_due_date": v.next_due_date,
+        "date_administered": v.date_administered.isoformat() if v.date_administered else None,
+        "next_due_date": v.next_due_date.isoformat() if v.next_due_date else None,
         "lot_number": v.lot_number,
         "veterinarian_id": v.veterinarian_id,
         "veterinarian_name": v.veterinarian.name if v.veterinarian else None,
@@ -367,42 +394,57 @@ def get_vaccines(animal_id: int, db: Session = Depends(get_db)):
 
 @router.post("/{animal_id}/vaccines")
 def add_vaccine(animal_id: int, data: dict, db: Session = Depends(get_db)):
-    from datetime import datetime
     record = db.query(HealthRecord).filter(HealthRecord.animal_id == animal_id).first()
     if not record:
-        record = HealthRecord(animal_id=animal_id, creation_date=datetime.utcnow().date())
+        record = HealthRecord(animal_id=animal_id, creation_date=today_ar())
         db.add(record)
         db.commit()
         db.refresh(record)
 
-    vet_id = data.get("veterinarian_id")
+    vaccine_id = _parse_optional_int(data.get("vaccine_id"))
+    if not vaccine_id:
+        raise HTTPException(status_code=400, detail="vaccine_id es obligatorio")
+
+    vet_id = _parse_optional_int(data.get("veterinarian_id"))
     if not vet_id and data.get("veterinarian_name"):
-        vet_name = data["veterinarian_name"]
-        vet = db.query(Veterinarian).filter(Veterinarian.name == vet_name).first()
-        if not vet:
-            vet = Veterinarian(name=vet_name)
-            db.add(vet)
-            db.flush()
-        vet_id = vet.id
+        vet_name = str(data["veterinarian_name"]).strip()
+        if vet_name:
+            vet = db.query(Veterinarian).filter(Veterinarian.name == vet_name).first()
+            if not vet:
+                vet = Veterinarian(name=vet_name)
+                db.add(vet)
+                db.flush()
+            vet_id = vet.id
 
     vaccine = Vaccine(
         health_record_id=record.id,
-        vaccine_id=data["vaccine_id"],
-        date_administered=datetime.strptime(data["date_administered"], "%Y-%m-%d").date() if data.get("date_administered") else datetime.utcnow().date(),
-        next_due_date=datetime.strptime(data["next_due_date"], "%Y-%m-%d").date() if data.get("next_due_date") else None,
-        lot_number=data.get("lot_number"),
+        vaccine_id=vaccine_id,
+        date_administered=_parse_date(data.get("date_administered"), today_ar()),
+        next_due_date=_parse_date(data.get("next_due_date"), None),
+        lot_number=(data.get("lot_number") or None),
         veterinarian_id=vet_id,
     )
     db.add(vaccine)
     db.commit()
     db.refresh(vaccine)
-    return vaccine
+
+    # Devolver el mismo formato que el GET (persistido y legible)
+    return {
+        "id": vaccine.id,
+        "vaccine_id": vaccine.vaccine_id,
+        "date_administered": vaccine.date_administered.isoformat() if vaccine.date_administered else None,
+        "next_due_date": vaccine.next_due_date.isoformat() if vaccine.next_due_date else None,
+        "lot_number": vaccine.lot_number,
+        "veterinarian_id": vaccine.veterinarian_id,
+        "veterinarian_name": None,
+        "vaccine_catalog": None,
+    }
 
 def _serialize_deworming(item):
     return {
         "id": item.id,
-        "date": item.date,
-        "next_due_date": item.next_due_date,
+        "date": item.date.isoformat() if item.date else None,
+        "next_due_date": item.next_due_date.isoformat() if item.next_due_date else None,
         "product_id": item.product_id,
         "product": {"id": item.product.id, "name": item.product.name, "type": item.product.type} if item.product else None,
     }
@@ -422,16 +464,20 @@ def get_internal_dewormings(animal_id: int, db: Session = Depends(get_db)):
 
 @router.post("/{animal_id}/internal_dewormings")
 def add_internal_deworming(animal_id: int, data: dict, db: Session = Depends(get_db)):
-    from datetime import datetime
+    product_id = _parse_optional_int(data.get("product_id"))
+    if not product_id:
+        raise HTTPException(status_code=400, detail="product_id es obligatorio")
     item = Deworming(
         animal_id=animal_id,
-        date=datetime.strptime(data["date"], "%Y-%m-%d").date() if data.get("date") else datetime.utcnow().date(),
-        product_id=data["product_id"],
-        next_due_date=datetime.strptime(data["next_due_date"], "%Y-%m-%d").date() if data.get("next_due_date") else None,
+        date=_parse_date(data.get("date"), today_ar()),
+        product_id=product_id,
+        next_due_date=_parse_date(data.get("next_due_date"), None),
     )
     db.add(item)
     db.commit()
-    return item
+    db.refresh(item)
+    item = db.query(Deworming).options(joinedload(Deworming.product)).filter(Deworming.id == item.id).first()
+    return _serialize_deworming(item)
 
 @router.get("/{animal_id}/external_dewormings")
 def get_external_dewormings(animal_id: int, db: Session = Depends(get_db)):
@@ -440,34 +486,44 @@ def get_external_dewormings(animal_id: int, db: Session = Depends(get_db)):
 
 @router.post("/{animal_id}/external_dewormings")
 def add_external_deworming(animal_id: int, data: dict, db: Session = Depends(get_db)):
-    from datetime import datetime
+    product_id = _parse_optional_int(data.get("product_id"))
+    if not product_id:
+        raise HTTPException(status_code=400, detail="product_id es obligatorio")
     item = Deworming(
         animal_id=animal_id,
-        date=datetime.strptime(data["date"], "%Y-%m-%d").date() if data.get("date") else datetime.utcnow().date(),
-        product_id=data["product_id"],
-        next_due_date=datetime.strptime(data["next_due_date"], "%Y-%m-%d").date() if data.get("next_due_date") else None,
+        date=_parse_date(data.get("date"), today_ar()),
+        product_id=product_id,
+        next_due_date=_parse_date(data.get("next_due_date"), None),
     )
     db.add(item)
     db.commit()
-    return item
+    db.refresh(item)
+    item = db.query(Deworming).options(joinedload(Deworming.product)).filter(Deworming.id == item.id).first()
+    return _serialize_deworming(item)
 
 @router.get("/{animal_id}/lab_results")
 def get_lab_results(animal_id: int, db: Session = Depends(get_db)):
     items = db.query(LabResult).options(joinedload(LabResult.laboratory)).filter(LabResult.animal_id == animal_id).order_by(LabResult.date.desc()).all()
-    return items
+    return [_serialize_lab(i) for i in items]
 
 @router.post("/{animal_id}/lab_results")
 def add_lab_result(animal_id: int, data: dict, db: Session = Depends(get_db)):
-    from datetime import datetime
+    laboratory_id = _parse_optional_int(data.get("laboratory_id"))
+    if not laboratory_id:
+        raise HTTPException(status_code=400, detail="laboratory_id es obligatorio")
+    if not data.get("document_url"):
+        raise HTTPException(status_code=400, detail="document_url es obligatorio")
     item = LabResult(
         animal_id=animal_id,
-        date=datetime.strptime(data['date'], "%Y-%m-%d").date() if data.get('date') else datetime.utcnow().date(),
-        title=data.get('title'),
-        document_url=data['document_url']
+        date=_parse_date(data.get("date"), today_ar()),
+        laboratory_id=laboratory_id,
+        document_url=data["document_url"],
     )
     db.add(item)
     db.commit()
-    return item
+    db.refresh(item)
+    item = db.query(LabResult).options(joinedload(LabResult.laboratory)).filter(LabResult.id == item.id).first()
+    return _serialize_lab(item)
 
 @router.delete("/{animal_id}/lab_results/{lab_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_lab_result(animal_id: int, lab_id: int, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
@@ -475,45 +531,71 @@ def delete_lab_result(animal_id: int, lab_id: int, db: Session = Depends(get_db)
     if not db_lab:
         raise HTTPException(status_code=404, detail="Estudio no encontrado")
     
-    if db_lab.document_url and not db_lab.document_url.startswith("http"):
-        file_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), db_lab.document_url.lstrip('/'))
-        if os.path.exists(file_path):
-            try:
-                os.remove(file_path)
-            except Exception as e:
-                print(f"Failed to delete file: {e}")
+    from src.services.storage_service import delete_by_url
+    delete_by_url(db_lab.document_url)
                 
     db.delete(db_lab)
     db.commit()
     return None
 
 from fastapi import UploadFile, File
-import os
-import uuid
 
 @router.post("/{animal_id}/lab_results/upload")
-def upload_lab_result(animal_id: int, laboratory_id: int, file: UploadFile = File(...), date: str = None, db: Session = Depends(get_db)):
-    from datetime import datetime
-    
-    # Save file
-    uploads_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "uploads", "labs")
-    os.makedirs(uploads_dir, exist_ok=True)
-    
-    file_ext = os.path.splitext(file.filename)[1]
-    filename = f"{uuid.uuid4()}{file_ext}"
-    file_path = os.path.join(uploads_dir, filename)
-    
-    with open(file_path, "wb") as f:
-        f.write(file.file.read())
-        
-    document_url = f"/uploads/labs/{filename}"
-    
-    item = LabResult(
-        animal_id=animal_id,
-        date=datetime.strptime(date, "%Y-%m-%d").date() if date else datetime.utcnow().date(),
-        laboratory_id=laboratory_id,
-        document_url=document_url
-    )
-    db.add(item)
+async def upload_lab_result(
+    animal_id: int,
+    laboratory_id: int,
+    files: List[UploadFile] = File(...),
+    date: str = None,
+    db: Session = Depends(get_db),
+):
+    """Sube uno o varios archivos de laboratorio (mismo tipo/fecha)."""
+    from src.services.storage_service import upload_bytes
+
+    if not files:
+        raise HTTPException(status_code=400, detail="Debes seleccionar al menos un archivo")
+
+    created = []
+    errors = []
+    lab_date = _parse_date(date, today_ar())
+
+    for file in files:
+        try:
+            content = await file.read()
+            if not content:
+                errors.append(f"{file.filename or 'archivo'}: vacío")
+                continue
+            document_url = upload_bytes(
+                content,
+                folder="labs",
+                original_filename=file.filename,
+                content_type=file.content_type,
+            )
+            item = LabResult(
+                animal_id=animal_id,
+                date=lab_date,
+                laboratory_id=laboratory_id,
+                document_url=document_url,
+            )
+            db.add(item)
+            db.flush()
+            created.append(item.id)
+        except Exception as e:
+            errors.append(f"{file.filename or 'archivo'}: {e}")
+
+    if not created:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"No se pudo subir ningún archivo. {'; '.join(errors)}")
+
     db.commit()
-    return item
+    items = (
+        db.query(LabResult)
+        .options(joinedload(LabResult.laboratory))
+        .filter(LabResult.id.in_(created))
+        .order_by(LabResult.id.desc())
+        .all()
+    )
+    return {
+        "uploaded": [_serialize_lab(i) for i in items],
+        "count": len(items),
+        "errors": errors,
+    }
