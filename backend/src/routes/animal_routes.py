@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from src.database.session import get_db
 from src.models.models import Animal, Species
 from src.dtos.animal_dto import AnimalCreate, AnimalResponse, AnimalUpdate
-from src.auth import get_current_user
+from src.auth import get_current_user, ensure_admin_for_inactive
 from typing import List, Optional
 
 router = APIRouter(prefix="/animals", tags=["Animals"])
@@ -56,12 +56,22 @@ def get_animals(
     skip: int = 0,
     limit: int = 1000,
     is_daycare: Optional[bool] = None,
+    include_inactive: bool = False,
     db: Session = Depends(get_db),
+    _admin=Depends(ensure_admin_for_inactive),
 ):
-    query = db.query(Animal).filter(Animal.is_active == True)
+    """Por defecto solo activas. Con include_inactive=true (solo admin) también inactivas."""
+    query = db.query(Animal)
+    if not include_inactive:
+        query = query.filter(Animal.is_active == True)
     if is_daycare is not None:
         query = query.filter(Animal.is_daycare == is_daycare)
-    animals = query.offset(skip).limit(limit).all()
+    animals = (
+        query.order_by(Animal.is_active.desc(), Animal.name.asc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
     return animals
 
 @router.get("/{animal_id}", response_model=AnimalResponse)

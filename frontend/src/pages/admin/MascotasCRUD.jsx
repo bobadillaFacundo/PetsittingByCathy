@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Pencil, Trash2, Plus, X, Save, Syringe, FileText, UserCircle, BookHeart } from 'lucide-react';
+import { Pencil, Trash2, Plus, X, Save, Syringe, FileText, UserCircle, BookHeart, RotateCcw } from 'lucide-react';
 import DesparasitacionesTab from './DesparasitacionesTab';
 import LaboratoriosTab from './LaboratoriosTab';
 import LibretaTab from './LibretaTab';
@@ -92,9 +92,12 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
 
   const fetchMascotas = async () => {
     try {
-      const res = await fetch(`https://petsittingbycathy.onrender.com/animals/?is_daycare=${daycareOnly}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetch(
+        `https://petsittingbycathy.onrender.com/animals/?is_daycare=${daycareOnly}&include_inactive=true`,
+        {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }
+      );
       if (!res.ok) {
         if (res.status === 401) {
           redirectToLogin();
@@ -250,7 +253,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
   };
 
   const handleDelete = async (id, name) => {
-    if (window.confirm(`¿Estás seguro de que deseas eliminar (desactivar) a ${name}?`)) {
+    if (window.confirm(`¿Dar de baja a ${name}? Seguirá visible aquí para reactivar o ver su historial; no aparecerá en la guardia.`)) {
       try {
         const res = await fetch(`https://petsittingbycathy.onrender.com/animals/${id}`, {
           method: 'DELETE',
@@ -261,11 +264,32 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
         if (res.ok) {
           fetchMascotas();
         } else {
-          alert("Error al eliminar la mascota.");
+          alert("Error al dar de baja la mascota.");
         }
       } catch (err) {
         console.error(err);
       }
+    }
+  };
+
+  const handleReactivate = async (id, name) => {
+    if (!window.confirm(`¿Dar de alta de nuevo a ${name}? Volverá a aparecer en la guardia.`)) return;
+    try {
+      const res = await fetch(`https://petsittingbycathy.onrender.com/animals/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ is_active: true }),
+      });
+      if (res.ok) {
+        fetchMascotas();
+      } else {
+        alert("Error al reactivar la mascota.");
+      }
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -341,7 +365,13 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
           {/* Grid de Tarjetas (Móvil) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:hidden p-4">
             {mascotas.filter(m => m.species_id === selectedSpeciesId).map((m) => (
-              <div key={m.id} onClick={() => openModal(m)} className="bg-white rounded-3xl shadow-sm border border-gray-100 p-5 flex flex-col justify-between hover:shadow-md transition-shadow cursor-pointer">
+              <div
+                key={m.id}
+                onClick={() => openModal(m)}
+                className={`bg-white rounded-3xl shadow-sm border p-5 flex flex-col justify-between hover:shadow-md transition-shadow cursor-pointer ${
+                  m.is_active ? 'border-gray-100' : 'border-red-100 bg-red-50/30 opacity-90'
+                }`}
+              >
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <h3 className="text-xl font-black text-gray-900 tracking-tight flex items-center gap-2">
@@ -389,18 +419,27 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                     <button 
                       onClick={(e) => { e.stopPropagation(); openModal(m); }}
                       className="p-3 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-all active:scale-95 shadow-sm"
-                      title="Editar"
+                      title="Editar / historial"
                     >
                       <Pencil size={18} />
                     </button>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); handleDelete(m.id, m.name); }}
-                      className="p-3 text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-all active:scale-95 shadow-sm"
-                      title="Dar de baja"
-                      disabled={!m.is_active}
-                    >
-                      <Trash2 size={18} />
-                    </button>
+                    {m.is_active ? (
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); handleDelete(m.id, m.name); }}
+                        className="p-3 text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-all active:scale-95 shadow-sm"
+                        title="Dar de baja"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    ) : (
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); handleReactivate(m.id, m.name); }}
+                        className="p-3 text-green-700 bg-green-50 hover:bg-green-100 rounded-xl transition-all active:scale-95 shadow-sm"
+                        title="Dar de alta"
+                      >
+                        <RotateCcw size={18} />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -430,7 +469,13 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {mascotas.filter(m => m.species_id === selectedSpeciesId).map((m) => (
-                  <tr key={m.id} onClick={() => openModal(m)} className="hover:bg-gray-50/50 transition-colors cursor-pointer">
+                  <tr
+                    key={m.id}
+                    onClick={() => openModal(m)}
+                    className={`hover:bg-gray-50/50 transition-colors cursor-pointer ${
+                      !m.is_active ? 'bg-red-50/40' : ''
+                    }`}
+                  >
                     <td className="px-6 py-4 font-bold text-gray-900">
                       <div className="flex items-center gap-2 flex-wrap">
                         {m.name}
@@ -480,18 +525,27 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                       <button 
                         onClick={(e) => { e.stopPropagation(); openModal(m); }}
                         className="p-2 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl transition-colors active:scale-95"
-                        title="Editar"
+                        title="Editar / historial"
                       >
                         <Pencil size={18} />
                       </button>
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); handleDelete(m.id, m.name); }}
-                        className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-xl transition-colors active:scale-95"
-                        title="Dar de baja"
-                        disabled={!m.is_active}
-                      >
-                        <Trash2 size={18} />
-                      </button>
+                      {m.is_active ? (
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleDelete(m.id, m.name); }}
+                          className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-xl transition-colors active:scale-95"
+                          title="Dar de baja"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      ) : (
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleReactivate(m.id, m.name); }}
+                          className="p-2 text-green-600 hover:text-green-800 hover:bg-green-50 rounded-xl transition-colors active:scale-95"
+                          title="Dar de alta"
+                        >
+                          <RotateCcw size={18} />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -751,7 +805,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                       className="w-5 h-5 text-indigo-600 rounded border-gray-300"
                     />
                     <label htmlFor="isActive" className="text-sm font-medium text-gray-700">
-                      Mascota Activa (Aparece en la guardia)
+                      Mascota activa (aparece en la guardia). Desmarcar = baja; marcar = alta de nuevo.
                     </label>
                   </div>
 

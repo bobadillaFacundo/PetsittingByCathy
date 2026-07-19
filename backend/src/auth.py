@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timedelta
+from typing import Optional
 import jwt
 from jwt.exceptions import InvalidTokenError
 
@@ -17,6 +18,7 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 # 24 horas
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
 
 def verify_password(plain_password, hashed_password):
     return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
@@ -56,6 +58,29 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="La cuenta de usuario está desactivada",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user
+
+
+def ensure_admin_for_inactive(
+    include_inactive: bool = False,
+    token: Optional[str] = Depends(oauth2_scheme_optional),
+    db: Session = Depends(get_db),
+):
+    """Si include_inactive=true, exige token de admin. Si no, no exige auth."""
+    if not include_inactive:
+        return None
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Se requiere autenticación para ver mascotas inactivas",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    user = get_current_user(token=token, db=db)
+    if getattr(user, "role", None) != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo admin puede ver mascotas inactivas",
         )
     return user
 
