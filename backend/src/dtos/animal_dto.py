@@ -129,6 +129,20 @@ class AttachmentDTO(BaseModel):
     file_type: str
 
 
+class ObservationDTO(BaseModel):
+    id: int
+    observation: str
+    created_at: datetime
+    report_id: Optional[int] = None
+    user_name: Optional[str] = None
+    attachments: List[AttachmentDTO] = []
+
+
+class ObservationCreate(BaseModel):
+    observation: str
+    report_id: Optional[int] = None
+
+
 class ReportHistoryDTO(BaseModel):
     id: int
     created_at: datetime
@@ -141,6 +155,7 @@ class ReportHistoryDTO(BaseModel):
 class AnimalHistoryResponse(BaseModel):
     animal: AnimalResponse
     reports: List[ReportHistoryDTO]
+    observations: List[ObservationDTO] = []
     active_medications: List['AnimalMedicationResponse'] = []
 
 class AnimalMedicationResponse(BaseModel):

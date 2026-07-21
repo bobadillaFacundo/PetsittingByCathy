@@ -177,6 +177,7 @@ def confirm_report(
         db.flush()
         
         event_values = []
+        observation_ids = []
         # Procesar inserts según table_name
         for insert in animal_data.get("inserts", []):
             table_name = insert.get("table_name")
@@ -219,8 +220,15 @@ def confirm_report(
             elif table_name == "AnimalObservation":
                 text = fields.get("observation")
                 if not text: continue
-                animal_obs = AnimalObservation(animal_id=animal.id, observation=text)
+                animal_obs = AnimalObservation(
+                    animal_id=animal.id,
+                    observation=text,
+                    report_id=report.id,
+                    user_id=current_user.id,
+                )
                 db.add(animal_obs)
+                db.flush()
+                observation_ids.append(animal_obs.id)
 
         # Crear alertas críticas si se detectan palabras clave rojas
         create_critical_alerts_for_report(
@@ -228,7 +236,13 @@ def confirm_report(
         )
                 
         db.commit()
-        saved_reports.append({"animal": animal_name, "report_id": report.id, "animal_id": animal.id, "severity_assigned": animal.severity})
+        saved_reports.append({
+            "animal": animal_name,
+            "report_id": report.id,
+            "animal_id": animal.id,
+            "severity_assigned": animal.severity,
+            "observation_ids": observation_ids,
+        })
         
     return {"status": "success", "message": "Reportes guardados correctamente", "saved_reports": saved_reports}
 
@@ -337,7 +351,11 @@ def _apply_inserts_to_report(db, report, animal, inserts):
         elif table_name == "AnimalObservation":
             text = fields.get("observation")
             if text:
-                db.add(AnimalObservation(animal_id=animal.id, observation=text))
+                db.add(AnimalObservation(
+                    animal_id=animal.id,
+                    observation=text,
+                    report_id=report.id,
+                ))
     return event_values
 
 @router.put("/{report_id}/edit")
@@ -407,14 +425,21 @@ def delete_report_physically(
     current_user=Depends(get_current_user),
 ):
     """Borra el reporte de la BD (físico), con eventos, adjuntos y alertas asociadas."""
-    from src.models.models import ReportMedication, CriticalAlert
+    from src.models.models import ReportMedication, CriticalAlert, AnimalObservation
     from src.services.storage_service import delete_by_url
+    from sqlalchemy import or_
 
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Reporte no encontrado")
 
-    attachments = db.query(Attachment).filter(Attachment.report_id == report_id).all()
+    obs_ids = [
+        o.id for o in db.query(AnimalObservation).filter(AnimalObservation.report_id == report_id).all()
+    ]
+    att_filters = [Attachment.report_id == report_id]
+    if obs_ids:
+        att_filters.append(Attachment.observation_id.in_(obs_ids))
+    attachments = db.query(Attachment).filter(or_(*att_filters)).all()
     for att in attachments:
         delete_by_url(att.file_url)
         db.delete(att)
@@ -435,40 +460,93 @@ async def attach_photo_to_report(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Adjunta una foto a un reporte existente."""
+    """Adjunta una foto o video a un reporte (compatibilidad)."""
+    return await _attach_media_to_report(report_id, [photo], None, db)
+
+
+@router.post("/{report_id}/attach-media")
+async def attach_media_to_report(
+    report_id: int,
+    files: List[UploadFile] = File(...),
+    observation_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Adjunta una o varias fotos/videos a un reporte (opcionalmente a una observación)."""
+    return await _attach_media_to_report(report_id, files, observation_id, db)
+
+
+async def _attach_media_to_report(
+    report_id: int,
+    files: List[UploadFile],
+    observation_id: Optional[int],
+    db: Session,
+):
+    from src.models.models import AnimalObservation
+    from src.services.storage_service import upload_bytes
+    from src.services.media_helpers import detect_media_type
+
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Reporte no encontrado")
+    if not files:
+        raise HTTPException(status_code=400, detail="Debes seleccionar al menos un archivo")
 
-    allowed = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
-    ext = os.path.splitext(photo.filename or "photo.jpg")[1].lower()
-    if ext not in allowed:
-        raise HTTPException(status_code=400, detail="Formato de imagen no soportado")
+    obs = None
+    if observation_id is not None:
+        obs = db.query(AnimalObservation).filter(
+            AnimalObservation.id == observation_id,
+            AnimalObservation.animal_id == report.animal_id,
+        ).first()
+        if not obs:
+            raise HTTPException(status_code=404, detail="Observación no encontrada")
 
-    from src.services.storage_service import upload_bytes
-    content = await photo.read()
-    file_url = upload_bytes(
-        content,
-        folder="photos",
-        original_filename=photo.filename or f"photo{ext}",
-        content_type=photo.content_type,
-    )
+    created = []
+    errors = []
+    for file in files:
+        try:
+            content = await file.read()
+            if not content:
+                errors.append(f"{file.filename or 'archivo'}: vacío")
+                continue
+            file_type, folder = detect_media_type(file.filename, file.content_type)
+            file_url = upload_bytes(
+                content,
+                folder=folder,
+                original_filename=file.filename or f"media{folder}",
+                content_type=file.content_type,
+            )
+            attachment = Attachment(
+                animal_id=report.animal_id,
+                report_id=report_id,
+                observation_id=observation_id if obs else None,
+                file_type=file_type,
+                file_url=file_url,
+            )
+            db.add(attachment)
+            db.flush()
+            created.append({
+                "id": attachment.id,
+                "file_url": file_url,
+                "file_type": file_type,
+                "report_id": report_id,
+                "animal_id": report.animal_id,
+                "observation_id": observation_id,
+            })
+        except ValueError as e:
+            errors.append(f"{file.filename or 'archivo'}: {e}")
+        except Exception as e:
+            errors.append(f"{file.filename or 'archivo'}: {e}")
 
-    attachment = Attachment(
-        animal_id=report.animal_id,
-        report_id=report_id,
-        file_type="image",
-        file_url=file_url,
-    )
-    db.add(attachment)
+    if not created:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"No se pudo subir ningún archivo. {'; '.join(errors)}")
+
     db.commit()
-    db.refresh(attachment)
-
     return {
-        "id": attachment.id,
-        "file_url": file_url,
-        "report_id": report_id,
-        "animal_id": report.animal_id,
+        "uploaded": created,
+        "count": len(created),
+        "errors": errors,
     }
 
 @router.get("/all")

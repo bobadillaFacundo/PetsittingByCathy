@@ -268,13 +268,12 @@ def delete_animal_medication(animal_id: int, medication_id: int, db: Session = D
     db.commit()
     return None
 
-from src.dtos.animal_dto import AnimalHistoryResponse, ReportHistoryDTO, EventDTO, AnimalMedicationResponse
+from src.dtos.animal_dto import AnimalHistoryResponse, ReportHistoryDTO, EventDTO, AnimalMedicationResponse, ObservationDTO, AttachmentDTO
 from sqlalchemy.orm import joinedload
 
 @router.get("/{animal_id}/history", response_model=AnimalHistoryResponse)
 def get_animal_history(animal_id: int, db: Session = Depends(get_db)):
-    from src.models.models import Report, ReportEvent, EventType, User, Attachment
-    from src.dtos.animal_dto import AttachmentDTO
+    from src.models.models import Report, ReportEvent, EventType, User, Attachment, AnimalObservation
     animal = db.query(Animal).filter(Animal.id == animal_id).first()
     if not animal:
         raise HTTPException(status_code=404, detail="Animal no encontrado")
@@ -285,7 +284,10 @@ def get_animal_history(animal_id: int, db: Session = Depends(get_db)):
     for r in reports:
         events = db.query(ReportEvent).filter(ReportEvent.report_id == r.id).all()
         user = db.query(User).filter(User.id == r.user_id).first()
-        attachments = db.query(Attachment).filter(Attachment.report_id == r.id).all()
+        attachments = db.query(Attachment).filter(
+            Attachment.report_id == r.id,
+            Attachment.observation_id.is_(None),
+        ).all()
         
         event_dtos = []
         for e in events:
@@ -305,6 +307,29 @@ def get_animal_history(animal_id: int, db: Session = Depends(get_db)):
             events=event_dtos,
             attachments=attachment_dtos,
         ))
+
+    # Observaciones con multimedia (entidad débil 1:N)
+    obs_rows = (
+        db.query(AnimalObservation)
+        .options(joinedload(AnimalObservation.attachments), joinedload(AnimalObservation.user))
+        .filter(AnimalObservation.animal_id == animal_id)
+        .order_by(AnimalObservation.created_at.desc())
+        .all()
+    )
+    observation_dtos = [
+        ObservationDTO(
+            id=o.id,
+            observation=o.observation,
+            created_at=o.created_at,
+            report_id=o.report_id,
+            user_name=o.user.name if o.user else None,
+            attachments=[
+                AttachmentDTO(id=a.id, file_url=a.file_url, file_type=a.file_type)
+                for a in (o.attachments or [])
+            ],
+        )
+        for o in obs_rows
+    ]
 
     # Medicaciones activas del animal
     active_meds = db.query(AnimalMedication).join(MedicationCatalog).filter(
@@ -327,7 +352,7 @@ def get_animal_history(animal_id: int, db: Session = Depends(get_db)):
         for m in active_meds
     ]
         
-    return AnimalHistoryResponse(animal=animal, reports=history, active_medications=med_dtos)
+    return AnimalHistoryResponse(animal=animal, reports=history, observations=observation_dtos, active_medications=med_dtos)
 
 from pydantic import BaseModel
 class EvolutionAnalysisResponse(BaseModel):
@@ -643,3 +668,168 @@ async def upload_lab_result(
         "count": len(items),
         "errors": errors,
     }
+
+
+# ----------------- OBSERVACIONES (entidad débil 1:N con multimedia) ----------------- #
+
+from src.models.models import AnimalObservation
+from src.dtos.animal_dto import ObservationCreate
+
+
+def _serialize_observation(obs: AnimalObservation) -> dict:
+    return {
+        "id": obs.id,
+        "animal_id": obs.animal_id,
+        "report_id": obs.report_id,
+        "observation": obs.observation,
+        "created_at": obs.created_at.isoformat() if obs.created_at else None,
+        "user_name": obs.user.name if obs.user else None,
+        "attachments": [
+            {"id": a.id, "file_url": a.file_url, "file_type": a.file_type}
+            for a in (obs.attachments or [])
+        ],
+    }
+
+
+@router.get("/{animal_id}/observations")
+def get_observations(animal_id: int, db: Session = Depends(get_db)):
+    animal = db.query(Animal).filter(Animal.id == animal_id).first()
+    if not animal:
+        raise HTTPException(status_code=404, detail="Animal no encontrado")
+    items = (
+        db.query(AnimalObservation)
+        .options(joinedload(AnimalObservation.attachments), joinedload(AnimalObservation.user))
+        .filter(AnimalObservation.animal_id == animal_id)
+        .order_by(AnimalObservation.created_at.desc())
+        .all()
+    )
+    return [_serialize_observation(o) for o in items]
+
+
+@router.post("/{animal_id}/observations")
+def create_observation(
+    animal_id: int,
+    data: ObservationCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    animal = db.query(Animal).filter(Animal.id == animal_id).first()
+    if not animal:
+        raise HTTPException(status_code=404, detail="Animal no encontrado")
+    text = (data.observation or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="La observación no puede estar vacía")
+
+    obs = AnimalObservation(
+        animal_id=animal_id,
+        observation=text,
+        report_id=data.report_id,
+        user_id=current_user.id,
+    )
+    db.add(obs)
+    db.commit()
+    db.refresh(obs)
+    obs = (
+        db.query(AnimalObservation)
+        .options(joinedload(AnimalObservation.attachments), joinedload(AnimalObservation.user))
+        .filter(AnimalObservation.id == obs.id)
+        .first()
+    )
+    return _serialize_observation(obs)
+
+
+@router.post("/{animal_id}/observations/{observation_id}/media")
+async def upload_observation_media(
+    animal_id: int,
+    observation_id: int,
+    files: List[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Sube una o varias fotos/videos a una observación."""
+    from src.models.models import Attachment
+    from src.services.storage_service import upload_bytes
+    from src.services.media_helpers import detect_media_type
+
+    obs = (
+        db.query(AnimalObservation)
+        .filter(AnimalObservation.id == observation_id, AnimalObservation.animal_id == animal_id)
+        .first()
+    )
+    if not obs:
+        raise HTTPException(status_code=404, detail="Observación no encontrada")
+    if not files:
+        raise HTTPException(status_code=400, detail="Debes seleccionar al menos un archivo")
+
+    created = []
+    errors = []
+    for file in files:
+        try:
+            content = await file.read()
+            if not content:
+                errors.append(f"{file.filename or 'archivo'}: vacío")
+                continue
+            file_type, folder = detect_media_type(file.filename, file.content_type)
+            file_url = upload_bytes(
+                content,
+                folder=folder,
+                original_filename=file.filename,
+                content_type=file.content_type,
+            )
+            att = Attachment(
+                animal_id=animal_id,
+                report_id=obs.report_id,
+                observation_id=observation_id,
+                file_type=file_type,
+                file_url=file_url,
+            )
+            db.add(att)
+            db.flush()
+            created.append(att.id)
+        except ValueError as e:
+            errors.append(f"{file.filename or 'archivo'}: {e}")
+        except Exception as e:
+            errors.append(f"{file.filename or 'archivo'}: {e}")
+
+    if not created:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"No se pudo subir ningún archivo. {'; '.join(errors)}")
+
+    db.commit()
+    obs = (
+        db.query(AnimalObservation)
+        .options(joinedload(AnimalObservation.attachments), joinedload(AnimalObservation.user))
+        .filter(AnimalObservation.id == observation_id)
+        .first()
+    )
+    return {
+        "observation": _serialize_observation(obs),
+        "count": len(created),
+        "errors": errors,
+    }
+
+
+@router.delete("/{animal_id}/observations/{observation_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_observation(
+    animal_id: int,
+    observation_id: int,
+    db: Session = Depends(get_db),
+    current_admin=Depends(get_current_user),
+):
+    from src.services.storage_service import delete_by_url
+
+    obs = (
+        db.query(AnimalObservation)
+        .options(joinedload(AnimalObservation.attachments))
+        .filter(AnimalObservation.id == observation_id, AnimalObservation.animal_id == animal_id)
+        .first()
+    )
+    if not obs:
+        raise HTTPException(status_code=404, detail="Observación no encontrada")
+
+    for att in obs.attachments or []:
+        delete_by_url(att.file_url)
+
+    db.delete(obs)
+    db.commit()
+    return None

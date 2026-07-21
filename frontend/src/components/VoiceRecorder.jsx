@@ -81,9 +81,11 @@ export default function VoiceRecorder({ onSave }) {
   const [currentStep, setCurrentStep] = useState(0);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [pendingReports, setPendingReports] = useState(0);
-  const [attachedPhotos, setAttachedPhotos] = useState([]);
+  const [attachedMedia, setAttachedMedia] = useState([]);
   const [observationDraft, setObservationDraft] = useState("");
-  const photoInputRef = useRef(null);
+  const galleryInputRef = useRef(null);
+  const cameraPhotoRef = useRef(null);
+  const cameraVideoRef = useRef(null);
   
   const mediaRecorder = useRef(null);
   const audioChunks = useRef([]);
@@ -286,24 +288,30 @@ export default function VoiceRecorder({ onSave }) {
         const result = await response.json();
         const savedReports = result.saved_reports || [];
 
-        // Subir fotos adjuntas a cada reporte guardado
-        if (attachedPhotos.length > 0 && savedReports.length > 0) {
+        // Subir fotos/videos adjuntos a cada reporte guardado
+        if (attachedMedia.length > 0 && savedReports.length > 0) {
           for (const saved of savedReports) {
-            for (const photo of attachedPhotos) {
-              const formData = new FormData();
-              formData.append("photo", photo);
-              await fetch(`https://petsittingbycathy.onrender.com/reports/${saved.report_id}/attach-photo`, {
+            const formData = new FormData();
+            attachedMedia.forEach((file) => formData.append("files", file));
+            const obsId = saved.observation_ids?.[0];
+            const params = obsId ? `?observation_id=${obsId}` : "";
+            const uploadRes = await fetch(
+              `https://petsittingbycathy.onrender.com/reports/${saved.report_id}/attach-media${params}`,
+              {
                 method: "POST",
-                headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` },
+                headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
                 body: formData,
-              });
+              }
+            );
+            if (!uploadRes.ok) {
+              console.error("Error subiendo media al reporte", saved.report_id);
             }
           }
         }
 
         setAnalysisResult(null);
         setEditableData(null);
-        setAttachedPhotos([]);
+        setAttachedMedia([]);
         setSaveSuccess(true);
         setSelectedAnimal(null);
         if (onSave) onSave();
@@ -317,17 +325,19 @@ export default function VoiceRecorder({ onSave }) {
     }
   };
 
-  const handlePhotoSelect = (e) => {
+  const handleMediaSelect = (e) => {
     const files = Array.from(e.target.files || []);
-    const valid = files.filter(f => f.type.startsWith("image/"));
+    const valid = files.filter(
+      (f) => f.type.startsWith("image/") || f.type.startsWith("video/")
+    );
     if (valid.length > 0) {
-      setAttachedPhotos(prev => [...prev, ...valid]);
+      setAttachedMedia((prev) => [...prev, ...valid]);
     }
     e.target.value = "";
   };
 
-  const removePhoto = (index) => {
-    setAttachedPhotos(prev => prev.filter((_, i) => i !== index));
+  const removeMedia = (index) => {
+    setAttachedMedia((prev) => prev.filter((_, i) => i !== index));
   };
 
   return (
@@ -438,36 +448,78 @@ export default function VoiceRecorder({ onSave }) {
             </span>
           </button>
 
-          {/* Adjuntar fotos */}
-          <div className="mt-6 w-full max-w-sm">
+          {/* Adjuntar fotos y videos */}
+          <div className="mt-6 w-full max-w-sm space-y-2">
             <input
-              ref={photoInputRef}
+              ref={galleryInputRef}
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              className="hidden"
+              onChange={handleMediaSelect}
+            />
+            <input
+              ref={cameraPhotoRef}
               type="file"
               accept="image/*"
               capture="environment"
-              multiple
               className="hidden"
-              onChange={handlePhotoSelect}
+              onChange={handleMediaSelect}
             />
-            <button
-              onClick={() => photoInputRef.current?.click()}
-              className="w-full py-3 px-4 bg-white border-2 border-dashed border-gray-300 rounded-xl hover:border-indigo-400 hover:bg-indigo-50 transition-all flex items-center justify-center gap-2 text-gray-700 font-medium"
-            >
-              <span className="text-2xl">📸</span>
-              Tomar o subir foto
-            </button>
-            {attachedPhotos.length > 0 && (
+            <input
+              ref={cameraVideoRef}
+              type="file"
+              accept="video/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleMediaSelect}
+            />
+            <div className="grid grid-cols-1 gap-2">
+              <button
+                type="button"
+                onClick={() => cameraPhotoRef.current?.click()}
+                className="w-full py-3 px-4 bg-white border-2 border-dashed border-gray-300 rounded-xl hover:border-indigo-400 hover:bg-indigo-50 transition-all flex items-center justify-center gap-2 text-gray-700 font-medium"
+              >
+                <span className="text-2xl">📸</span>
+                Tomar foto
+              </button>
+              <button
+                type="button"
+                onClick={() => cameraVideoRef.current?.click()}
+                className="w-full py-3 px-4 bg-white border-2 border-dashed border-gray-300 rounded-xl hover:border-indigo-400 hover:bg-indigo-50 transition-all flex items-center justify-center gap-2 text-gray-700 font-medium"
+              >
+                <span className="text-2xl">🎥</span>
+                Grabar video
+              </button>
+              <button
+                type="button"
+                onClick={() => galleryInputRef.current?.click()}
+                className="w-full py-3 px-4 bg-white border-2 border-dashed border-gray-300 rounded-xl hover:border-indigo-400 hover:bg-indigo-50 transition-all flex items-center justify-center gap-2 text-gray-700 font-medium"
+              >
+                <span className="text-2xl">🖼️</span>
+                Subir desde galería (varios)
+              </button>
+            </div>
+            {attachedMedia.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-3 justify-center">
-                {attachedPhotos.map((photo, idx) => (
-                  <div key={idx} className="relative group">
-                    <img
-                      src={URL.createObjectURL(photo)}
-                      alt={`Adjunto ${idx + 1}`}
-                      className="w-20 h-20 object-cover rounded-lg border border-gray-200 shadow-sm"
-                    />
+                {attachedMedia.map((file, idx) => (
+                  <div key={`${file.name}-${idx}`} className="relative group">
+                    {file.type.startsWith("video/") ? (
+                      <video
+                        src={URL.createObjectURL(file)}
+                        className="w-20 h-20 object-cover rounded-lg border border-gray-200 shadow-sm bg-black"
+                      />
+                    ) : (
+                      <img
+                        src={URL.createObjectURL(file)}
+                        alt={`Adjunto ${idx + 1}`}
+                        className="w-20 h-20 object-cover rounded-lg border border-gray-200 shadow-sm"
+                      />
+                    )}
                     <button
-                      onClick={() => removePhoto(idx)}
-                      className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                      type="button"
+                      onClick={() => removeMedia(idx)}
+                      className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full text-xs font-bold opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex items-center justify-center"
                     >
                       ✕
                     </button>
@@ -475,9 +527,10 @@ export default function VoiceRecorder({ onSave }) {
                 ))}
               </div>
             )}
-            {attachedPhotos.length > 0 && (
+            {attachedMedia.length > 0 && (
               <p className="text-xs text-gray-500 text-center mt-2">
-                {attachedPhotos.length} {attachedPhotos.length === 1 ? 'foto adjunta' : 'fotos adjuntas'} — se guardarán con el reporte
+                {attachedMedia.length}{" "}
+                {attachedMedia.length === 1 ? "archivo adjunto" : "archivos adjuntos"} — se guardarán con el reporte
               </p>
             )}
           </div>

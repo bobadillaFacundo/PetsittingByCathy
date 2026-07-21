@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Pencil, Trash2, Plus, X, Save, Syringe, FileText, UserCircle, BookHeart, RotateCcw } from 'lucide-react';
+import { Pencil, Trash2, Plus, X, Save, Syringe, FileText, UserCircle, BookHeart, RotateCcw, StickyNote } from 'lucide-react';
 import DesparasitacionesTab from './DesparasitacionesTab';
 import LaboratoriosTab from './LaboratoriosTab';
 import LibretaTab from './LibretaTab';
 import MedicacionTab from './MedicacionTab';
+import ObservacionesTab from './ObservacionesTab';
 import { redirectToLogin } from '../../lib/auth';
 
 const SPECIES_INFO = {
@@ -623,6 +624,13 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                   >
                     <Syringe size={18} /> Medicación
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalTab('observaciones')}
+                    className={`flex items-center gap-2 px-4 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${modalTab === 'observaciones' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500'}`}
+                  >
+                    <StickyNote size={18} /> Observaciones
+                  </button>
                 </div>
               )}
 
@@ -847,6 +855,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
               {modalTab === 'deworming' && <DesparasitacionesTab animalId={editingId} token={token} />}
               {modalTab === 'labs' && <LaboratoriosTab animalId={editingId} token={token} />}
               {modalTab === 'medicacion' && <MedicacionTab animalId={editingId} />}
+              {modalTab === 'observaciones' && <ObservacionesTab animalId={editingId} token={token} />}
             </div>
           </div>
         </div>,

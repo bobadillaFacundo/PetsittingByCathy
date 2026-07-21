@@ -314,13 +314,19 @@ class AnimalMedication(Base):
 
 
 class AnimalObservation(Base):
+    """Entidad débil de Animal: observaciones con texto y multimedia adjunta (1:N vía Attachment)."""
     __tablename__ = "animal_observations"
     id = Column(Integer, primary_key=True, index=True)
     animal_id = Column(Integer, ForeignKey("animals.id"), nullable=False)
+    report_id = Column(Integer, ForeignKey("reports.id", ondelete="CASCADE"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     observation = Column(Text, nullable=False)
     created_at = Column(DateTime, default=now_ar)
 
     animal = relationship("Animal", back_populates="observations")
+    report = relationship("Report", back_populates="observations")
+    user = relationship("User")
+    attachments = relationship("Attachment", back_populates="observation", cascade="all, delete-orphan")
 
 # ----------------- REPORTES DIARIOS ----------------- #
 
@@ -338,6 +344,7 @@ class Report(Base):
     events = relationship("ReportEvent", back_populates="report")
     administered_meds = relationship("ReportMedication", back_populates="report")
     attachments = relationship("Attachment", back_populates="report")
+    observations = relationship("AnimalObservation", back_populates="report", cascade="all, delete-orphan")
 
 
 class ReportEvent(Base):
@@ -374,12 +381,14 @@ class Attachment(Base):
     id = Column(Integer, primary_key=True, index=True)
     animal_id = Column(Integer, ForeignKey("animals.id"), nullable=False)
     report_id = Column(Integer, ForeignKey("reports.id"), nullable=True)
+    observation_id = Column(Integer, ForeignKey("animal_observations.id", ondelete="CASCADE"), nullable=True)
     file_type = Column(String, nullable=False)
     file_url = Column(String, nullable=False)
     uploaded_at = Column(DateTime, default=now_ar)
 
     animal = relationship("Animal", back_populates="attachments")
     report = relationship("Report", back_populates="attachments")
+    observation = relationship("AnimalObservation", back_populates="attachments")
 
 
 class CriticalAlert(Base):

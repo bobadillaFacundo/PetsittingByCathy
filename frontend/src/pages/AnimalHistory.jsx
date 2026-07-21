@@ -50,6 +50,9 @@ export default function AnimalHistory({ animalId = 1 }) {
   const [editTranscript, setEditTranscript] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
   const [expandedPhoto, setExpandedPhoto] = useState(null);
+  const [expandedVideo, setExpandedVideo] = useState(null);
+
+  const mediaSrc = (url) => (url?.startsWith('http') ? url : `https://petsittingbycathy.onrender.com${url}`);
 
   const fetchHistory = useCallback(() => {
     setLoading(true);
@@ -239,6 +242,51 @@ export default function AnimalHistory({ animalId = 1 }) {
         </div>
       )}
 
+      {data.observations && data.observations.length > 0 && (
+        <div className="mb-6 bg-amber-50 border border-amber-200 p-4 rounded-2xl">
+          <h3 className="text-sm font-bold text-amber-900 uppercase tracking-wide mb-3">
+            📝 Observaciones y otros
+          </h3>
+          <div className="space-y-3">
+            {data.observations.map((obs) => (
+              <div key={obs.id} className="bg-white p-3 rounded-xl border border-amber-100 shadow-sm">
+                <p className="text-sm text-gray-800 whitespace-pre-wrap">{obs.observation}</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {obs.created_at ? new Date(obs.created_at).toLocaleString('es-AR') : ''}
+                  {obs.user_name ? ` · ${obs.user_name}` : ''}
+                </p>
+                {obs.attachments?.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {obs.attachments.map((att) =>
+                      att.file_type === 'video' ? (
+                        <video
+                          key={att.id}
+                          src={mediaSrc(att.file_url)}
+                          controls
+                          className="w-24 h-24 object-cover rounded-lg border border-gray-200 bg-black"
+                        />
+                      ) : (
+                        <button
+                          key={att.id}
+                          type="button"
+                          onClick={() => setExpandedPhoto(mediaSrc(att.file_url))}
+                        >
+                          <img
+                            src={mediaSrc(att.file_url)}
+                            alt=""
+                            className="w-24 h-24 object-cover rounded-lg border border-gray-200"
+                          />
+                        </button>
+                      )
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="relative border-l-2 border-indigo-200 pl-6 ml-4 space-y-8 pb-4">
         {data.reports.map((report) => (
           <div key={report.id} className="relative group">
@@ -298,21 +346,37 @@ export default function AnimalHistory({ animalId = 1 }) {
                 </p>
               )}
 
-              {/* Fotos adjuntas */}
+              {/* Fotos y videos adjuntos */}
               {report.attachments && report.attachments.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-4">
                   {report.attachments.map((att) => (
-                    <button
-                      key={att.id}
-                      onClick={() => setExpandedPhoto(att.file_url)}
-                      className="block"
-                    >
-                      <img
-                        src={att.file_url}
-                        alt="Adjunto del reporte"
-                        className="w-24 h-24 object-cover rounded-lg border border-gray-200 shadow-sm hover:shadow-md hover:scale-105 transition-all"
-                      />
-                    </button>
+                    att.file_type === 'video' ? (
+                      <button
+                        key={att.id}
+                        type="button"
+                        onClick={() => setExpandedVideo(mediaSrc(att.file_url))}
+                        className="block relative"
+                      >
+                        <video
+                          src={mediaSrc(att.file_url)}
+                          className="w-24 h-24 object-cover rounded-lg border border-gray-200 shadow-sm"
+                        />
+                        <span className="absolute inset-0 flex items-center justify-center text-white text-2xl bg-black/30 rounded-lg">▶</span>
+                      </button>
+                    ) : (
+                      <button
+                        key={att.id}
+                        type="button"
+                        onClick={() => setExpandedPhoto(mediaSrc(att.file_url))}
+                        className="block"
+                      >
+                        <img
+                          src={mediaSrc(att.file_url)}
+                          alt="Adjunto del reporte"
+                          className="w-24 h-24 object-cover rounded-lg border border-gray-200 shadow-sm hover:shadow-md hover:scale-105 transition-all"
+                        />
+                      </button>
+                    )
                   ))}
                 </div>
               )}
@@ -343,6 +407,21 @@ export default function AnimalHistory({ animalId = 1 }) {
             src={expandedPhoto}
             alt="Foto ampliada"
             className="max-w-full max-h-[90vh] rounded-xl shadow-2xl"
+          />
+        </div>
+      )}
+
+      {expandedVideo && (
+        <div
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+          onClick={() => setExpandedVideo(null)}
+        >
+          <video
+            src={expandedVideo}
+            controls
+            autoPlay
+            className="max-w-full max-h-[90vh] rounded-xl shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
           />
         </div>
       )}

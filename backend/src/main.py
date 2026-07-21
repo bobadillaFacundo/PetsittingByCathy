@@ -1,13 +1,25 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from contextlib import asynccontextmanager
 import os
 from src.timezone_ar import force_process_timezone
 from src.routes import animal_routes, report_routes, chat_routes, dashboard_routes, auth_routes, catalog_routes, user_routes, reservation_routes, calendar_routes
 
 force_process_timezone()
 
-app = FastAPI(title="Asistente Veterinario API", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        from src.database.migrate_normalize import migrate
+        migrate()
+    except Exception as e:
+        print(f"Advertencia al migrar BD al iniciar: {e}")
+    yield
+
+
+app = FastAPI(title="Asistente Veterinario API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

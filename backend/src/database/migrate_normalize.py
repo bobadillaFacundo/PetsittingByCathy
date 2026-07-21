@@ -195,6 +195,33 @@ def migrate():
                 db.commit()
                 print(f"  OK animals perfil: {', '.join(added)}")
 
+        # --- Observaciones: report_id, user_id en animal_observations ---
+        inspector = inspect(engine)
+        if table_exists(inspector, "animal_observations"):
+            obs_cols = {
+                "report_id": "INTEGER REFERENCES reports(id) ON DELETE CASCADE",
+                "user_id": "INTEGER REFERENCES users(id)",
+            }
+            added_obs = []
+            for col, ddl in obs_cols.items():
+                if not column_exists(inspector, "animal_observations", col):
+                    db.execute(text(f"ALTER TABLE animal_observations ADD COLUMN {col} {ddl}"))
+                    added_obs.append(col)
+            if added_obs:
+                db.commit()
+                print(f"  OK animal_observations: {', '.join(added_obs)}")
+
+        # --- Attachments: observation_id (entidad débil de observación) ---
+        inspector = inspect(engine)
+        if table_exists(inspector, "attachments") and not column_exists(inspector, "attachments", "observation_id"):
+            print("Agregando attachments.observation_id...")
+            db.execute(text(
+                "ALTER TABLE attachments ADD COLUMN observation_id INTEGER "
+                "REFERENCES animal_observations(id) ON DELETE CASCADE"
+            ))
+            db.commit()
+            print("  OK attachments.observation_id")
+
         print("\nMigración completada. Reinicia el backend.")
     except Exception as e:
         db.rollback()
