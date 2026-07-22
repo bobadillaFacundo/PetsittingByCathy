@@ -548,6 +548,29 @@ def add_internal_deworming(animal_id: int, data: dict, db: Session = Depends(get
     item = db.query(Deworming).options(joinedload(Deworming.product)).filter(Deworming.id == item.id).first()
     return _serialize_deworming(item)
 
+@router.delete("/{animal_id}/internal_dewormings/{deworming_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_internal_deworming(
+    animal_id: int,
+    deworming_id: int,
+    db: Session = Depends(get_db),
+    current_admin=Depends(get_current_user),
+):
+    item = (
+        db.query(Deworming)
+        .join(VeterinaryProduct)
+        .filter(
+            Deworming.id == deworming_id,
+            Deworming.animal_id == animal_id,
+            VeterinaryProduct.type == "INTERNAL",
+        )
+        .first()
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="Desparasitación interna no encontrada")
+    db.delete(item)
+    db.commit()
+    return None
+
 @router.get("/{animal_id}/external_dewormings")
 def get_external_dewormings(animal_id: int, db: Session = Depends(get_db)):
     items = _get_dewormings_by_type(animal_id, "EXTERNAL", db)
@@ -569,6 +592,29 @@ def add_external_deworming(animal_id: int, data: dict, db: Session = Depends(get
     db.refresh(item)
     item = db.query(Deworming).options(joinedload(Deworming.product)).filter(Deworming.id == item.id).first()
     return _serialize_deworming(item)
+
+@router.delete("/{animal_id}/external_dewormings/{deworming_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_external_deworming(
+    animal_id: int,
+    deworming_id: int,
+    db: Session = Depends(get_db),
+    current_admin=Depends(get_current_user),
+):
+    item = (
+        db.query(Deworming)
+        .join(VeterinaryProduct)
+        .filter(
+            Deworming.id == deworming_id,
+            Deworming.animal_id == animal_id,
+            VeterinaryProduct.type == "EXTERNAL",
+        )
+        .first()
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="Desparasitación externa no encontrada")
+    db.delete(item)
+    db.commit()
+    return None
 
 @router.get("/{animal_id}/lab_results")
 def get_lab_results(animal_id: int, db: Session = Depends(get_db)):

@@ -70,6 +70,27 @@ export default function DesparasitacionesTab({ animalId, token }) {
     }
   };
 
+  const handleDelete = async (type, id, productName) => {
+    if (!window.confirm(`¿Eliminar la desparasitación "${productName}"?`)) return;
+    const url = type === 'interna'
+      ? `https://petsittingbycathy.onrender.com/animals/${animalId}/internal_dewormings/${id}`
+      : `https://petsittingbycathy.onrender.com/animals/${animalId}/external_dewormings/${id}`;
+    try {
+      const res = await fetch(url, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        fetchData();
+      } else {
+        alert('Error al eliminar la desparasitación');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error de conexión al eliminar');
+    }
+  };
+
   if (loading) return <div className="p-8 text-center text-gray-500">Cargando...</div>;
 
   return (
@@ -106,17 +127,27 @@ export default function DesparasitacionesTab({ animalId, token }) {
         <ul className="space-y-2">
           {internas.length === 0 && <li className="text-sm text-gray-400 italic">No hay registros</li>}
           {internas.map(item => (
-            <li key={item.id} className="bg-white border border-gray-100 p-3 rounded-lg flex justify-between items-center shadow-sm">
-              <div>
+            <li key={item.id} className="bg-white border border-gray-100 p-3 rounded-lg flex justify-between items-center shadow-sm gap-3">
+              <div className="flex-1 min-w-0">
                 <p className="font-bold text-gray-800 text-sm">{item.product?.name || 'Producto Desconocido'}</p>
                 <p className="text-xs text-gray-500">Realizado: {item.date}</p>
               </div>
-              {item.next_due_date && (
-                <div className="text-right">
-                  <p className="text-xs font-medium text-indigo-600">Próxima:</p>
-                  <p className="text-xs font-bold text-indigo-700">{item.next_due_date}</p>
-                </div>
-              )}
+              <div className="flex items-center gap-2 shrink-0">
+                {item.next_due_date && (
+                  <div className="text-right">
+                    <p className="text-xs font-medium text-indigo-600">Próxima:</p>
+                    <p className="text-xs font-bold text-indigo-700">{item.next_due_date}</p>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleDelete('interna', item.id, item.product?.name || 'esta desparasitación')}
+                  className="text-red-600 bg-red-50 hover:bg-red-100 p-2 rounded-lg transition-colors"
+                  title="Eliminar"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
             </li>
           ))}
         </ul>
@@ -156,17 +187,27 @@ export default function DesparasitacionesTab({ animalId, token }) {
         <ul className="space-y-2">
           {externas.length === 0 && <li className="text-sm text-gray-400 italic">No hay registros</li>}
           {externas.map(item => (
-            <li key={item.id} className="bg-white border border-gray-100 p-3 rounded-lg flex justify-between items-center shadow-sm">
-              <div>
+            <li key={item.id} className="bg-white border border-gray-100 p-3 rounded-lg flex justify-between items-center shadow-sm gap-3">
+              <div className="flex-1 min-w-0">
                 <p className="font-bold text-gray-800 text-sm">{item.product?.name || 'Producto Desconocido'}</p>
                 <p className="text-xs text-gray-500">Realizado: {item.date}</p>
               </div>
-              {item.next_due_date && (
-                <div className="text-right">
-                  <p className="text-xs font-medium text-emerald-600">Próxima:</p>
-                  <p className="text-xs font-bold text-emerald-700">{item.next_due_date}</p>
-                </div>
-              )}
+              <div className="flex items-center gap-2 shrink-0">
+                {item.next_due_date && (
+                  <div className="text-right">
+                    <p className="text-xs font-medium text-emerald-600">Próxima:</p>
+                    <p className="text-xs font-bold text-emerald-700">{item.next_due_date}</p>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleDelete('externa', item.id, item.product?.name || 'esta desparasitación')}
+                  className="text-red-600 bg-red-50 hover:bg-red-100 p-2 rounded-lg transition-colors"
+                  title="Eliminar"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
             </li>
           ))}
         </ul>
