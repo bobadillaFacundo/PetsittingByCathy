@@ -106,6 +106,13 @@ def read_root():
     return {"message": "Bienvenido a la API del Asistente Veterinario"}
 
 
+@app.get("/health/ollama")
+def health_ollama():
+    from src.services.vision_service import probe_ollama
+
+    return probe_ollama()
+
+
 @app.get("/health/schema")
 def health_schema():
     from sqlalchemy import inspect

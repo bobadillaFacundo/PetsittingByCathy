@@ -30,6 +30,7 @@ VLLM_MODEL = os.getenv("VLLM_MODEL", "Qwen/Qwen2.5-7B-Instruct-AWQ")
 VLLM_URL = f"{_VLLM_BASE}/chat/completions"
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "qwen/qwen3.6-27b")
 GROQ_VISION_MODEL_FALLBACK = os.getenv("GROQ_VISION_MODEL_FALLBACK", "llama-3.2-11b-vision-preview").strip()
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
@@ -302,6 +303,47 @@ def _service_url_reachable_from_backend(url: str) -> bool:
 
 def _ollama_usable() -> bool:
     return bool(OLLAMA_BASE_URL) and _service_url_reachable_from_backend(OLLAMA_BASE_URL)
+
+
+def _ollama_block_reason() -> Optional[str]:
+    if not OLLAMA_BASE_URL:
+        return "OLLAMA_BASE_URL vacío"
+    host = _host_from_service_url(OLLAMA_BASE_URL)
+    if VISION_SKIP_LOCAL_FALLBACKS and _is_private_or_loopback_host(host):
+        return (
+            f"host '{host}' no alcanzable desde Render; "
+            "usá URL Tailscale Funnel https://tu-pc.ts.net"
+        )
+    return None
+
+
+def probe_ollama() -> dict[str, Any]:
+    """Prueba conectividad a Ollama (útil en /health/ollama)."""
+    reason = _ollama_block_reason()
+    if reason:
+        return {"ok": False, "usable": False, "reason": reason}
+    host = _host_from_service_url(OLLAMA_BASE_URL)
+    result: dict[str, Any] = {
+        "ok": False,
+        "usable": True,
+        "host": host,
+        "model": OLLAMA_VISION_MODEL,
+    }
+    try:
+        resp = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=(3, 10))
+        resp.raise_for_status()
+        models = [m.get("name") for m in resp.json().get("models") or []]
+        result["models"] = models
+        result["model_installed"] = any(
+            OLLAMA_VISION_MODEL in (name or "") or (name or "").startswith(f"{OLLAMA_VISION_MODEL}:")
+            for name in models
+        )
+        result["ok"] = result["model_installed"]
+        if not result["model_installed"]:
+            result["reason"] = f"modelo '{OLLAMA_VISION_MODEL}' no está en Ollama; ejecutá: ollama pull {OLLAMA_VISION_MODEL}"
+    except Exception as e:
+        result["reason"] = str(e)
+    return result
 
 
 def _ocr_usable() -> bool:
@@ -599,10 +641,10 @@ def _call_vllm_json(messages: list) -> dict:
 
 
 def _call_llm_json(messages: list, prefer_groq: bool = True, groq_model: Optional[str] = None) -> dict:
-    """Llama a Groq por defecto; si falla, usa vLLM."""
+    """Llama a Groq (texto) por defecto; si falla, usa vLLM."""
     if prefer_groq and GROQ_API_KEY:
         try:
-            return _call_groq_json(messages, groq_model or GROQ_VISION_MODEL)
+            return _call_groq_json(messages, groq_model or GROQ_MODEL)
         except (GroqUnavailableError, json.JSONDecodeError, KeyError) as e:
             logger.warning("Groq NLP falló, probando vLLM: %s", e)
 
@@ -918,6 +960,12 @@ def _scan_with_auto_fallback(
     groq_nlp_ok = bool(GROQ_API_KEY)
     no_vaccines_error: Optional[ScanNoVaccinesError] = None
 
+    block = _ollama_block_reason()
+    if block:
+        logger.info("Escaneo: Ollama no disponible — %s", block)
+    elif _ollama_usable():
+        logger.info("Escaneo: Ollama listo en %s (modelo %s)", OLLAMA_BASE_URL, OLLAMA_VISION_MODEL)
+
     if GROQ_API_KEY:
         try:
             return extract_fields_groq_vision(
@@ -933,7 +981,6 @@ def _scan_with_auto_fallback(
             msg = f"Groq: {e}"
             logger.warning("Escaneo vacuna - %s", msg)
             errors.append(msg)
-            groq_nlp_ok = False
 
     if _ollama_usable():
         logger.info("Escaneo: Groq no alcanzó; probando Ollama en %s", OLLAMA_BASE_URL)
@@ -949,14 +996,22 @@ def _scan_with_auto_fallback(
                 if errors:
                     fields["fallback_from"] = errors
                 return fields
+            if raw_text.strip():
+                return _scan_result(
+                    [],
+                    raw_text,
+                    "moondream",
+                    warning=(
+                        "Ollama leyó la etiqueta pero no armó vacunas automáticamente. "
+                        "Revisá el texto abajo o cargá los datos a mano."
+                    ),
+                )
             errors.append("Ollama: no se detectaron vacunas en la imagen")
             logger.warning("Escaneo vacuna - %s", errors[-1])
         except Exception as e:
             msg = f"Ollama: {e}"
             logger.warning("Escaneo vacuna - %s", msg)
             errors.append(msg)
-    elif errors:
-        logger.info("Escaneo: Ollama no configurado o no alcanzable desde el servidor")
 
     if _ocr_usable():
         try:
