@@ -734,8 +734,8 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
 
               <div className="modal-sheet-body">
                 <div className="modal-tab-panel">
-              {modalTab === 'basic' && (
-                <div className="modal-tab-content">
+                  <div className="modal-tab-pane" hidden={modalTab !== 'basic'}>
+                    <div className="modal-tab-content">
                 <form onSubmit={handleSubmit} className="space-y-4 w-full">
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1">Nombre</label>
@@ -967,14 +967,28 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                     </button>
                   </div>
                 </form>
-                </div>
-              )}
+                    </div>
+                  </div>
 
-              {modalTab === 'libreta' && <LibretaTab animalId={editingId} token={token} />}
-              {modalTab === 'deworming' && <DesparasitacionesTab animalId={editingId} token={token} />}
-              {modalTab === 'labs' && <LaboratoriosTab animalId={editingId} token={token} />}
-              {modalTab === 'medicacion' && <MedicacionTab animalId={editingId} />}
-              {modalTab === 'observaciones' && <ObservacionesTab animalId={editingId} token={token} />}
+                  {editingId && (
+                    <>
+                      <div className="modal-tab-pane" hidden={modalTab !== 'libreta'}>
+                        <LibretaTab animalId={editingId} token={token} />
+                      </div>
+                      <div className="modal-tab-pane" hidden={modalTab !== 'deworming'}>
+                        <DesparasitacionesTab animalId={editingId} token={token} />
+                      </div>
+                      <div className="modal-tab-pane" hidden={modalTab !== 'labs'}>
+                        <LaboratoriosTab animalId={editingId} token={token} />
+                      </div>
+                      <div className="modal-tab-pane" hidden={modalTab !== 'medicacion'}>
+                        <MedicacionTab animalId={editingId} />
+                      </div>
+                      <div className="modal-tab-pane" hidden={modalTab !== 'observaciones'}>
+                        <ObservacionesTab animalId={editingId} token={token} />
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

@@ -139,22 +139,23 @@ input[type="date"].audit-date-input::-webkit-datetime-edit-year-field {
   max-width: 42rem;
   display: flex;
   flex-direction: column;
-  min-height: min(90dvh, 52rem);
+  flex-shrink: 0;
   height: min(90dvh, 52rem);
+  min-height: min(90dvh, 52rem);
   max-height: min(90dvh, 52rem);
   overflow: hidden;
 }
 
 @media (max-width: 639px) {
   .modal-sheet.modal-sheet--pet {
-    min-height: min(94dvh, 100%);
-    height: min(94dvh, 100%);
+    height: 94dvh;
+    min-height: 94dvh;
     max-height: 94dvh;
   }
 }
 
 .modal-sheet--pet .modal-sheet-body {
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -162,24 +163,40 @@ input[type="date"].audit-date-input::-webkit-datetime-edit-year-field {
 }
 
 .modal-sheet--pet .modal-tab-panel {
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  height: 100%;
   padding: 1.5rem;
   box-sizing: border-box;
+  overflow: hidden;
+}
+
+.modal-sheet--pet .modal-tab-pane {
+  flex: 1 1 0%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.modal-sheet--pet .modal-tab-pane[hidden] {
+  display: none !important;
+}
+
+.modal-tab-content {
+  flex: 1 1 0%;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+  height: 100%;
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
-}
-
-.modal-tab-content {
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  min-height: 100%;
 }
 
 .modal-sheet--pet .modal-tab-loading {
@@ -188,7 +205,7 @@ input[type="date"].audit-date-input::-webkit-datetime-edit-year-field {
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: 100%;
+  min-height: 12rem;
   color: #6b7280;
   font-size: 0.875rem;
 }

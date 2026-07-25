@@ -10,7 +10,6 @@ export default function LibretaTab({ animalId, token }) {
   const [saving, setSaving] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
-  const [scanEngine, setScanEngine] = useState('auto');
   const [scanPreview, setScanPreview] = useState(null);
   const [newVaccine, setNewVaccine] = useState({
     vaccine_id: '',
@@ -64,7 +63,7 @@ export default function LibretaTab({ animalId, token }) {
     setScanning(true);
     try {
       const res = await fetch(
-        `${API_BASE}/animals/${animalId}/vaccines/scan?engine=${encodeURIComponent(scanEngine)}`,
+        `${API_BASE}/animals/${animalId}/vaccines/scan`,
         {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token}` },
@@ -202,22 +201,11 @@ export default function LibretaTab({ animalId, token }) {
                 }}
                 className="flex-1 text-sm file:mr-4 file:py-1.5 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 border border-gray-200 rounded-lg p-1 text-gray-900 w-full"
               />
-              <select
-                value={scanEngine}
-                onChange={(e) => setScanEngine(e.target.value)}
-                className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-900 bg-white shrink-0"
-                title="Motor de reconocimiento"
-              >
-                <option value="auto">Automático (Groq → Ollama → OCR)</option>
-                <option value="groq">Groq Vision (qwen3.6-27b)</option>
-                <option value="moondream">Ollama / Moondream</option>
-                <option value="ocr">OCR (PaddleOCR)</option>
-              </select>
               <button
                 type="button"
                 onClick={handleScan}
                 disabled={!selectedFile || scanning}
-                className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center justify-center gap-1 shrink-0 disabled:opacity-60"
+                className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center justify-center gap-1 shrink-0 disabled:opacity-60 w-full sm:w-auto"
               >
                 <ScanLine size={16} /> {scanning ? 'Analizando...' : 'Escanear'}
               </button>
