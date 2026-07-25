@@ -201,6 +201,48 @@ class TestVaccineDocument:
         assert body["lot_number"] == "ABC-1"
         assert body["method"] == "groq"
 
+    def test_scan_deworming_product(self, client, auth_headers, seed, db, monkeypatch):
+        from src.models.models import VeterinaryProduct
+
+        prod = VeterinaryProduct(name="Bravecto Scan", type="EXTERNAL")
+        db.add(prod)
+        db.commit()
+
+        monkeypatch.setattr(
+            "src.services.vision_service.scan_deworming_image",
+            lambda *a, **k: {
+                "products": [{
+                    "product_name": "Bravecto Scan",
+                    "product_type": "EXTERNAL",
+                    "date": "2025-03-01",
+                    "next_due_date": "2025-09-01",
+                    "lot_number": "BRV-42",
+                }],
+                "count": 1,
+                "product_name": "Bravecto Scan",
+                "product_type": "EXTERNAL",
+                "date": "2025-03-01",
+                "raw_text": "Bravecto Lote BRV-42",
+                "method": "groq",
+            },
+        )
+        monkeypatch.setattr(
+            "src.services.vision_service.match_product_catalog_id",
+            lambda name, catalog, preferred_type=None: prod.id if name else None,
+        )
+
+        res = client.post(
+            f"/animals/{seed['animal'].id}/dewormings/scan",
+            files={"file": ("pipeta.jpg", b"fake-image", "image/jpeg")},
+            headers=auth_headers,
+        )
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert body["count"] == 1
+        assert body["products"][0]["product_id"] == prod.id
+        assert body["product_type"] == "EXTERNAL"
+        assert body["method"] == "groq"
+
     def test_add_vaccines_bulk(self, client, auth_headers, seed, db):
         from src.models.models import VaccineCatalog, Vaccine
 

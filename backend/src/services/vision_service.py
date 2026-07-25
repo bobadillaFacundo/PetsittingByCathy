@@ -86,6 +86,24 @@ _VACCINE_VISION_PROMPT = (
     "Responde SOLO JSON válido, sin markdown."
 )
 
+_DEWORMING_VISION_PROMPT = (
+    "Leé etiquetas/cajas de antiparasitarios veterinarios (pipetas, comprimidos, collares). "
+    "Extraé: product_name (nombre comercial, ej. NexGard, Bravecto, Drontal), "
+    "product_type (INTERNAL si es oral/comprimido, EXTERNAL si es pipeta/collar/spray; null si no está claro), "
+    "date (fecha de aplicación si aparece), next_due_date (próxima dosis/vencimiento), "
+    "lot_number (lote si hay).\n"
+    "Fechas en YYYY-MM-DD. null si no se lee.\n"
+    '{"products":[{"product_name":null,"product_type":null,"date":null,'
+    '"next_due_date":null,"lot_number":null}]}\n'
+    "Responde SOLO JSON válido, sin markdown."
+)
+
+_DEWORMING_FIELD_RULES = """
+Busca nombre comercial del antiparasitario (NexGard, Bravecto, Frontline, Drontal, etc.).
+INTERNAL = uso interno (oral, comprimido). EXTERNAL = uso externo (pipeta, collar, spray tópico).
+Fechas a YYYY-MM-DD. Lote en N. Lote / Lote / Lot si aparece.
+"""
+
 
 class GroqUnavailableError(Exception):
     """Groq no disponible (límite de uso, error de red, etc.)."""
@@ -106,6 +124,15 @@ class ScanNoVaccinesError(Exception):
         self.raw_text = raw_text or ""
         self.method = method
         super().__init__("No se detectaron vacunas en la imagen")
+
+
+class ScanNoProductsError(Exception):
+    """El archivo se procesó pero no se detectó producto de desparasitación."""
+
+    def __init__(self, raw_text: str = "", method: str = "groq"):
+        self.raw_text = raw_text or ""
+        self.method = method
+        super().__init__("No se detectó producto de desparasitación en la imagen")
 
 
 def _image_to_b64(image_bytes: bytes) -> str:
@@ -136,7 +163,6 @@ def _pil_to_jpeg_bytes(img, max_side: Optional[int] = None) -> bytes:
     elif img.mode == "L":
         img = img.convert("RGB")
 
-    limit = max_side if max_side is not None else VISION_MAX_IMAGE_SIDE
     limit = max_side if max_side is not None else VISION_MAX_IMAGE_SIDE
     w, h = img.size
     if max(w, h) > limit:
@@ -508,6 +534,23 @@ _MOONDREAM_OCR_PROMPTS = [
     ),
 ]
 
+_MOONDREAM_OCR_PROMPTS_DEWORMING = [
+    (
+        "What is ALL the text printed on the antiparasitic product labels in this image? "
+        "Transcribe every word, number, lot code and date exactly as shown. "
+        "Include brand names like NexGard, Bravecto, Frontline, Drontal. "
+        "Reply in Spanish as plain text lines only. Do NOT return coordinates, JSON or bounding boxes."
+    ),
+    (
+        "Describe this image in detail. List every line of text visible on veterinary "
+        "deworming or flea/tick product packaging (pipettes, tablets, collars)."
+    ),
+    (
+        "OCR: copy all visible text from the antiparasitic product labels in this photo, "
+        "including N. Lote, F. Cad, F. Elab and commercial names. Spanish labels."
+    ),
+]
+
 
 def _ollama_vision_post(prompt: str, b64: str, timeout: tuple[int, int]) -> str:
     options = {"num_predict": 800, "temperature": 0.1}
@@ -561,7 +604,11 @@ def _ollama_vision_post(prompt: str, b64: str, timeout: tuple[int, int]) -> str:
     raise RuntimeError(last_error or "Ollama no devolvió texto legible")
 
 
-def extract_text_moondream(image_bytes: bytes, filename: str = "scan.jpg") -> str:
+def extract_text_moondream(
+    image_bytes: bytes,
+    filename: str = "scan.jpg",
+    scan_kind: str = "vaccine",
+) -> str:
     """Transcribe etiquetas con Moondream vía Ollama (varios prompts anti-coordenadas)."""
     prepared_bytes, _ = _prepare_image_for_vision(
         image_bytes,
@@ -570,8 +617,13 @@ def extract_text_moondream(image_bytes: bytes, filename: str = "scan.jpg") -> st
     )
     b64 = _image_to_b64(prepared_bytes)
     timeout = (5, _effective_ollama_timeout())
+    prompts = (
+        _MOONDREAM_OCR_PROMPTS_DEWORMING
+        if scan_kind == "deworming"
+        else _MOONDREAM_OCR_PROMPTS
+    )
     errors: list[str] = []
-    for prompt in _MOONDREAM_OCR_PROMPTS:
+    for prompt in prompts:
         try:
             return _ollama_vision_post(prompt, b64, timeout)
         except RuntimeError as e:
@@ -1129,6 +1181,462 @@ def scan_vaccine_image(
     raise ValueError(
         f"Motor desconocido: {engine}. Use 'auto', 'groq', 'moondream' u 'ocr'."
     )
+
+
+def _product_catalog_hint(catalog: Optional[list[dict]], limit: Optional[int] = None) -> str:
+    if not catalog:
+        return ""
+    if limit is None:
+        limit = 12 if VISION_SKIP_LOCAL_FALLBACKS else 40
+    items = catalog[:limit]
+    extra = f" (y {len(catalog) - limit} más)" if len(catalog) > limit else ""
+    lines = []
+    for item in items:
+        name = item.get("name") or ""
+        ptype = (item.get("type") or "").upper()
+        if name:
+            lines.append(f"{name} ({ptype})" if ptype else name)
+    if not lines:
+        return ""
+    return (
+        "\nProductos antiparasitarios conocidos en el catálogo (elige el más cercano si aplica):\n"
+        + ", ".join(lines)
+        + extra
+    )
+
+
+def _normalize_product_type(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
+    s = str(value).strip().upper()
+    if s in ("INTERNAL", "INTERNO", "INTERNA", "ORAL", "COMPRIMIDO", "TABLET"):
+        return "INTERNAL"
+    if s in ("EXTERNAL", "EXTERNO", "EXTERNA", "PIPETA", "TOPICO", "TÓPICO", "COLLAR", "SPRAY"):
+        return "EXTERNAL"
+    return None
+
+
+def _normalize_product_item(item: dict) -> dict[str, Any]:
+    if not isinstance(item, dict):
+        return {}
+    return {
+        "product_name": (item.get("product_name") or None),
+        "product_type": _normalize_product_type(item.get("product_type")),
+        "date": _normalize_date(item.get("date")),
+        "next_due_date": _normalize_date(item.get("next_due_date")),
+        "lot_number": (item.get("lot_number") or None),
+    }
+
+
+def _fields_list_from_parsed_deworming(parsed: dict, raw_text: str) -> list[dict[str, Any]]:
+    items = parsed.get("products")
+    if isinstance(items, list) and items:
+        result = [_normalize_product_item(x) for x in items if isinstance(x, dict)]
+        result = [x for x in result if any(x.values())]
+        if result:
+            return result
+
+    single = _normalize_product_item(parsed)
+    if any(single.values()):
+        return [single]
+    return []
+
+
+def _deworming_scan_result(
+    products: list[dict[str, Any]],
+    raw_text: str,
+    method: str,
+    warning: Optional[str] = None,
+) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "products": products,
+        "count": len(products),
+        "raw_text": raw_text,
+        "method": method,
+    }
+    if warning:
+        result["warning"] = warning
+    if products:
+        result.update(products[0])
+    return result
+
+
+def _extract_products_from_groq_content(
+    content: str,
+    catalog: Optional[list[dict]] = None,
+) -> list[dict[str, Any]]:
+    parsed: dict[str, Any] = {}
+    try:
+        parsed = _parse_json_from_text(content)
+    except json.JSONDecodeError:
+        parsed = {}
+
+    products = _fields_list_from_parsed_deworming(parsed, content)
+    if products:
+        return products
+
+    try:
+        fields = parse_deworming_fields(content, catalog=catalog, prefer_groq=True)
+        return fields.get("products") or []
+    except Exception as e:
+        logger.warning("Fallback NLP desparasitación tras visión Groq falló: %s", e)
+        return []
+
+
+def extract_fields_groq_vision_deworming(
+    image_bytes: bytes,
+    filename: str = "image.jpg",
+    catalog: Optional[list[dict]] = None,
+    already_prepared: bool = False,
+) -> dict[str, Any]:
+    """Analiza la imagen de un antiparasitario con Groq Vision."""
+    if already_prepared:
+        prepared_bytes = image_bytes
+    else:
+        prepared_bytes, _ = _prepare_image_for_vision(image_bytes, filename)
+    catalog_hint = _product_catalog_hint(catalog)
+
+    data_url = f"data:image/jpeg;base64,{_image_to_b64(prepared_bytes)}"
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": _DEWORMING_VISION_PROMPT + catalog_hint},
+                {"type": "image_url", "image_url": {"url": data_url}},
+            ],
+        },
+    ]
+    content = ""
+    models_to_try = [GROQ_VISION_MODEL]
+    if (
+        GROQ_VISION_MODEL_FALLBACK
+        and GROQ_VISION_MODEL_FALLBACK != GROQ_VISION_MODEL
+        and not VISION_SKIP_LOCAL_FALLBACKS
+    ):
+        models_to_try.append(GROQ_VISION_MODEL_FALLBACK)
+
+    last_error: Optional[Exception] = None
+    for model_name in models_to_try:
+        try:
+            content = _call_groq(
+                messages,
+                model_name,
+                json_mode=True,
+                max_tokens=512,
+            )
+            break
+        except GroqRateLimitError:
+            raise
+        except (GroqUnavailableError, json.JSONDecodeError, KeyError) as e:
+            last_error = e
+            logger.warning("Groq vision desparasitación con %s falló: %s", model_name, e)
+            continue
+
+    if not content:
+        if isinstance(last_error, GroqUnavailableError):
+            raise last_error
+        try:
+            content = _call_groq(
+                messages,
+                models_to_try[0],
+                json_mode=False,
+                max_tokens=512,
+            )
+        except GroqRateLimitError:
+            raise
+        except GroqUnavailableError as e:
+            raise e
+    if not content:
+        raise GroqUnavailableError("Groq no devolvió contenido")
+
+    products = _extract_products_from_groq_content(content, catalog=catalog)
+    if not products:
+        raise ScanNoProductsError(content, method="groq")
+    return _deworming_scan_result(products, content, "groq")
+
+
+def parse_deworming_fields(
+    raw_text: str,
+    catalog: Optional[list[dict]] = None,
+    prefer_groq: bool = True,
+) -> dict[str, Any]:
+    """Convierte texto OCR/visión en campos de desparasitación."""
+    catalog_hint = _product_catalog_hint(catalog)
+
+    prompt = f"""
+Analiza el texto extraído de una etiqueta o caja de antiparasitario veterinario (Argentina).
+Puede haber UNO o VARIOS productos en el mismo texto.
+{_DEWORMING_FIELD_RULES}
+{catalog_hint}
+Devuelve JSON con esta estructura exacta:
+{{"products": [
+  {{"product_name": string|null, "product_type": "INTERNAL"|"EXTERNAL"|null,
+    "date": string|null, "next_due_date": string|null, "lot_number": string|null}}
+]}}
+
+Texto extraído:
+{raw_text}
+"""
+    messages = [
+        {
+            "role": "system",
+            "content": "Eres un extractor de datos veterinarios. Responde SOLO con JSON válido.",
+        },
+        {"role": "user", "content": prompt},
+    ]
+    try:
+        parsed = _call_llm_json(messages, prefer_groq=prefer_groq)
+    except Exception as e:
+        logger.warning("Error parseando campos de desparasitación: %s", e)
+        parsed = {}
+
+    products = _fields_list_from_parsed_deworming(parsed, raw_text)
+    return _deworming_scan_result(products, raw_text, "text")
+
+
+def _merge_product_lists(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for result in results:
+        for item in result.get("products") or []:
+            key = "|".join([
+                str(item.get("product_name") or "").lower(),
+                str(item.get("lot_number") or "").lower(),
+                str(item.get("date") or ""),
+            ])
+            if key in seen and key != "||":
+                continue
+            seen.add(key)
+            merged.append(item)
+    return merged
+
+
+def _scan_deworming_pdf(
+    pdf_bytes: bytes,
+    catalog: Optional[list[dict]] = None,
+) -> dict[str, Any]:
+    raw_text = _extract_text_pdf(pdf_bytes)
+    if raw_text.strip():
+        fields = parse_deworming_fields(raw_text, catalog=catalog)
+        if fields.get("products"):
+            fields["method"] = "pdf-text"
+            return fields
+
+    logger.info("PDF desparasitación sin texto extraíble; convirtiendo páginas a imagen...")
+    page_images = _pdf_pages_to_jpeg_list(pdf_bytes)
+    page_results: list[dict[str, Any]] = []
+    raw_parts: list[str] = []
+
+    for i, page_jpeg in enumerate(page_images):
+        try:
+            result = extract_fields_groq_vision_deworming(
+                page_jpeg,
+                filename=f"page-{i + 1}.jpg",
+                catalog=catalog,
+                already_prepared=True,
+            )
+            if result.get("products"):
+                page_results.append(result)
+                raw_parts.append(result.get("raw_text") or "")
+        except (ScanNoProductsError, ValueError):
+            continue
+
+    products = _merge_product_lists(page_results)
+    raw_text = "\n---\n".join(raw_parts)
+    if not products:
+        raise ScanNoProductsError(raw_text, method="pdf-vision")
+
+    return _deworming_scan_result(products, raw_text, "pdf-vision")
+
+
+def _scan_deworming_with_auto_fallback(
+    image_bytes: bytes,
+    filename: str,
+    catalog: Optional[list[dict]] = None,
+) -> dict[str, Any]:
+    """Groq → Ollama → OCR (solo local) para antiparasitarios."""
+    if _is_pdf(image_bytes, filename):
+        return _scan_deworming_pdf(image_bytes, catalog)
+
+    errors: list[str] = []
+    groq_nlp_ok = bool(GROQ_API_KEY)
+    no_products_error: Optional[ScanNoProductsError] = None
+
+    block = _ollama_block_reason()
+    if block:
+        logger.info("Escaneo desparasitación: Ollama no disponible — %s", block)
+    elif _ollama_usable():
+        logger.info(
+            "Escaneo desparasitación: Ollama listo en %s (modelo %s)",
+            OLLAMA_BASE_URL,
+            OLLAMA_VISION_MODEL,
+        )
+
+    if GROQ_API_KEY:
+        try:
+            return extract_fields_groq_vision_deworming(
+                image_bytes, filename=filename, catalog=catalog
+            )
+        except ScanImageError:
+            raise
+        except ScanNoProductsError as e:
+            no_products_error = e
+            errors.append("Groq: no se detectó producto de desparasitación en la imagen")
+            logger.warning("Escaneo desparasitación - %s", errors[-1])
+        except (GroqRateLimitError, GroqUnavailableError, json.JSONDecodeError, KeyError, requests.RequestException) as e:
+            msg = f"Groq: {e}"
+            logger.warning("Escaneo desparasitación - %s", msg)
+            errors.append(msg)
+
+    if _ollama_usable():
+        logger.info("Escaneo desparasitación: Groq no alcanzó; probando Ollama en %s", OLLAMA_BASE_URL)
+        try:
+            raw_text = extract_text_moondream(image_bytes, filename=filename, scan_kind="deworming")
+            fields = parse_deworming_fields(
+                raw_text,
+                catalog=catalog,
+                prefer_groq=groq_nlp_ok,
+            )
+            if fields.get("products"):
+                fields["method"] = "moondream"
+                if errors:
+                    fields["fallback_from"] = errors
+                return fields
+            if raw_text.strip() and _moondream_text_useful(raw_text):
+                return _deworming_scan_result(
+                    [],
+                    raw_text,
+                    "moondream",
+                    warning=(
+                        "Ollama leyó la etiqueta pero no identificó el producto automáticamente. "
+                        "Revisá el texto abajo o cargá los datos a mano."
+                    ),
+                )
+            errors.append("Ollama: no se detectó producto de desparasitación en la imagen")
+            logger.warning("Escaneo desparasitación - %s", errors[-1])
+        except Exception as e:
+            msg = f"Ollama: {e}"
+            logger.warning("Escaneo desparasitación - %s", msg)
+            errors.append(msg)
+
+    if _ocr_usable():
+        try:
+            raw_text = extract_text_ocr(image_bytes, filename=filename)
+            if not raw_text.strip():
+                raise RuntimeError("OCR no detectó texto")
+            fields = parse_deworming_fields(
+                raw_text,
+                catalog=catalog,
+                prefer_groq=groq_nlp_ok,
+            )
+            if fields.get("products"):
+                fields["method"] = "ocr"
+                if errors:
+                    fields["fallback_from"] = errors
+                return fields
+            errors.append("OCR: no se detectó producto de desparasitación en la imagen")
+        except Exception as e:
+            errors.append(f"OCR: {e}")
+
+    if no_products_error and not _ollama_usable() and not _ocr_usable():
+        return _deworming_scan_result(
+            [],
+            no_products_error.raw_text,
+            no_products_error.method,
+            warning=(
+                "No se detectó el producto automáticamente. "
+                "Revisá el texto extraído abajo o cargá los datos a mano."
+            ),
+        )
+
+    logger.error("Escaneo desparasitación falló tras Groq/Ollama/OCR: %s", "; ".join(errors))
+    raise _scan_all_engines_failed()
+
+
+def scan_deworming_image(
+    image_bytes: bytes,
+    filename: str = "image.jpg",
+    engine: str = "auto",
+    catalog: Optional[list[dict]] = None,
+) -> dict[str, Any]:
+    """
+    Escanea una imagen de antiparasitario.
+    engine: 'auto' (default), 'groq', 'moondream'/'ollama', 'ocr'
+    """
+    engine = (engine or "auto").strip().lower()
+
+    try:
+        if engine == "auto":
+            return _scan_deworming_with_auto_fallback(image_bytes, filename, catalog)
+
+        if _is_pdf(image_bytes, filename):
+            return _scan_deworming_pdf(image_bytes, catalog)
+
+        if engine == "groq":
+            fields = extract_fields_groq_vision_deworming(
+                image_bytes, filename=filename, catalog=catalog
+            )
+            fields["method"] = "groq"
+            return fields
+
+        if engine == "ocr":
+            raw_text = extract_text_ocr(image_bytes, filename=filename)
+            fields = parse_deworming_fields(raw_text, catalog=catalog)
+            fields["method"] = "ocr"
+            return fields
+
+        if engine in ("moondream", "vision", "modal", "ollama"):
+            raw_text = extract_text_moondream(
+                image_bytes, filename=filename, scan_kind="deworming"
+            )
+            fields = parse_deworming_fields(raw_text, catalog=catalog)
+            fields["method"] = "moondream"
+            return fields
+    except ScanNoProductsError as e:
+        return _deworming_scan_result(
+            [],
+            e.raw_text,
+            e.method,
+            warning=(
+                "No se detectó el producto automáticamente. "
+                "Revisá el texto extraído abajo o cargá los datos a mano."
+            ),
+        )
+
+    raise ValueError(
+        f"Motor desconocido: {engine}. Use 'auto', 'groq', 'moondream' u 'ocr'."
+    )
+
+
+def match_product_catalog_id(
+    product_name: Optional[str],
+    catalog: list[dict],
+    preferred_type: Optional[str] = None,
+) -> Optional[int]:
+    """Intenta mapear el nombre detectado al catálogo de productos veterinarios."""
+    if not product_name or not catalog:
+        return None
+    name_lower = product_name.strip().lower()
+    preferred = _normalize_product_type(preferred_type)
+
+    candidates = catalog
+    if preferred:
+        typed = [c for c in catalog if (c.get("type") or "").upper() == preferred]
+        if typed:
+            candidates = typed
+
+    for item in candidates:
+        cat_name = (item.get("name") or "").strip().lower()
+        if cat_name == name_lower:
+            return item["id"]
+    for item in candidates:
+        cat_name = (item.get("name") or "").strip().lower()
+        if cat_name in name_lower or name_lower in cat_name:
+            return item["id"]
+
+    if preferred and candidates != catalog:
+        return match_product_catalog_id(product_name, catalog, preferred_type=None)
+    return None
 
 
 def match_vaccine_catalog_id(vaccine_name: Optional[str], catalog: list[dict]) -> Optional[int]:

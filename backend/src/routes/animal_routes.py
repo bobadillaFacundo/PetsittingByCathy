@@ -635,6 +635,95 @@ async def scan_vaccine_certificate(
     return _enrich_scan_vaccines(result, catalog_list)
 
 
+def _enrich_scan_deworming(result: dict, catalog_list: list[dict]) -> dict:
+    from src.services.vision_service import match_product_catalog_id
+
+    products = result.get("products")
+    if not isinstance(products, list) or not products:
+        single = {
+            "product_name": result.get("product_name"),
+            "product_type": result.get("product_type"),
+            "date": result.get("date"),
+            "next_due_date": result.get("next_due_date"),
+            "lot_number": result.get("lot_number"),
+        }
+        if any(single.values()):
+            products = [single]
+        else:
+            products = []
+
+    enriched = []
+    for item in products:
+        row = dict(item)
+        row["product_id"] = match_product_catalog_id(
+            row.get("product_name"),
+            catalog_list,
+            preferred_type=row.get("product_type"),
+        )
+        enriched.append(row)
+
+    result["products"] = enriched
+    result["count"] = len(enriched)
+    if enriched:
+        result.update(enriched[0])
+    return result
+
+
+@router.post("/{animal_id}/dewormings/scan")
+async def scan_deworming_product(
+    animal_id: int,
+    file: UploadFile = File(...),
+    engine: str = "auto",
+    db: Session = Depends(get_db),
+):
+    """Escanea una imagen de antiparasitario y devuelve campos detectados (sin guardar)."""
+    from src.services.vision_service import (
+        scan_deworming_image,
+        ScanImageError,
+        GroqUnavailableError,
+        GroqRateLimitError,
+    )
+
+    animal = db.query(Animal).filter(Animal.id == animal_id).first()
+    if not animal:
+        raise HTTPException(status_code=404, detail="Animal no encontrado")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="El archivo está vacío")
+
+    catalog = db.query(VeterinaryProduct).all()
+    catalog_list = [{"id": c.id, "name": c.name, "type": c.type} for c in catalog]
+
+    try:
+        result = await asyncio.to_thread(
+            scan_deworming_image,
+            content,
+            filename=file.filename or "deworming.jpg",
+            engine=engine,
+            catalog=catalog_list,
+        )
+    except ScanImageError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except GroqRateLimitError as e:
+        logger.warning("Escaneo desparasitación rate limit sin fallback: %s", e)
+        raise HTTPException(status_code=502, detail="scan_failed")
+    except GroqUnavailableError as e:
+        logger.warning("Escaneo desparasitación Groq no disponible: %s", e)
+        raise HTTPException(status_code=502, detail="scan_failed")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        if str(e) == "scan_failed":
+            raise HTTPException(status_code=502, detail="scan_failed")
+        raise HTTPException(status_code=502, detail="scan_failed")
+    except Exception:
+        logger.exception("Escaneo desparasitación error inesperado")
+        raise HTTPException(status_code=502, detail="scan_failed")
+
+    return _enrich_scan_deworming(result, catalog_list)
+
+
 @router.post("/{animal_id}/vaccines/bulk")
 def add_vaccines_bulk(animal_id: int, data: dict, db: Session = Depends(get_db)):
     """Registra varias vacunas a la vez (mismo documento opcional)."""
