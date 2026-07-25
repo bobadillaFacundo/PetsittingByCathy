@@ -56,6 +56,19 @@ class GroqUnavailableError(Exception):
     """Groq no disponible (límite de uso, error de red, etc.)."""
 
 
+class ScanImageError(ValueError):
+    """El archivo no se pudo leer o convertir para el escaneo."""
+
+
+class ScanNoVaccinesError(Exception):
+    """El archivo se procesó pero no se encontraron vacunas estructuradas."""
+
+    def __init__(self, raw_text: str = "", method: str = "groq"):
+        self.raw_text = raw_text or ""
+        self.method = method
+        super().__init__("No se detectaron vacunas en la imagen")
+
+
 def _image_to_b64(image_bytes: bytes) -> str:
     return base64.b64encode(image_bytes).decode("ascii")
 
@@ -100,7 +113,7 @@ def _pil_to_jpeg_bytes(img) -> bytes:
 
     data = out.getvalue()
     if len(data) > GROQ_MAX_IMAGE_BYTES:
-        raise ValueError("La imagen es demasiado grande incluso comprimida.")
+        raise ScanImageError("La imagen es demasiado grande incluso comprimida.")
     return data
 
 
@@ -117,7 +130,7 @@ def _pdf_pages_to_jpeg_list(pdf_bytes: bytes, max_pages: int = 8) -> list[bytes]
     try:
         import fitz
     except ImportError as e:
-        raise ValueError("No se pudo procesar el PDF en el servidor.") from e
+        raise ScanImageError("No se pudo procesar el PDF en el servidor.") from e
 
     images: list[bytes] = []
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
@@ -131,7 +144,7 @@ def _pdf_pages_to_jpeg_list(pdf_bytes: bytes, max_pages: int = 8) -> list[bytes]
         doc.close()
 
     if not images:
-        raise ValueError("El PDF está vacío o no se pudo convertir.")
+        raise ScanImageError("El PDF está vacío o no se pudo convertir.")
     return images
 
 
@@ -145,7 +158,7 @@ def _prepare_image_for_vision(image_bytes: bytes, filename: str = "image.jpg") -
         from PIL import Image
     except ImportError:
         if len(image_bytes) > GROQ_MAX_IMAGE_BYTES:
-            raise ValueError("La imagen supera 18 MB. Usá una foto más liviana.")
+            raise ScanImageError("La imagen supera 18 MB. Usá una foto más liviana.")
         return image_bytes, filename or "image.jpg"
 
     _register_heif_opener()
@@ -154,7 +167,7 @@ def _prepare_image_for_vision(image_bytes: bytes, filename: str = "image.jpg") -
         img = Image.open(io.BytesIO(image_bytes))
         img.load()
     except Exception as e:
-        raise ValueError(
+        raise ScanImageError(
             f"No se pudo leer el archivo ({filename or 'imagen'}). "
             f"El servidor intentó convertirlo automáticamente. Detalle: {e}"
         ) from e
@@ -229,12 +242,18 @@ def _parse_json_from_text(content: str) -> dict:
         text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
         text = re.sub(r"\s*```$", "", text)
     try:
-        return json.loads(text)
+        parsed = json.loads(text)
     except json.JSONDecodeError:
         match = re.search(r"\{.*\}", text, re.DOTALL)
         if match:
-            return json.loads(match.group())
-        raise
+            parsed = json.loads(match.group())
+        else:
+            raise
+    if isinstance(parsed, list):
+        return {"vaccines": parsed}
+    if isinstance(parsed, dict):
+        return parsed
+    return {}
 
 
 def _extract_text_pdf(pdf_bytes: bytes) -> str:
@@ -410,14 +429,21 @@ def extract_fields_groq_vision(
             ],
         },
     ]
-    content = _call_groq(messages, GROQ_VISION_MODEL, json_mode=False)
-    parsed = _parse_json_from_text(content)
-    vaccines = _fields_list_from_parsed(parsed, content)
+    content = ""
+    last_error: Optional[Exception] = None
+    for json_mode in (True, False):
+        try:
+            content = _call_groq(messages, GROQ_VISION_MODEL, json_mode=json_mode)
+            break
+        except (GroqUnavailableError, json.JSONDecodeError, KeyError) as e:
+            last_error = e
+            continue
+    if not content:
+        raise GroqUnavailableError(str(last_error or "Groq no devolvió contenido"))
+
+    vaccines = _extract_vaccines_from_groq_content(content, catalog_names=catalog_names)
     if not vaccines:
-        raise ValueError(
-            "No se detectaron vacunas en la imagen. El archivo fue convertido automáticamente; "
-            "probá con mejor luz o una foto más nítida."
-        )
+        raise ScanNoVaccinesError(content, method="groq")
     return _scan_result(vaccines, content, "groq")
 
 
@@ -474,16 +500,46 @@ def _fields_list_from_parsed(parsed: dict, raw_text: str) -> list[dict[str, Any]
     return []
 
 
-def _scan_result(vaccines: list[dict[str, Any]], raw_text: str, method: str) -> dict[str, Any]:
+def _scan_result(
+    vaccines: list[dict[str, Any]],
+    raw_text: str,
+    method: str,
+    warning: Optional[str] = None,
+) -> dict[str, Any]:
     result: dict[str, Any] = {
         "vaccines": vaccines,
         "count": len(vaccines),
         "raw_text": raw_text,
         "method": method,
     }
+    if warning:
+        result["warning"] = warning
     if vaccines:
         result.update(vaccines[0])
     return result
+
+
+def _extract_vaccines_from_groq_content(
+    content: str,
+    catalog_names: Optional[list[str]] = None,
+) -> list[dict[str, Any]]:
+    """Intenta extraer vacunas del texto/JSON devuelto por Groq Vision."""
+    parsed: dict[str, Any] = {}
+    try:
+        parsed = _parse_json_from_text(content)
+    except json.JSONDecodeError:
+        parsed = {}
+
+    vaccines = _fields_list_from_parsed(parsed, content)
+    if vaccines:
+        return vaccines
+
+    try:
+        fields = parse_vaccine_fields(content, catalog_names=catalog_names, prefer_groq=True)
+        return fields.get("vaccines") or []
+    except Exception as e:
+        logger.warning("Fallback NLP tras visión Groq falló: %s", e)
+        return []
 
 
 def parse_vaccine_fields(
@@ -569,16 +625,18 @@ def _scan_pdf(
             if result.get("vaccines"):
                 page_results.append(result)
                 raw_parts.append(result.get("raw_text") or "")
-        except ValueError:
+        except (ScanNoVaccinesError, ValueError):
             continue
 
     vaccines = _merge_vaccine_lists(page_results)
+    raw_text = "\n---\n".join(raw_parts)
     if not vaccines:
-        raise ValueError(
-            "No se detectaron vacunas en el PDF. El archivo fue convertido a imagen automáticamente."
+        raise ScanNoVaccinesError(
+            raw_text,
+            method="pdf-vision",
         )
 
-    return _scan_result(vaccines, "\n---\n".join(raw_parts), "pdf-vision")
+    return _scan_result(vaccines, raw_text, "pdf-vision")
 
 
 def _scan_with_auto_fallback(
@@ -594,12 +652,16 @@ def _scan_with_auto_fallback(
 
     errors: list[str] = []
     groq_available = bool(GROQ_API_KEY)
+    no_vaccines_error: Optional[ScanNoVaccinesError] = None
 
     if groq_available:
         try:
             return extract_fields_groq_vision(image_bytes, filename=filename, catalog_names=catalog_names)
-        except ValueError:
+        except ScanImageError:
             raise
+        except ScanNoVaccinesError as e:
+            no_vaccines_error = e
+            errors.append("Groq: no se detectaron vacunas en la imagen")
         except (GroqUnavailableError, json.JSONDecodeError, KeyError, requests.RequestException) as e:
             msg = f"Groq: {e}"
             logger.warning("Escaneo vacuna - %s", msg)
@@ -607,6 +669,16 @@ def _scan_with_auto_fallback(
             groq_available = False
 
     if not _local_fallbacks_enabled():
+        if no_vaccines_error:
+            return _scan_result(
+                [],
+                no_vaccines_error.raw_text,
+                no_vaccines_error.method,
+                warning=(
+                    "No se detectaron vacunas automáticamente. "
+                    "Revisá el texto extraído abajo o cargá los datos a mano."
+                ),
+            )
         if errors:
             raise RuntimeError(
                 "No se pudo analizar la imagen con Groq. "
@@ -663,28 +735,39 @@ def scan_vaccine_image(
     """
     engine = (engine or "auto").strip().lower()
 
-    if engine == "auto":
-        return _scan_with_auto_fallback(image_bytes, filename, catalog_names)
+    try:
+        if engine == "auto":
+            return _scan_with_auto_fallback(image_bytes, filename, catalog_names)
 
-    if _is_pdf(image_bytes, filename):
-        return _scan_pdf(image_bytes, catalog_names)
+        if _is_pdf(image_bytes, filename):
+            return _scan_pdf(image_bytes, catalog_names)
 
-    if engine == "groq":
-        fields = extract_fields_groq_vision(image_bytes, filename=filename, catalog_names=catalog_names)
-        fields["method"] = "groq"
-        return fields
+        if engine == "groq":
+            fields = extract_fields_groq_vision(image_bytes, filename=filename, catalog_names=catalog_names)
+            fields["method"] = "groq"
+            return fields
 
-    if engine == "ocr":
-        raw_text = extract_text_ocr(image_bytes, filename=filename)
-        fields = parse_vaccine_fields(raw_text, catalog_names=catalog_names)
-        fields["method"] = "ocr"
-        return fields
+        if engine == "ocr":
+            raw_text = extract_text_ocr(image_bytes, filename=filename)
+            fields = parse_vaccine_fields(raw_text, catalog_names=catalog_names)
+            fields["method"] = "ocr"
+            return fields
 
-    if engine in ("moondream", "vision", "modal", "ollama"):
-        raw_text = extract_text_moondream(image_bytes)
-        fields = parse_vaccine_fields(raw_text, catalog_names=catalog_names)
-        fields["method"] = "moondream"
-        return fields
+        if engine in ("moondream", "vision", "modal", "ollama"):
+            raw_text = extract_text_moondream(image_bytes)
+            fields = parse_vaccine_fields(raw_text, catalog_names=catalog_names)
+            fields["method"] = "moondream"
+            return fields
+    except ScanNoVaccinesError as e:
+        return _scan_result(
+            [],
+            e.raw_text,
+            e.method,
+            warning=(
+                "No se detectaron vacunas automáticamente. "
+                "Revisá el texto extraído abajo o cargá los datos a mano."
+            ),
+        )
 
     raise ValueError(
         f"Motor desconocido: {engine}. Use 'auto', 'groq', 'moondream' u 'ocr'."

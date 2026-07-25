@@ -586,7 +586,7 @@ async def scan_vaccine_certificate(
     db: Session = Depends(get_db),
 ):
     """Escanea una imagen de vacuna y devuelve campos detectados (sin guardar)."""
-    from src.services.vision_service import scan_vaccine_image
+    from src.services.vision_service import scan_vaccine_image, ScanImageError
 
     animal = db.query(Animal).filter(Animal.id == animal_id).first()
     if not animal:
@@ -607,6 +607,8 @@ async def scan_vaccine_certificate(
             engine=engine,
             catalog_names=catalog_names,
         )
+    except ScanImageError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:

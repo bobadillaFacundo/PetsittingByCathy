@@ -2,6 +2,38 @@ import { useState, useEffect } from 'react';
 import { Plus, Shield, ShieldAlert, CheckCircle, Camera, ScanLine, Link as LinkIcon, Trash2, ListPlus, Save } from 'lucide-react';
 import { API_BASE, mediaUrl } from '../../lib/api';
 
+async function prepareScanFile(file) {
+  if (!file) return null;
+  const name = file.name || 'certificado';
+  const lower = name.toLowerCase();
+  if (lower.endsWith('.pdf') || file.type === 'application/pdf') {
+    return file;
+  }
+
+  try {
+    const bitmap = await createImageBitmap(file);
+    const maxSide = 2048;
+    let { width, height } = bitmap;
+    if (Math.max(width, height) > maxSide) {
+      const ratio = maxSide / Math.max(width, height);
+      width = Math.round(width * ratio);
+      height = Math.round(height * ratio);
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, width, height);
+    bitmap.close?.();
+    const blob = await new Promise((resolve, reject) => {
+      canvas.toBlob((value) => (value ? resolve(value) : reject(new Error('No se pudo comprimir'))), 'image/jpeg', 0.88);
+    });
+    return new File([blob], name.replace(/\.[^.]+$/i, '.jpg'), { type: 'image/jpeg' });
+  } catch (err) {
+    console.warn('No se pudo convertir la imagen en el navegador, se envía el original:', err);
+    return file;
+  }
+}
+
 const emptyVaccineForm = () => ({
   vaccine_id: '',
   date_administered: '',
@@ -87,8 +119,9 @@ export default function LibretaTab({ animalId, token }) {
 
   const handleScan = async () => {
     if (!selectedFile) return alert('Selecciona una imagen del certificado o libreta de vacunas.');
+    const uploadFile = await prepareScanFile(selectedFile);
     const formData = new FormData();
-    formData.append('file', selectedFile);
+    formData.append('file', uploadFile);
     setScanning(true);
     try {
       const res = await fetch(`${API_BASE}/animals/${animalId}/vaccines/scan`, {
@@ -96,20 +129,20 @@ export default function LibretaTab({ animalId, token }) {
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
+      const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        const detail = err.detail;
+        const detail = payload.detail;
         const msg = Array.isArray(detail)
           ? detail.map((d) => d.msg || JSON.stringify(d)).join(', ')
           : (typeof detail === 'string' ? detail : 'Error al analizar la imagen');
         alert(msg);
         return;
       }
-      const data = await res.json();
+      const data = payload;
       setScanPreview(data);
       const rows = rowsFromScan(data);
       if (!rows.length) {
-        alert('No se detectaron vacunas en la imagen.');
+        alert(data.warning || 'No se detectaron vacunas en la imagen. Podés completar los datos a mano.');
         return;
       }
       setPendingRows(rows);
@@ -273,6 +306,14 @@ export default function LibretaTab({ animalId, token }) {
               <p className="text-xs text-indigo-700 font-medium">
                 {scanPreview.count} vacunas detectadas en la imagen
               </p>
+            )}
+            {scanPreview?.warning && (
+              <p className="text-xs text-amber-700 font-medium">{scanPreview.warning}</p>
+            )}
+            {scanPreview?.raw_text && !scanPreview?.count && (
+              <pre className="text-xs text-gray-600 bg-gray-50 p-2 rounded max-h-32 overflow-auto whitespace-pre-wrap border border-gray-100">
+                {scanPreview.raw_text}
+              </pre>
             )}
           </div>
 
