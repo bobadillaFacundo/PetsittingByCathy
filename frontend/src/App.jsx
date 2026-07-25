@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router';
 import VoiceRecorder from './components/VoiceRecorder';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
