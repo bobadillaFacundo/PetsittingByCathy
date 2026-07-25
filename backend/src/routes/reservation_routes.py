@@ -1,18 +1,24 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session, selectinload
-from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
-from pydantic import ValidationError
+from sqlalchemy.exc import SQLAlchemyError
+import os
+import json
 import traceback
+from typing import List
+
 from src.database.session import get_db
 from src.models.models import Reservation, Animal
-from src.dtos.reservation_dto import ReservationCreate, ReservationUpdate, ReservationResponse
+from src.dtos.reservation_dto import (
+    ReservationCreate,
+    ReservationUpdate,
+    ReservationResponse,
+    reservation_to_response,
+)
 from src.auth import get_current_user
 from src.timezone_ar import to_ar_naive
-from typing import List
 
 router = APIRouter(prefix="/reservations", tags=["Reservations"])
 
-# Reservas de estadía: solo mascotas externas
 DAYCARE_RESERVATION_STATUSES = {
     "Pendiente",
     "Confirmada",
@@ -21,7 +27,6 @@ DAYCARE_RESERVATION_STATUSES = {
     "Cancelada",
 }
 
-# Vet / baño / otras actividades: solo mascotas de guardería
 SERVICE_STATUSES = {
     "Llevar Veterinaria",
     "Viene Veterinaria",
@@ -34,16 +39,14 @@ OTHER_ACTIVITY_STATUS = "Otras actividades"
 
 def _validate_reservation_animal(db: Session, animal_id: int, status: str):
     animal = db.query(Animal).filter(Animal.id == animal_id).first()
-    if not animal or not animal.is_active:
+    if not animal or animal.is_active is False:
         raise HTTPException(status_code=404, detail="Mascota no encontrada")
-    # Nueva Reserva / estadía → solo externas
-    if status in DAYCARE_RESERVATION_STATUSES and animal.is_daycare:
+    if status in DAYCARE_RESERVATION_STATUSES and animal.is_daycare is True:
         raise HTTPException(
             status_code=400,
             detail="Las reservas solo se pueden asignar a mascotas externas.",
         )
-    # Vet / baño → solo guardería
-    if status in SERVICE_STATUSES and not animal.is_daycare:
+    if status in SERVICE_STATUSES and animal.is_daycare is not True:
         raise HTTPException(
             status_code=400,
             detail="Vet / Baño / otras actividades solo se puede asignar a mascotas de guardería.",
@@ -56,26 +59,6 @@ def _get_reservation_query(db: Session):
         selectinload(Reservation.animal),
         selectinload(Reservation.species),
     )
-
-
-def _reservation_to_response(db: Session, reservation_id: int) -> ReservationResponse:
-    row = _get_reservation_query(db).filter(Reservation.id == reservation_id).first()
-    if row is None:
-        raise HTTPException(status_code=500, detail="No se pudo leer la reserva guardada")
-    try:
-        return ReservationResponse.model_validate(row)
-    except ValidationError:
-        traceback.print_exc()
-        return ReservationResponse(
-            id=row.id,
-            animal_id=row.animal_id,
-            species_id=row.species_id,
-            start_date=row.start_date,
-            end_date=row.end_date,
-            status=row.status,
-            notes=row.notes,
-            belongings_photos=row.belongings_photos,
-        )
 
 
 def _validate_reservation_data(db: Session, data: dict, *, is_update: bool = False) -> None:
@@ -103,70 +86,89 @@ def _normalize_reservation_payload(data: dict) -> dict:
     return data
 
 
+def _db_error_detail(exc: SQLAlchemyError) -> str:
+    err = str(getattr(exc, "orig", exc)).lower()
+    if any(k in err for k in ("animal_id", "species_id", "null value", "not-null", "does not exist", "undefinedcolumn")):
+        return (
+            "No se pudo guardar la actividad. "
+            "Reiniciá el backend en Render para aplicar la migración de base de datos."
+        )
+    return "No se pudo guardar la reserva. Verificá los datos."
+
+
 @router.post("/", response_model=ReservationResponse)
-def create_reservation(reservation: ReservationCreate, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
+def create_reservation(
+    reservation: ReservationCreate,
+    db: Session = Depends(get_db),
+    current_admin=Depends(get_current_user),
+):
     data = _normalize_reservation_payload(reservation.model_dump())
     _validate_reservation_data(db, data)
     db_reservation = Reservation(**data)
     db.add(db_reservation)
     try:
+        db.flush()
         db.commit()
-    except (IntegrityError, OperationalError, ProgrammingError) as exc:
-        db.rollback()
-        err = str(getattr(exc, "orig", exc)).lower()
-        if (
-            "animal_id" in err
-            or "species_id" in err
-            or "null value" in err
-            or "not-null" in err
-            or "does not exist" in err
-            or "undefinedcolumn" in err
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "No se pudo guardar la actividad. "
-                    "Reiniciá el backend en Render para aplicar la migración de base de datos."
-                ),
-            ) from exc
-        raise HTTPException(status_code=400, detail="No se pudo guardar la reserva. Verificá los datos.") from exc
-    except Exception as exc:
+        db.refresh(db_reservation)
+    except SQLAlchemyError as exc:
         db.rollback()
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail="Error interno al guardar la reserva") from exc
-    return _reservation_to_response(db, db_reservation.id)
+        raise HTTPException(status_code=400, detail=_db_error_detail(exc)) from exc
+
+    return reservation_to_response(db_reservation)
 
 
 @router.get("/", response_model=List[ReservationResponse])
-def get_reservations(db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
-    return _get_reservation_query(db).all()
+def get_reservations(db: Session = Depends(get_db), current_admin=Depends(get_current_user)):
+    rows = _get_reservation_query(db).all()
+    return [reservation_to_response(row) for row in rows]
 
 
 @router.put("/{reservation_id}", response_model=ReservationResponse)
-def update_reservation(reservation_id: int, reservation_update: ReservationUpdate, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
+def update_reservation(
+    reservation_id: int,
+    reservation_update: ReservationUpdate,
+    db: Session = Depends(get_db),
+    current_admin=Depends(get_current_user),
+):
     db_reservation = db.query(Reservation).filter(Reservation.id == reservation_id).first()
     if not db_reservation:
         raise HTTPException(status_code=404, detail="Reserva no encontrada")
 
     update_data = reservation_update.model_dump(exclude_unset=True)
     update_data = _normalize_reservation_payload(update_data)
-    _validate_reservation_data(db, {
-        "status": update_data.get("status", db_reservation.status),
-        "animal_id": update_data.get("animal_id", db_reservation.animal_id),
-        "notes": update_data.get("notes", db_reservation.notes),
-        "species_id": update_data.get("species_id", db_reservation.species_id),
-    }, is_update=True)
+    _validate_reservation_data(
+        db,
+        {
+            "status": update_data.get("status", db_reservation.status),
+            "animal_id": update_data.get("animal_id", db_reservation.animal_id),
+            "notes": update_data.get("notes", db_reservation.notes),
+            "species_id": update_data.get("species_id", db_reservation.species_id),
+        },
+        is_update=True,
+    )
 
     for key, value in update_data.items():
         setattr(db_reservation, key, value)
 
-    db.commit()
-    db.refresh(db_reservation)
-    return _reservation_to_response(db, reservation_id)
+    try:
+        db.commit()
+        db.refresh(db_reservation)
+    except SQLAlchemyError as exc:
+        db.rollback()
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=_db_error_detail(exc)) from exc
+
+    row = _get_reservation_query(db).filter(Reservation.id == reservation_id).first()
+    return reservation_to_response(row or db_reservation)
 
 
 @router.delete("/{reservation_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_reservation(reservation_id: int, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
+def delete_reservation(
+    reservation_id: int,
+    db: Session = Depends(get_db),
+    current_admin=Depends(get_current_user),
+):
     db_reservation = db.query(Reservation).filter(Reservation.id == reservation_id).first()
     if not db_reservation:
         raise HTTPException(status_code=404, detail="Reserva no encontrada")
@@ -175,27 +177,22 @@ def delete_reservation(reservation_id: int, db: Session = Depends(get_db), curre
     db.commit()
     return None
 
-from fastapi import UploadFile, File
-import os
-import uuid
-from typing import List
 
 @router.post("/{reservation_id}/photos")
 async def upload_reservation_photos(
     reservation_id: int,
     photos: List[UploadFile] = File(...),
     db: Session = Depends(get_db),
-    current_admin = Depends(get_current_user)
+    current_admin=Depends(get_current_user),
 ):
     db_reservation = db.query(Reservation).filter(Reservation.id == reservation_id).first()
     if not db_reservation:
         raise HTTPException(status_code=404, detail="Reserva no encontrada")
 
     uploaded_urls = []
-    
+
     if db_reservation.belongings_photos:
         try:
-            import json
             uploaded_urls = json.loads(db_reservation.belongings_photos)
         except Exception:
             if db_reservation.belongings_photos.strip():
@@ -203,11 +200,12 @@ async def upload_reservation_photos(
 
     allowed = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
     from src.services.storage_service import upload_bytes
+
     for photo in photos:
         ext = os.path.splitext(photo.filename or "photo.jpg")[1].lower()
         if ext not in allowed:
             continue
-            
+
         content = await photo.read()
         file_url = upload_bytes(
             content,
@@ -217,10 +215,8 @@ async def upload_reservation_photos(
         )
         uploaded_urls.append(file_url)
 
-    import json
     db_reservation.belongings_photos = json.dumps(uploaded_urls)
     db.commit()
     db.refresh(db_reservation)
-    
-    return {"status": "success", "belongings_photos": uploaded_urls}
 
+    return {"status": "success", "belongings_photos": uploaded_urls}

@@ -113,4 +113,5 @@ def health_schema():
     return {
         "reservations_species_id": "species_id" in cols,
         "reservations_animal_id_nullable": cols.get("animal_id", {}).get("nullable", False),
+        "api_version": "reservations-v3",
     }
