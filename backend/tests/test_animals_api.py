@@ -170,11 +170,16 @@ class TestVaccineDocument:
         monkeypatch.setattr(
             "src.services.vision_service.scan_vaccine_image",
             lambda *a, **k: {
+                "vaccines": [{
+                    "vaccine_name": "Antirrábica Scan",
+                    "lot_number": "ABC-1",
+                    "date_administered": "2025-01-10",
+                    "next_due_date": "2026-01-10",
+                    "veterinarian_name": "Dr. Test",
+                }],
+                "count": 1,
                 "vaccine_name": "Antirrábica Scan",
                 "lot_number": "ABC-1",
-                "date_administered": "2025-01-10",
-                "next_due_date": "2026-01-10",
-                "veterinarian_name": "Dr. Test",
                 "raw_text": "Antirrábica Lote ABC-1",
                 "method": "groq",
             },
@@ -191,9 +196,36 @@ class TestVaccineDocument:
         )
         assert res.status_code == 200, res.text
         body = res.json()
-        assert body["vaccine_id"] == vc.id
+        assert body["count"] == 1
+        assert body["vaccines"][0]["vaccine_id"] == vc.id
         assert body["lot_number"] == "ABC-1"
         assert body["method"] == "groq"
+
+    def test_add_vaccines_bulk(self, client, auth_headers, seed, db):
+        from src.models.models import VaccineCatalog, Vaccine
+
+        vc1 = VaccineCatalog(name="Séxtuple Bulk")
+        vc2 = VaccineCatalog(name="Antirrábica Bulk")
+        db.add_all([vc1, vc2])
+        db.commit()
+
+        res = client.post(
+            f"/animals/{seed['animal'].id}/vaccines/bulk",
+            json={
+                "vaccines": [
+                    {"vaccine_id": vc1.id, "date_administered": "2025-01-01", "lot_number": "A1"},
+                    {"vaccine_id": vc2.id, "date_administered": "2025-02-01", "lot_number": "B2"},
+                ]
+            },
+            headers=auth_headers,
+        )
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert body["count"] == 2
+        assert len(body["created"]) == 2
+
+        saved = db.query(Vaccine).filter(Vaccine.health_record_id.isnot(None)).count()
+        assert saved >= 2
 
 
 @pytest.mark.api

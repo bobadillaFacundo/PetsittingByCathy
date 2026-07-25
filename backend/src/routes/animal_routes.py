@@ -499,6 +499,56 @@ def _resolve_veterinarian_id(data: dict, db: Session) -> Optional[int]:
             vet_id = vet.id
     return vet_id
 
+
+def _enrich_scan_vaccines(result: dict, catalog_list: list[dict]) -> dict:
+    from src.services.vision_service import match_vaccine_catalog_id
+
+    vaccines = result.get("vaccines")
+    if not isinstance(vaccines, list) or not vaccines:
+        single = {
+            "vaccine_name": result.get("vaccine_name"),
+            "lot_number": result.get("lot_number"),
+            "date_administered": result.get("date_administered"),
+            "next_due_date": result.get("next_due_date"),
+            "veterinarian_name": result.get("veterinarian_name"),
+        }
+        if any(single.values()):
+            vaccines = [single]
+        else:
+            vaccines = []
+
+    enriched = []
+    for item in vaccines:
+        row = dict(item)
+        row["vaccine_id"] = match_vaccine_catalog_id(row.get("vaccine_name"), catalog_list)
+        enriched.append(row)
+
+    result["vaccines"] = enriched
+    result["count"] = len(enriched)
+    if enriched:
+        result.update(enriched[0])
+    return result
+
+
+def _build_vaccine(record_id: int, item: dict, db: Session, document_url: str = None) -> Vaccine:
+    vaccine_id = _parse_optional_int(item.get("vaccine_id"))
+    if not vaccine_id:
+        raise HTTPException(status_code=400, detail="vaccine_id es obligatorio en cada vacuna")
+
+    vet_id = _resolve_veterinarian_id(item, db)
+    doc_url = document_url or item.get("document_url") or None
+
+    return Vaccine(
+        health_record_id=record_id,
+        vaccine_id=vaccine_id,
+        date_administered=_parse_date(item.get("date_administered"), today_ar()),
+        next_due_date=_parse_date(item.get("next_due_date"), None),
+        lot_number=(item.get("lot_number") or None),
+        veterinarian_id=vet_id,
+        document_url=doc_url,
+    )
+
+
 @router.post("/{animal_id}/vaccines")
 def add_vaccine(animal_id: int, data: dict, db: Session = Depends(get_db)):
     record = _get_or_create_health_record(animal_id, db)
@@ -536,7 +586,7 @@ async def scan_vaccine_certificate(
     db: Session = Depends(get_db),
 ):
     """Escanea una imagen de vacuna y devuelve campos detectados (sin guardar)."""
-    from src.services.vision_service import scan_vaccine_image, match_vaccine_catalog_id
+    from src.services.vision_service import scan_vaccine_image
 
     animal = db.query(Animal).filter(Animal.id == animal_id).first()
     if not animal:
@@ -564,9 +614,93 @@ async def scan_vaccine_certificate(
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Error al analizar la imagen: {e}")
 
-    matched_id = match_vaccine_catalog_id(result.get("vaccine_name"), catalog_list)
-    result["vaccine_id"] = matched_id
-    return result
+    return _enrich_scan_vaccines(result, catalog_list)
+
+
+@router.post("/{animal_id}/vaccines/bulk")
+def add_vaccines_bulk(animal_id: int, data: dict, db: Session = Depends(get_db)):
+    """Registra varias vacunas a la vez (mismo documento opcional)."""
+    items = data.get("vaccines") or []
+    if not items:
+        raise HTTPException(status_code=400, detail="Debes enviar al menos una vacuna")
+
+    record = _get_or_create_health_record(animal_id, db)
+    document_url = data.get("document_url") or None
+    created_ids = []
+
+    try:
+        for item in items:
+            vaccine = _build_vaccine(record.id, item, db, document_url=document_url)
+            db.add(vaccine)
+            db.flush()
+            created_ids.append(vaccine.id)
+    except HTTPException:
+        db.rollback()
+        raise
+
+    db.commit()
+    vaccines = db.query(Vaccine).options(
+        joinedload(Vaccine.vaccine_catalog),
+        joinedload(Vaccine.veterinarian),
+    ).filter(Vaccine.id.in_(created_ids)).order_by(Vaccine.id.asc()).all()
+    return {
+        "created": [_serialize_vaccine(v) for v in vaccines],
+        "count": len(vaccines),
+    }
+
+
+@router.post("/{animal_id}/vaccines/bulk-with-document")
+async def add_vaccines_bulk_with_document(
+    animal_id: int,
+    file: UploadFile = File(...),
+    vaccines: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    """Sube un certificado/libreta y registra varias vacunas con el mismo document_url."""
+    import json as json_lib
+    from src.services.storage_service import upload_bytes
+
+    try:
+        items = json_lib.loads(vaccines)
+    except json_lib.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="vaccines debe ser un JSON válido")
+
+    if not isinstance(items, list) or not items:
+        raise HTTPException(status_code=400, detail="Debes enviar al menos una vacuna")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="El archivo está vacío")
+
+    document_url = upload_bytes(
+        content,
+        folder="vaccines",
+        original_filename=file.filename,
+        content_type=file.content_type,
+    )
+
+    record = _get_or_create_health_record(animal_id, db)
+    created_ids = []
+    try:
+        for item in items:
+            vaccine = _build_vaccine(record.id, item, db, document_url=document_url)
+            db.add(vaccine)
+            db.flush()
+            created_ids.append(vaccine.id)
+    except HTTPException:
+        db.rollback()
+        raise
+
+    db.commit()
+    saved = db.query(Vaccine).options(
+        joinedload(Vaccine.vaccine_catalog),
+        joinedload(Vaccine.veterinarian),
+    ).filter(Vaccine.id.in_(created_ids)).order_by(Vaccine.id.asc()).all()
+    return {
+        "created": [_serialize_vaccine(v) for v in saved],
+        "count": len(saved),
+        "document_url": document_url,
+    }
 
 
 @router.post("/{animal_id}/vaccines/with-document")

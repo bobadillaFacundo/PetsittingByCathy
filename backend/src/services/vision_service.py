@@ -36,14 +36,19 @@ OCR_TIMEOUT = int(os.getenv("OCR_TIMEOUT", "10"))
 GROQ_MAX_IMAGE_BYTES = 18 * 1024 * 1024  # margen bajo el límite de 20 MB de Groq
 
 _VACCINE_VISION_PROMPT = (
-    "Esta imagen es un certificado, etiqueta o sticker de vacuna veterinaria. "
-    "Extrae los datos en JSON con estas claves exactas:\n"
-    "- vaccine_name: string o null (nombre de la vacuna, ej. Séxtuple, Antirrábica, KC)\n"
-    "- lot_number: string o null (número de lote)\n"
-    "- date_administered: string o null (fecha de aplicación en formato YYYY-MM-DD)\n"
-    "- next_due_date: string o null (próxima dosis o vencimiento en YYYY-MM-DD)\n"
-    "- veterinarian_name: string o null (veterinario o clínica)\n"
-    "Usa null si un dato no aparece. Responde SOLO con JSON válido, sin markdown."
+    "Esta imagen puede ser una libreta de vacunación, certificado o etiqueta con UNA o VARIAS vacunas. "
+    "Identifica TODAS las vacunas visibles (cada fila, sello o aplicación cuenta como una entrada). "
+    "Devuelve JSON con esta estructura exacta:\n"
+    '{"vaccines": [{"vaccine_name": string|null, "lot_number": string|null, '
+    '"date_administered": string|null, "next_due_date": string|null, "veterinarian_name": string|null}]}\n'
+    "Campos por vacuna:\n"
+    "- vaccine_name: nombre (ej. Séxtuple, Antirrábica, KC)\n"
+    "- lot_number: número de lote\n"
+    "- date_administered: fecha aplicación YYYY-MM-DD\n"
+    "- next_due_date: próxima dosis o vencimiento YYYY-MM-DD\n"
+    "- veterinarian_name: veterinario o clínica\n"
+    "Usa null si un dato no aparece. Si hay una sola vacuna, igual devuelve un array con un elemento. "
+    "Responde SOLO con JSON válido, sin markdown."
 )
 
 
@@ -298,7 +303,8 @@ def extract_fields_groq_vision(
     ]
     content = _call_groq(messages, GROQ_VISION_MODEL, json_mode=False)
     parsed = _parse_json_from_text(content)
-    return _fields_from_parsed(parsed, raw_text=content)
+    vaccines = _fields_list_from_parsed(parsed, content)
+    return _scan_result(vaccines, content, "groq")
 
 
 def _normalize_date(value: Optional[str]) -> Optional[str]:
@@ -327,6 +333,45 @@ def _fields_from_parsed(parsed: dict, raw_text: str) -> dict[str, Any]:
     }
 
 
+def _normalize_vaccine_item(item: dict) -> dict[str, Any]:
+    if not isinstance(item, dict):
+        return {}
+    return {
+        "vaccine_name": (item.get("vaccine_name") or None),
+        "lot_number": (item.get("lot_number") or None),
+        "date_administered": _normalize_date(item.get("date_administered")),
+        "next_due_date": _normalize_date(item.get("next_due_date")),
+        "veterinarian_name": (item.get("veterinarian_name") or None),
+    }
+
+
+def _fields_list_from_parsed(parsed: dict, raw_text: str) -> list[dict[str, Any]]:
+    """Extrae lista de vacunas desde JSON (multi o formato legacy de una sola)."""
+    items = parsed.get("vaccines")
+    if isinstance(items, list) and items:
+        result = [_normalize_vaccine_item(x) for x in items if isinstance(x, dict)]
+        result = [x for x in result if any(x.values())]
+        if result:
+            return result
+
+    single = _fields_from_parsed(parsed, raw_text)
+    if any(single.get(k) for k in ("vaccine_name", "lot_number", "date_administered", "next_due_date", "veterinarian_name")):
+        return [single]
+    return []
+
+
+def _scan_result(vaccines: list[dict[str, Any]], raw_text: str, method: str) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "vaccines": vaccines,
+        "count": len(vaccines),
+        "raw_text": raw_text,
+        "method": method,
+    }
+    if vaccines:
+        result.update(vaccines[0])
+    return result
+
+
 def parse_vaccine_fields(
     raw_text: str,
     catalog_names: Optional[list[str]] = None,
@@ -341,13 +386,13 @@ def parse_vaccine_fields(
         )
 
     prompt = f"""
-Analiza el siguiente texto extraído de un certificado o etiqueta de vacuna veterinaria.
-Extrae los datos en JSON con estas claves exactas:
-- vaccine_name: string o null (nombre de la vacuna, ej. Séxtuple, Antirrábica, KC)
-- lot_number: string o null (número de lote)
-- date_administered: string o null (fecha de aplicación en formato YYYY-MM-DD)
-- next_due_date: string o null (próxima dosis o vencimiento en YYYY-MM-DD)
-- veterinarian_name: string o null (veterinario o clínica)
+Analiza el siguiente texto extraído de un certificado o libreta de vacunación veterinaria.
+Puede contener UNA o VARIAS vacunas. Identifica TODAS las aplicaciones visibles.
+Devuelve JSON con esta estructura exacta:
+{{"vaccines": [
+  {{"vaccine_name": string|null, "lot_number": string|null,
+    "date_administered": string|null, "next_due_date": string|null, "veterinarian_name": string|null}}
+]}}
 {catalog_hint}
 
 Texto extraído:
@@ -366,7 +411,8 @@ Texto extraído:
         logger.warning("Error parseando campos de vacuna: %s", e)
         parsed = {}
 
-    return _fields_from_parsed(parsed, raw_text=raw_text)
+    vaccines = _fields_list_from_parsed(parsed, raw_text)
+    return _scan_result(vaccines, raw_text, "text")
 
 
 def _scan_pdf(
@@ -399,9 +445,7 @@ def _scan_with_auto_fallback(
 
     if groq_available:
         try:
-            fields = extract_fields_groq_vision(image_bytes, filename=filename, catalog_names=catalog_names)
-            fields["method"] = "groq"
-            return fields
+            return extract_fields_groq_vision(image_bytes, filename=filename, catalog_names=catalog_names)
         except ValueError:
             raise
         except (GroqUnavailableError, json.JSONDecodeError, KeyError, requests.RequestException) as e:
