@@ -17,6 +17,14 @@ REQUIRED_TAG_SETS: dict[str, list[str]] = {
 
 REQUIRED_TAG_SET_NAMES = frozenset(REQUIRED_TAG_SETS.keys())
 
+# Conjuntos opcionales: se crean por defecto pero no son obligatorios en cada reporte.
+OPTIONAL_DEFAULT_TAG_SETS: dict[str, list[str]] = {
+    "Peso": [
+        "peso", "pesó", "pesa", "kilos", "kg", "kilogramos", "pesa kilos",
+        "peso actual", "peso en kilos", "pesa kg",
+    ],
+}
+
 
 def parse_csv_values(raw: str) -> list[str]:
     return [v.strip() for v in (raw or "").split(",") if v.strip()]
@@ -59,6 +67,26 @@ def ensure_required_tag_sets(db: Session) -> list[TagSet]:
     if created:
         db.commit()
     return load_tag_sets(db)
+
+
+def ensure_optional_tag_sets(db: Session) -> None:
+    """Crea conjuntos opcionales (ej. Peso) si faltan. No sobrescribe variantes existentes."""
+    existing = {
+        t.name.casefold(): t
+        for t in db.query(TagSet).options(joinedload(TagSet.variants_rel)).all()
+    }
+    created = False
+    for name, defaults in OPTIONAL_DEFAULT_TAG_SETS.items():
+        if name.casefold() in existing:
+            continue
+        tag_set = TagSet(name=name)
+        db.add(tag_set)
+        db.flush()
+        set_tag_variants(db, tag_set, defaults)
+        existing[name.casefold()] = tag_set
+        created = True
+    if created:
+        db.commit()
 
 
 def load_tag_sets(db: Session) -> list[TagSet]:

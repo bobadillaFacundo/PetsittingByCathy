@@ -12,11 +12,17 @@ const SPECIES_INFO = {
 };
 
 const ROUTINE_EVENTS = ["Comida", "Agua", "Pis", "Caca"];
+const WEIGHT_EVENT = "Peso";
 
 function isRoutineEvent(insert) {
   if (!insert || insert.table_name !== "ReportEvent") return false;
   const name = (insert.fields?.event_type_name || "").toLowerCase();
   return ROUTINE_EVENTS.some(r => r.toLowerCase() === name);
+}
+
+function isWeightEventInsert(insert) {
+  if (!insert || insert.table_name !== "ReportEvent") return false;
+  return (insert.fields?.event_type_name || "").toLowerCase() === WEIGHT_EVENT.toLowerCase();
 }
 
 function ensureRoutineFields(extractedData, fallbackAnimalName) {
@@ -584,7 +590,8 @@ export default function VoiceRecorder({ onSave }) {
                 });
                 const otherInserts = inserts
                   .map((ins, idx) => ({ ins, idx }))
-                  .filter(({ ins }) => !isRoutineEvent(ins));
+                  .filter(({ ins }) => !isRoutineEvent(ins) && !isWeightEventInsert(ins));
+                const weightInsert = inserts.find(isWeightEventInsert);
 
                 const updateRoutineValue = (eventName, value) => {
                   const newData = [...editableData];
@@ -603,6 +610,28 @@ export default function VoiceRecorder({ onSave }) {
                     list.push({
                       table_name: "ReportEvent",
                       fields: { event_type_name: eventName, value },
+                    });
+                  }
+                  newData[i] = { ...newData[i], inserts: list };
+                  setEditableData(newData);
+                };
+
+                const updateWeightValue = (value) => {
+                  const newData = [...editableData];
+                  const list = [...(newData[i].inserts || [])];
+                  const found = list.findIndex(isWeightEventInsert);
+                  const trimmed = String(value ?? "").trim();
+                  if (!trimmed) {
+                    if (found >= 0) list.splice(found, 1);
+                  } else if (found >= 0) {
+                    list[found] = {
+                      ...list[found],
+                      fields: { ...list[found].fields, event_type_name: WEIGHT_EVENT, value: trimmed },
+                    };
+                  } else {
+                    list.push({
+                      table_name: "ReportEvent",
+                      fields: { event_type_name: WEIGHT_EVENT, value: trimmed },
                     });
                   }
                   newData[i] = { ...newData[i], inserts: list };
@@ -651,6 +680,25 @@ export default function VoiceRecorder({ onSave }) {
                             </label>
                           ))}
                         </div>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-sm font-bold text-gray-800">Peso</h4>
+                          <span className="text-[11px] font-medium text-gray-400">Opcional</span>
+                        </div>
+                        <label className="bg-violet-50/60 border border-violet-100 rounded-xl p-3 flex flex-col gap-1.5">
+                          <span className="text-xs font-bold text-violet-700 uppercase tracking-wide">Peso (kg)</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            className="w-full bg-white border border-violet-100 rounded-lg px-3 py-2 text-gray-900 text-base focus:outline-none focus:ring-2 focus:ring-violet-400"
+                            value={weightInsert?.fields?.value ?? ""}
+                            placeholder="Ej. 12.5"
+                            onChange={(e) => updateWeightValue(e.target.value)}
+                          />
+                        </label>
                       </div>
 
                       {otherInserts.length > 0 && (

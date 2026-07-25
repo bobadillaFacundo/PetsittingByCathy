@@ -327,6 +327,11 @@ def migrate():
             run_ddl("ALTER TABLE animals ADD COLUMN IF NOT EXISTS weight_kg DOUBLE PRECISION")
             print("  OK animals.weight_kg")
 
+        from src.services.tag_helpers import ensure_optional_tag_sets
+        print("Verificando conjuntos opcionales (Peso)...")
+        ensure_optional_tag_sets(db)
+        print("  OK conjuntos opcionales")
+
         print("\nMigración completada. Reinicia el backend.")
     except Exception as e:
         db.rollback()

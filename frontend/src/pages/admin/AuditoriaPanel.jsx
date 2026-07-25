@@ -4,6 +4,11 @@ import { Send, RefreshCw, Activity, CheckCircle2, Filter, Mic, Square, Download,
 import VoiceRecorder from '../../components/VoiceRecorder';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { API_BASE, mediaUrl } from '../../lib/api';
+import {
+  resolveEventColor,
+  getEventBadgeClasses,
+  formatEventDisplayValue,
+} from '../../lib/eventColors';
 
 export default function AuditoriaPanel() {
   const [reports, setReports] = useState([]);
@@ -20,52 +25,27 @@ export default function AuditoriaPanel() {
   const [colorRules, setColorRules] = useState([]);
   const [transcriptModal, setTranscriptModal] = useState(null); // { animal_name, transcript, created_at, user_name }
 
-  const getEventColor = (e) => {
-    const type = (e.type || '').toLowerCase();
-    const value = (e.value || '').toLowerCase();
-
-    if (['enfermedad', 'medicación', 'medicacion'].some(k => type.includes(k))) {
-      return 'red';
-    }
-    if (['observacion', 'observación', 'nota'].some(k => type.includes(k))) {
-      return 'yellow';
-    }
-
-    let exactRed = [];
-    let partialRed = [];
-    let exactYellow = [];
-    let partialYellow = [];
-
-    colorRules.forEach(r => {
-      const keys = (r.keywords || '').split(',').map(k => k.trim().toLowerCase()).filter(k => k);
-      if (r.color === 'red') {
-        if (r.match_type === 'exact') exactRed.push(...keys);
-        else partialRed.push(...keys);
-      } else if (r.color === 'yellow') {
-        if (r.match_type === 'exact') exactYellow.push(...keys);
-        else partialYellow.push(...keys);
-      }
-    });
-
-    if (exactRed.includes(value) || partialRed.some(v => value.includes(v))) return 'red';
-    if (exactYellow.includes(value) || partialYellow.some(v => value.includes(v))) return 'yellow';
-    return 'green';
+  const getAnimalWeightKg = (animalName) => {
+    const m = mascotas.find((a) => a.name?.toLowerCase() === animalName?.toLowerCase());
+    return m?.weight_kg ?? null;
   };
+
+  const getEventColor = (e, report) => resolveEventColor(e, {
+    colorRules,
+    report,
+    reports,
+    animalWeightKg: getAnimalWeightKg(report?.animal_name),
+  });
 
   const getReportColor = (report) => {
     const events = report.events || [];
     if (events.length === 0) return 'green';
-    if (events.some(e => getEventColor(e) === 'red')) return 'red';
-    if (events.some(e => getEventColor(e) === 'yellow')) return 'yellow';
+    if (events.some((e) => getEventColor(e, report) === 'red')) return 'red';
+    if (events.some((e) => getEventColor(e, report) === 'yellow')) return 'yellow';
     return 'green';
   };
 
-  const getEventBadgeStyle = (e) => {
-    const color = getEventColor(e);
-    if (color === 'red') return 'bg-red-50 text-red-700 border-red-200';
-    if (color === 'yellow') return 'bg-yellow-100 text-yellow-800 border-yellow-300';
-    return 'bg-emerald-50 text-emerald-700 border-emerald-100';
-  };
+  const getEventBadgeStyle = (e, report) => getEventBadgeClasses(getEventColor(e, report));
 
   const fetchWeather = async () => {
     setLoadingWeather(true);
@@ -82,10 +62,11 @@ export default function AuditoriaPanel() {
     }
   };
 
-  const getSymptomChartName = (e) => {
+  const getSymptomChartName = (e, report) => {
     const type = (e.type || '').toLowerCase();
+    if (type === 'peso') return null;
     const isRoutine = ['comida', 'agua', 'pis', 'caca'].includes(type);
-    const isAnomaly = getEventColor(e) !== 'green';
+    const isAnomaly = getEventColor(e, report) !== 'green';
     if (!isRoutine && !isAnomaly) return null;
     if (isRoutine && !isAnomaly) return null;
     return isRoutine ? `Problema con ${e.type}` : e.type;
@@ -93,7 +74,7 @@ export default function AuditoriaPanel() {
 
   const reportHasSymptom = (report, symptomName) => {
     if (symptomName === 'Todos') return true;
-    return (report.events || []).some((e) => getSymptomChartName(e) === symptomName);
+    return (report.events || []).some((e) => getSymptomChartName(e, report) === symptomName);
   };
 
   const clearSymptomFilter = () => setFilterSymptom('Todos');
@@ -271,7 +252,7 @@ export default function AuditoriaPanel() {
 
     baseReports.forEach((r) => {
       r.events.forEach((e) => {
-        const chartName = getSymptomChartName(e);
+        const chartName = getSymptomChartName(e, r);
         if (!chartName) return;
         if (!counts[chartName]) counts[chartName] = new Set();
         counts[chartName].add(r.animal_name.trim());
@@ -647,9 +628,9 @@ export default function AuditoriaPanel() {
                           <td className="px-6 py-4">
                             <div className="flex flex-wrap gap-1.5">
                               {r.events.map((e, idx) => {
-                                const label = e.value && e.value.length > 40 ? `${e.value.slice(0, 40)}…` : (e.value || 'Sí');
+                                const label = formatEventDisplayValue(e.type, e.value);
                                 return (
-                                <span key={idx} className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold border ${getEventBadgeStyle(e)}`}>
+                                <span key={idx} className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold border ${getEventBadgeStyle(e, r)}`}>
                                   <CheckCircle2 size={12} /> {e.type}: {label}
                                 </span>
                                 );
@@ -723,9 +704,9 @@ export default function AuditoriaPanel() {
 
                       <div className="flex flex-wrap gap-1.5 mb-3">
                         {r.events.map((e, idx) => {
-                          const label = e.value && e.value.length > 40 ? `${e.value.slice(0, 40)}…` : (e.value || 'Sí');
+                          const label = formatEventDisplayValue(e.type, e.value);
                           return (
-                          <span key={idx} className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border ${getEventBadgeStyle(e)}`}>
+                          <span key={idx} className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border ${getEventBadgeStyle(e, r)}`}>
                             <CheckCircle2 size={12} /> {e.type}: {label}
                           </span>
                           );

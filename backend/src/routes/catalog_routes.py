@@ -196,6 +196,7 @@ def delete_veterinarian(item_id: int, db: Session = Depends(get_db), current_adm
 
 from src.services.tag_helpers import (
     ensure_required_tag_sets,
+    ensure_optional_tag_sets,
     is_required_tag_set,
     tag_set_to_dict,
     set_tag_variants,
@@ -204,7 +205,7 @@ from src.services.tag_helpers import (
 
 @router.get("/tagsets")
 def get_tagsets(db: Session = Depends(get_db)):
-    # Garantiza que Comida, Agua, Pis y Caca existan siempre
+    ensure_optional_tag_sets(db)
     return [tag_set_to_dict(t) for t in ensure_required_tag_sets(db)]
 
 @router.post("/tagsets")

@@ -541,7 +541,6 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                         {m.is_rescue && (
                           <span className="text-[10px] font-bold uppercase tracking-wide bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">Rescate</span>
                         )}
-                        {daycareOnly && <CastrationWeightBadges isCastrated={m.is_castrated} weightKg={m.weight_kg} />}
                       </div>
                       {traitLabels(m).length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1">

@@ -1,5 +1,10 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { API_BASE, mediaUrl } from '../lib/api';
+import {
+  resolveEventColor,
+  getEventColorClasses,
+  formatEventDisplayValue,
+} from '../lib/eventColors';
 
 const SPECIES_INFO = {
   1: { name: "Perros", emoji: "🐶" },
@@ -10,36 +15,11 @@ const SPECIES_INFO = {
   6: { name: "Erizos", emoji: "🦔" }
 };
 
-function getEventColor(val, evtType, colorRules) {
-  const typeLower = evtType?.toLowerCase() || '';
-  if (typeLower.includes('enfermedad') || typeLower.includes('medicación') || typeLower.includes('medicacion')) {
-    return { colorClass: 'bg-red-50 text-red-700 border-red-200', dotColor: 'bg-red-400' };
-  }
-  if (typeLower.includes('observacion') || typeLower.includes('observación') || typeLower.includes('nota')) {
-    return { colorClass: 'bg-yellow-100 text-yellow-800 border-yellow-300', dotColor: 'bg-yellow-400' };
-  }
-
-  const v = val?.toLowerCase() || '';
-  let exactRed = [], partialRed = [], exactYellow = [], partialYellow = [];
-
-  colorRules.forEach(r => {
-    const keys = (r.keywords || '').split(',').map(k => k.trim().toLowerCase()).filter(k => k);
-    if (r.color === 'red') {
-      if (r.match_type === 'exact') exactRed.push(...keys);
-      else partialRed.push(...keys);
-    } else if (r.color === 'yellow') {
-      if (r.match_type === 'exact') exactYellow.push(...keys);
-      else partialYellow.push(...keys);
-    }
-  });
-
-  if (exactRed.includes(v) || partialRed.some(k => v.includes(k))) {
-    return { colorClass: 'bg-red-50 text-red-700 border-red-200', dotColor: 'bg-red-400' };
-  }
-  if (exactYellow.includes(v) || partialYellow.some(k => v.includes(k))) {
-    return { colorClass: 'bg-yellow-100 text-yellow-800 border-yellow-300', dotColor: 'bg-yellow-400' };
-  }
-  return { colorClass: 'bg-green-50 text-green-700 border-green-200', dotColor: 'bg-green-400' };
+function getEventColor(val, evtType, colorRules, report, reports, animalWeightKg) {
+  return resolveEventColor(
+    { type: evtType, value: val },
+    { colorRules, report, reports, animalWeightKg }
+  );
 }
 
 export default function AnimalHistory({ animalId = 1 }) {
@@ -75,6 +55,11 @@ export default function AnimalHistory({ animalId = 1 }) {
   useEffect(() => {
     fetchHistory();
   }, [fetchHistory]);
+
+  const reportsForWeight = useMemo(() => {
+    if (!data?.reports || !data?.animal) return [];
+    return data.reports.map((r) => ({ ...r, animal_name: data.animal.name }));
+  }, [data]);
 
   const downloadPDF = async (range) => {
     setExportingPDF(true);
@@ -384,11 +369,20 @@ export default function AnimalHistory({ animalId = 1 }) {
               
               <div className="flex flex-wrap gap-2 mt-2">
                 {report.events.map((evt, idx) => {
-                  const { colorClass, dotColor } = getEventColor(evt.value, evt.type, colorRules);
+                  const color = getEventColor(
+                    evt.value,
+                    evt.type,
+                    colorRules,
+                    { ...report, animal_name: data.animal.name },
+                    reportsForWeight,
+                    data.animal.weight_kg
+                  );
+                  const { colorClass, dotColor } = getEventColorClasses(color);
+                  const label = formatEventDisplayValue(evt.type, evt.value);
                   return (
                     <span key={idx} className={`inline-flex items-center gap-2 px-3 py-1 rounded-xl text-xs font-bold border shadow-sm ${colorClass}`}>
                       <span className={`w-2 h-2 rounded-full shadow-inner ${dotColor}`}></span>
-                      {evt.type}: {evt.value || "Sí"}
+                      {evt.type}: {label}
                     </span>
                   );
                 })}

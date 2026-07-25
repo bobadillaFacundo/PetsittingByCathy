@@ -190,7 +190,7 @@ Reglas CRÍTICAS Y OBLIGATORIAS (PENALIZACIÓN SI NO SE CUMPLEN):
 3. Para cada evento extraído, debes indicar:
    - "standard_set": ESTRICTAMENTE UNO DE LOS CONJUNTOS CONOCIDOS LISTADOS ABAJO. ¡PROHIBIDO inventar nombres nuevos! Si es un síntoma o problema general y no hay conjunto específico, usa "Enfermedad" u "Observación".
    - "spoken_variant": El verbo o acción exacta que dijo el usuario (por ejemplo: "morfó", "garcó", "vomitó").
-   - "value": El valor, cantidad, estado o descripción. MUY IMPORTANTE: Si es negativo (ej. "no hizo caca"), el valor debe ser "no" o "nada". Si es positivo, pon el estado (ej: "todo", "normal", "blanda", "sangre", "mitad").
+   - "value": El valor, cantidad, estado o descripción. MUY IMPORTANTE: Si es negativo (ej. "no hizo caca"), el valor debe ser "no" o "nada". Si es positivo, pon el estado (ej: "todo", "normal", "blanda", "sangre", "mitad"). Si el conjunto es "Peso", el valor debe ser SOLO el número en kilogramos (ej: "12.5", "8") sin unidades.
 4. Evalúa la urgencia médica global de este reporte para el paciente y asígnala al campo "severity". Solo puedes usar estos valores exactos:
    - "normal": Si comió, hizo pis y no hay anomalías.
    - "observation": Si hay síntomas leves o inusuales (ej: caca blanda, no comió, poco ánimo).
@@ -217,6 +217,8 @@ Respuesta:
     }}
   ]
 }}
+
+Si mencionan peso (ej. "pesa 12 kilos"), agrega un evento con standard_set "Peso" y value numérico. El peso es OPCIONAL: no lo inventes si no se mencionó.
 
 REPORTE REAL A ANALIZAR: "{transcript}"
 Responde ÚNICAMENTE con el objeto JSON. NO inventes eventos que no se mencionaron.
