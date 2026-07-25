@@ -5,11 +5,17 @@ import './index.css'
 import App from './App.jsx'
 import { redirectToLogin } from './lib/auth.js'
 
-registerSW({
+const updateSW = registerSW({
   immediate: true,
   onNeedRefresh() {
     window.location.reload()
   },
+})
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    updateSW(true)
+  }
 })
 
 const originalFetch = window.fetch;
