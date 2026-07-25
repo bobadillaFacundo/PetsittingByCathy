@@ -35,6 +35,7 @@ GROQ_VISION_MODEL_FALLBACK = os.getenv("GROQ_VISION_MODEL_FALLBACK", "llama-3.2-
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "90"))
+OLLAMA_MAX_IMAGE_SIDE = int(os.getenv("OLLAMA_MAX_IMAGE_SIDE", "768"))
 OCR_TIMEOUT = int(os.getenv("OCR_TIMEOUT", "10"))
 VISION_MAX_IMAGE_SIDE = int(
     os.getenv(
@@ -126,7 +127,7 @@ def _is_heic(image_bytes: bytes, filename: str = "") -> bool:
     return False
 
 
-def _pil_to_jpeg_bytes(img) -> bytes:
+def _pil_to_jpeg_bytes(img, max_side: Optional[int] = None) -> bytes:
     from PIL import Image
 
     if img.mode not in ("RGB", "L"):
@@ -134,10 +135,11 @@ def _pil_to_jpeg_bytes(img) -> bytes:
     elif img.mode == "L":
         img = img.convert("RGB")
 
-    max_side = VISION_MAX_IMAGE_SIDE
+    limit = max_side if max_side is not None else VISION_MAX_IMAGE_SIDE
+    limit = max_side if max_side is not None else VISION_MAX_IMAGE_SIDE
     w, h = img.size
-    if max(w, h) > max_side:
-        ratio = max_side / max(w, h)
+    if max(w, h) > limit:
+        ratio = limit / max(w, h)
         img = img.resize((int(w * ratio), int(h * ratio)), Image.Resampling.LANCZOS)
 
     quality = 88
@@ -187,8 +189,12 @@ def _pdf_pages_to_jpeg_list(pdf_bytes: bytes, max_pages: int = 8) -> list[bytes]
     return images
 
 
-def _prepare_image_for_vision(image_bytes: bytes, filename: str = "image.jpg") -> tuple[bytes, str]:
-    """Convierte HEIC/PNG/WebP/etc. a JPEG optimizado para Groq."""
+def _prepare_image_for_vision(
+    image_bytes: bytes,
+    filename: str = "image.jpg",
+    max_side: Optional[int] = None,
+) -> tuple[bytes, str]:
+    """Convierte HEIC/PNG/WebP/etc. a JPEG optimizado para visión."""
     if _is_pdf(image_bytes, filename):
         pages = _pdf_pages_to_jpeg_list(image_bytes, max_pages=1)
         return pages[0], "scan.jpg"
@@ -211,7 +217,7 @@ def _prepare_image_for_vision(image_bytes: bytes, filename: str = "image.jpg") -
             f"El servidor intentó convertirlo automáticamente. Detalle: {e}"
         ) from e
 
-    return _pil_to_jpeg_bytes(img), "scan.jpg"
+    return _pil_to_jpeg_bytes(img, max_side=max_side), "scan.jpg"
 
 
 def prepare_file_for_storage(
@@ -309,7 +315,7 @@ def _effective_groq_vision_timeout() -> int:
     if explicit:
         return int(explicit)
     if _ollama_usable():
-        return 14
+        return 10
     if VISION_SKIP_LOCAL_FALLBACKS:
         return 20
     return 90
@@ -317,7 +323,7 @@ def _effective_groq_vision_timeout() -> int:
 
 def _effective_ollama_timeout() -> int:
     if _ollama_usable() and VISION_SKIP_LOCAL_FALLBACKS:
-        return min(OLLAMA_TIMEOUT, 14)
+        return min(OLLAMA_TIMEOUT, 22)
     return OLLAMA_TIMEOUT
 
 
@@ -430,29 +436,77 @@ def extract_text_ocr(image_bytes: bytes, filename: str = "image.jpg", lang: str 
     return _ocr_text_from_response(resp.json())
 
 
-def extract_text_moondream(image_bytes: bytes) -> str:
+def extract_text_moondream(image_bytes: bytes, filename: str = "scan.jpg") -> str:
     """Describe el contenido de la imagen con Moondream vía Ollama."""
+    prepared_bytes, _ = _prepare_image_for_vision(
+        image_bytes,
+        filename=filename,
+        max_side=OLLAMA_MAX_IMAGE_SIDE,
+    )
     prompt = (
         "Transcribí TODO el texto visible de etiquetas/stickers de vacunas veterinarias en la imagen. "
         "Incluí especialmente recuadros con N. Lote, F. Elab, F. Cad, nombres comerciales (Vanguard, Nobivac, etc.) "
         "y sellos SENASA o firmas de veterinario. Responde en español, línea por línea."
     )
-    payload = {
-        "model": OLLAMA_VISION_MODEL,
-        "prompt": prompt,
-        "images": [_image_to_b64(image_bytes)],
-        "stream": False,
-    }
-    resp = requests.post(
-        f"{OLLAMA_BASE_URL}/api/generate",
-        json=payload,
-        timeout=(5, _effective_ollama_timeout()),
-    )
-    resp.raise_for_status()
-    text = (resp.json().get("response") or "").strip()
-    if not text:
-        raise RuntimeError("Ollama no devolvió texto")
-    return text
+    b64 = _image_to_b64(prepared_bytes)
+    timeout = (5, _effective_ollama_timeout())
+    options = {"num_predict": 600, "temperature": 0.1}
+    last_error = ""
+
+    attempts: list[tuple[str, dict]] = [
+        (
+            "generate",
+            {
+                "model": OLLAMA_VISION_MODEL,
+                "prompt": prompt,
+                "images": [b64],
+                "stream": False,
+                "options": options,
+            },
+        ),
+        (
+            "chat",
+            {
+                "model": OLLAMA_VISION_MODEL,
+                "messages": [{"role": "user", "content": prompt, "images": [b64]}],
+                "stream": False,
+                "options": options,
+            },
+        ),
+    ]
+
+    for endpoint, payload in attempts:
+        try:
+            resp = requests.post(
+                f"{OLLAMA_BASE_URL}/api/{endpoint}",
+                json=payload,
+                timeout=timeout,
+            )
+        except requests.Timeout as e:
+            last_error = f"Ollama tardó más de {_effective_ollama_timeout()}s"
+            logger.warning("Ollama %s timeout: %s", endpoint, e)
+            continue
+        except requests.RequestException as e:
+            last_error = str(e)
+            logger.warning("Ollama %s red: %s", endpoint, e)
+            continue
+
+        if resp.status_code != 200:
+            last_error = f"HTTP {resp.status_code}: {resp.text[:300]}"
+            logger.warning("Ollama %s respondió %s", endpoint, last_error)
+            continue
+
+        body = resp.json()
+        if endpoint == "chat":
+            text = (body.get("message") or {}).get("content") or ""
+        else:
+            text = body.get("response") or ""
+        text = text.strip()
+        if text:
+            return text
+        last_error = "respuesta vacía"
+
+    raise RuntimeError(last_error or "Ollama no devolvió texto")
 
 
 def _call_groq(
@@ -884,7 +938,7 @@ def _scan_with_auto_fallback(
     if _ollama_usable():
         logger.info("Escaneo: Groq no alcanzó; probando Ollama en %s", OLLAMA_BASE_URL)
         try:
-            raw_text = extract_text_moondream(image_bytes)
+            raw_text = extract_text_moondream(image_bytes, filename=filename)
             fields = parse_vaccine_fields(
                 raw_text,
                 catalog_names=catalog_names,
@@ -973,7 +1027,7 @@ def scan_vaccine_image(
             return fields
 
         if engine in ("moondream", "vision", "modal", "ollama"):
-            raw_text = extract_text_moondream(image_bytes)
+            raw_text = extract_text_moondream(image_bytes, filename=filename)
             fields = parse_vaccine_fields(raw_text, catalog_names=catalog_names)
             fields["method"] = "moondream"
             return fields

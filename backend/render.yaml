@@ -47,7 +47,7 @@ services:
       - key: VISION_SKIP_LOCAL_FALLBACKS
         value: "1"
       - key: GROQ_VISION_TIMEOUT
-        value: "20"
+        value: "10"
       - key: GROQ_RATE_LIMIT_RETRIES
         value: "1"
 
@@ -57,7 +57,7 @@ services:
       - key: OLLAMA_VISION_MODEL
         value: moondream
       - key: OLLAMA_TIMEOUT
-        value: "14"
+        value: "22"
       - key: OCR_SERVICE_URL
         sync: false
 
