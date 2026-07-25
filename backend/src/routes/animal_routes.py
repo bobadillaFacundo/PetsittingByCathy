@@ -5,6 +5,7 @@ from src.models.models import Animal, Species
 from src.dtos.animal_dto import AnimalCreate, AnimalResponse, AnimalUpdate
 from src.auth import get_current_user, ensure_admin_for_inactive
 from typing import List, Optional
+import asyncio
 
 router = APIRouter(prefix="/animals", tags=["Animals"])
 
@@ -586,7 +587,11 @@ async def scan_vaccine_certificate(
     db: Session = Depends(get_db),
 ):
     """Escanea una imagen de vacuna y devuelve campos detectados (sin guardar)."""
-    from src.services.vision_service import scan_vaccine_image, ScanImageError
+    from src.services.vision_service import (
+        scan_vaccine_image,
+        ScanImageError,
+        GroqUnavailableError,
+    )
 
     animal = db.query(Animal).filter(Animal.id == animal_id).first()
     if not animal:
@@ -601,7 +606,8 @@ async def scan_vaccine_certificate(
     catalog_names = [c.name for c in catalog]
 
     try:
-        result = scan_vaccine_image(
+        result = await asyncio.to_thread(
+            scan_vaccine_image,
             content,
             filename=file.filename or "vaccine.jpg",
             engine=engine,
@@ -609,6 +615,8 @@ async def scan_vaccine_certificate(
         )
     except ScanImageError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except GroqUnavailableError as e:
+        raise HTTPException(status_code=502, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:

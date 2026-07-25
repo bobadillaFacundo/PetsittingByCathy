@@ -44,6 +44,8 @@ services:
         value: qwen/qwen3.6-27b
       - key: VISION_SKIP_LOCAL_FALLBACKS
         value: "1"
+      - key: GROQ_VISION_TIMEOUT
+        value: "25"
 
       # ── Escaneo de vacunas (fallback Ollama/OCR solo si URL pública accesible) ─
       - key: OLLAMA_BASE_URL

@@ -33,6 +33,18 @@ GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "15"))
 OCR_TIMEOUT = int(os.getenv("OCR_TIMEOUT", "10"))
+GROQ_VISION_TIMEOUT = int(
+    os.getenv(
+        "GROQ_VISION_TIMEOUT",
+        "25" if VISION_SKIP_LOCAL_FALLBACKS else "90",
+    )
+)
+VISION_MAX_IMAGE_SIDE = int(
+    os.getenv(
+        "VISION_MAX_IMAGE_SIDE",
+        "1280" if VISION_SKIP_LOCAL_FALLBACKS else "2048",
+    )
+)
 GROQ_MAX_IMAGE_BYTES = 18 * 1024 * 1024  # margen bajo el límite de 20 MB de Groq
 
 _VACCINE_VISION_PROMPT = (
@@ -97,7 +109,7 @@ def _pil_to_jpeg_bytes(img) -> bytes:
     elif img.mode == "L":
         img = img.convert("RGB")
 
-    max_side = 2048
+    max_side = VISION_MAX_IMAGE_SIDE
     w, h = img.size
     if max(w, h) > max_side:
         ratio = max_side / max(w, h)
@@ -136,9 +148,11 @@ def _pdf_pages_to_jpeg_list(pdf_bytes: bytes, max_pages: int = 8) -> list[bytes]
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     try:
         page_count = min(len(doc), max_pages)
+        zoom = 1.5 if VISION_SKIP_LOCAL_FALLBACKS else 2.0
+        matrix = fitz.Matrix(zoom, zoom)
         for i in range(page_count):
             page = doc[i]
-            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
+            pix = page.get_pixmap(matrix=matrix, alpha=False)
             images.append(pix.tobytes("jpeg"))
     finally:
         doc.close()
@@ -191,9 +205,11 @@ def prepare_file_for_storage(
         return file_bytes, filename or "cert.jpg", content_type or "application/octet-stream"
 
 
-def _catalog_hint(catalog_names: Optional[list[str]], limit: int = 40) -> str:
+def _catalog_hint(catalog_names: Optional[list[str]], limit: Optional[int] = None) -> str:
     if not catalog_names:
         return ""
+    if limit is None:
+        limit = 20 if VISION_SKIP_LOCAL_FALLBACKS else 40
     names = catalog_names[:limit]
     extra = f" (y {len(catalog_names) - limit} más)" if len(catalog_names) > limit else ""
     return (
@@ -334,9 +350,16 @@ def extract_text_moondream(image_bytes: bytes) -> str:
     return text
 
 
-def _call_groq(messages: list, model: str, json_mode: bool = True) -> str:
+def _call_groq(
+    messages: list,
+    model: str,
+    json_mode: bool = True,
+    timeout: Optional[int] = None,
+) -> str:
     if not GROQ_API_KEY:
         raise GroqUnavailableError("GROQ_API_KEY no configurada")
+
+    request_timeout = timeout if timeout is not None else GROQ_VISION_TIMEOUT
 
     headers = {
         "Content-Type": "application/json",
@@ -357,7 +380,16 @@ def _call_groq(messages: list, model: str, json_mode: bool = True) -> str:
             **extra,
         }
         try:
-            resp = requests.post(GROQ_URL, headers=headers, json=payload, timeout=90)
+            resp = requests.post(
+                GROQ_URL,
+                headers=headers,
+                json=payload,
+                timeout=request_timeout,
+            )
+        except requests.Timeout as e:
+            raise GroqUnavailableError(
+                "Groq tardó demasiado en responder. Probá con una foto más clara o más liviana."
+            ) from e
         except requests.RequestException as e:
             raise GroqUnavailableError(str(e)) from e
 
@@ -437,6 +469,8 @@ def extract_fields_groq_vision(
             break
         except (GroqUnavailableError, json.JSONDecodeError, KeyError) as e:
             last_error = e
+            if isinstance(e, GroqUnavailableError):
+                raise
             continue
     if not content:
         raise GroqUnavailableError(str(last_error or "Groq no devolvió contenido"))

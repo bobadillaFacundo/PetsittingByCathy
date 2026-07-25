@@ -2,19 +2,16 @@ const RENDER_API = 'https://petsittingbycathy.onrender.com';
 
 /**
  * Base URL de la API.
- * - Dev: /api (proxy vite → localhost:8000)
- * - Prod: Render directo (CORS habilitado). Ignora VITE_API_BASE=/api en Vercel
- *   porque el rewrite devuelve index.html y rompe el login.
+ * - Dev: /api (proxy Vite → localhost:8000)
+ * - Prod (Vercel): /api (rewrite en vercel.json → Render, mismo origen, sin CORS)
+ * - Override: VITE_API_BASE=https://... para apuntar directo a Render
  */
 function resolveApiBase() {
-  if (import.meta.env.DEV) {
-    return import.meta.env.VITE_API_BASE || '/api';
-  }
   const fromEnv = import.meta.env.VITE_API_BASE;
   if (fromEnv && fromEnv.startsWith('http')) {
     return fromEnv.replace(/\/$/, '');
   }
-  return RENDER_API;
+  return '/api';
 }
 
 export const API_BASE = resolveApiBase();

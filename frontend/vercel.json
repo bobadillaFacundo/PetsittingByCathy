@@ -6,6 +6,10 @@
       "destination": "https://petsittingbycathy.onrender.com/:path*"
     },
     {
+      "source": "/uploads/:path*",
+      "destination": "https://petsittingbycathy.onrender.com/uploads/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
