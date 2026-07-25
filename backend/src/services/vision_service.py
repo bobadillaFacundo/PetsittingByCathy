@@ -101,7 +101,10 @@ _DEWORMING_VISION_PROMPT = (
 _DEWORMING_FIELD_RULES = """
 Busca nombre comercial del antiparasitario (NexGard, Bravecto, Frontline, Drontal, etc.).
 INTERNAL = uso interno (oral, comprimido). EXTERNAL = uso externo (pipeta, collar, spray tópico).
-Fechas a YYYY-MM-DD. Lote en N. Lote / Lote / Lot si aparece.
+Fechas a YYYY-MM-DD.
+- date = fecha de aplicación/administración si aparece (NO usar F. Cad / vencimiento del lote como date).
+- next_due_date = próxima dosis sugerida en el envase, si está indicada (distinto de F. Cad del lote).
+Lote en N. Lote / Lote / Lot si aparece.
 """
 
 

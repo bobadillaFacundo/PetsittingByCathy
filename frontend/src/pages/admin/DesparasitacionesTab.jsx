@@ -5,11 +5,17 @@ import { AR_TIMEZONE } from '../../lib/datetimeAr';
 
 const SCAN_ERROR_MSG = 'Error. Intentá más tarde.';
 
-/** Días hasta la próxima dosis sugerida (editable después del escaneo). */
+/** Intervalo por defecto si el producto no coincide con reglas conocidas. */
 const DEWORMING_NEXT_DAYS = {
   INTERNAL: 90,
   EXTERNAL: 30,
 };
+
+/** Externos de acción prolongada (~12 semanas). */
+const EXTERNAL_LONG_ACTING = /bravecto|fluralaner|seresto/i;
+
+/** Externos mensuales habituales. */
+const EXTERNAL_MONTHLY = /nexgard|frontline|advantix|stronghold|revolution|simparica|fipro|biospot|ecto|credelio/i;
 
 function todayArDate() {
   return new Intl.DateTimeFormat('en-CA', {
@@ -20,23 +26,62 @@ function todayArDate() {
   }).format(new Date());
 }
 
+function isValidIsoDate(value) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year
+    && date.getUTCMonth() === month - 1
+    && date.getUTCDate() === day;
+}
+
+/** Fecha de aplicación leída en la etiqueta, o hoy si no hay una válida. */
+function resolveStartDateFromScan(item) {
+  if (isValidIsoDate(item?.date)) return item.date;
+  return todayArDate();
+}
+
 function addDaysToIsoDate(isoDate, days) {
   const [year, month, day] = isoDate.split('-').map(Number);
   const date = new Date(Date.UTC(year, month - 1, day + days));
   return date.toISOString().slice(0, 10);
 }
 
-function defaultNextDueDate(startDate, productType) {
-  const interval = DEWORMING_NEXT_DAYS[productType] || DEWORMING_NEXT_DAYS.INTERNAL;
+function resolveProductName(item, catalogs) {
+  if (item?.product_name) return item.product_name;
+  if (item?.product_id) {
+    const found = [...catalogs.internal, ...catalogs.external]
+      .find((p) => p.id === item.product_id);
+    return found?.name || '';
+  }
+  return '';
+}
+
+function dewormingIntervalDays(productType, productName = '') {
+  const name = productName.toLowerCase();
+  if (productType === 'EXTERNAL') {
+    if (EXTERNAL_LONG_ACTING.test(name)) return 90;
+    if (EXTERNAL_MONTHLY.test(name)) return 30;
+    return DEWORMING_NEXT_DAYS.EXTERNAL;
+  }
+  if (productType === 'INTERNAL') {
+    return DEWORMING_NEXT_DAYS.INTERNAL;
+  }
+  return DEWORMING_NEXT_DAYS.INTERNAL;
+}
+
+function defaultNextDueDate(startDate, productType, productName = '') {
+  const interval = dewormingIntervalDays(productType, productName);
   return addDaysToIsoDate(startDate, interval);
 }
 
-function buildFormFromScan(item, productType) {
-  const startDate = todayArDate();
+function buildFormFromScan(item, productType, catalogs) {
+  const productName = resolveProductName(item, catalogs);
+  const startDate = resolveStartDateFromScan(item);
   return {
     date: startDate,
     product_id: item.product_id ? String(item.product_id) : '',
-    next_due_date: defaultNextDueDate(startDate, productType),
+    next_due_date: defaultNextDueDate(startDate, productType, productName),
   };
 }
 
@@ -127,8 +172,8 @@ export default function DesparasitacionesTab({ animalId, token }) {
 
   const applyScanToForm = (item) => {
     const type = resolveProductType(item);
-    const formData = type ? buildFormFromScan(item, type) : {
-      date: todayArDate(),
+    const formData = type ? buildFormFromScan(item, type, catalogs) : {
+      date: resolveStartDateFromScan(item),
       product_id: item.product_id ? String(item.product_id) : '',
       next_due_date: '',
     };
