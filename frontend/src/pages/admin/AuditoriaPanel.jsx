@@ -10,7 +10,6 @@ export default function AuditoriaPanel() {
   const [mascotas, setMascotas] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const [selectedAnimal, setSelectedAnimal] = useState('');
   const [filterAnimal, setFilterAnimal] = useState('Todas');
   const [filterSymptom, setFilterSymptom] = useState('Todos');
   const [filterDateStart, setFilterDateStart] = useState('');
@@ -80,6 +79,51 @@ export default function AuditoriaPanel() {
       console.error(err);
     } finally {
       setLoadingWeather(false);
+    }
+  };
+
+  const getSymptomChartName = (e) => {
+    const type = (e.type || '').toLowerCase();
+    const isRoutine = ['comida', 'agua', 'pis', 'caca'].includes(type);
+    const isAnomaly = getEventColor(e) !== 'green';
+    if (!isRoutine && !isAnomaly) return null;
+    if (isRoutine && !isAnomaly) return null;
+    return isRoutine ? `Problema con ${e.type}` : e.type;
+  };
+
+  const reportHasSymptom = (report, symptomName) => {
+    if (symptomName === 'Todos') return true;
+    return (report.events || []).some((e) => getSymptomChartName(e) === symptomName);
+  };
+
+  const clearSymptomFilter = () => setFilterSymptom('Todos');
+
+  const handleFilterAnimalChange = (value) => {
+    setFilterAnimal(value);
+    clearSymptomFilter();
+  };
+
+  const handleFilterColorChange = (value) => {
+    setFilterColor(value);
+    clearSymptomFilter();
+  };
+
+  const handleFilterDateStartChange = (value) => {
+    setFilterDateStart(value);
+    clearSymptomFilter();
+  };
+
+  const handleFilterDateEndChange = (value) => {
+    setFilterDateEnd(value);
+    clearSymptomFilter();
+  };
+
+  const handleSymptomPieClick = (data) => {
+    if (!data?.name) return;
+    if (filterSymptom === data.name) {
+      clearSymptomFilter();
+    } else {
+      setFilterSymptom(data.name);
     }
   };
 
@@ -175,16 +219,7 @@ export default function AuditoriaPanel() {
       const matchAnimal = filterAnimal === 'Todas' || r.animal_name === filterAnimal;
       let matchSymptom = filterSymptom === 'Todos';
       if (!matchSymptom) {
-        matchSymptom = r.events.some(e => {
-          const type = e.type.toLowerCase();
-          const isRoutine = ['comida', 'agua', 'pis', 'caca'].includes(type);
-          const isAnomaly = getEventColor(e) !== 'green';
-          if (!isRoutine || isAnomaly) {
-            const chartName = isRoutine ? `Problema con ${e.type}` : e.type;
-            return chartName === filterSymptom;
-          }
-          return false;
-        });
+        matchSymptom = reportHasSymptom(r, filterSymptom);
       }
 
       let matchDate = true;
@@ -228,48 +263,45 @@ export default function AuditoriaPanel() {
     return [...new Set(reports.map(r => r.animal_name))];
   }, [reports]);
 
-  const chartDataMascotas = useMemo(() => {
-    const counts = {};
-    recentReportsGlobal.forEach(r => {
-      let hasSymptom = filterSymptom === 'Todos';
-      if (!hasSymptom) {
-        hasSymptom = r.events.some(e => {
-          const type = e.type.toLowerCase();
-          const value = (e.value || "").toLowerCase();
-          const isRoutine = ['comida', 'agua', 'pis', 'caca'].includes(type);
-          const isAnomaly = getEventBadgeStyle(e) !== 'bg-emerald-50 text-emerald-700 border-emerald-100';
-          if (!isRoutine || isAnomaly) {
-            const chartName = isRoutine ? `Problema con ${e.type}` : e.type;
-            return chartName === filterSymptom;
-          }
-          return false;
-        });
-      }
-      if (hasSymptom) {
-        const petName = r.animal_name.trim();
-        counts[petName] = 1;
-      }
-    });
-    return Object.keys(counts).map(name => ({ name, Reportes: counts[name] })).sort((a, b) => b.Reportes - a.Reportes);
-  }, [recentReportsGlobal, filterSymptom]);
-
   const chartDataSintomas = useMemo(() => {
     const counts = {};
-    recentReportsFiltered.forEach(r => {
-      r.events.forEach(e => {
-        const type = e.type.toLowerCase();
-        const value = (e.value || "").toLowerCase();
-        const isRoutine = ['comida', 'agua', 'pis', 'caca'].includes(type);
-        const isAnomaly = getEventBadgeStyle(e) !== 'bg-emerald-50 text-emerald-700 border-emerald-100';
-        if (!isRoutine || isAnomaly) {
-          const chartName = isRoutine ? `Problema con ${e.type}` : e.type;
-          if (!counts[chartName]) counts[chartName] = new Set();
-          counts[chartName].add(r.animal_name.trim());
-        }
+    const baseReports = filterAnimal === 'Todas'
+      ? recentReportsGlobal
+      : recentReportsGlobal.filter((r) => r.animal_name === filterAnimal);
+
+    baseReports.forEach((r) => {
+      r.events.forEach((e) => {
+        const chartName = getSymptomChartName(e);
+        if (!chartName) return;
+        if (!counts[chartName]) counts[chartName] = new Set();
+        counts[chartName].add(r.animal_name.trim());
       });
     });
-    return Object.keys(counts).map(name => ({ name, value: counts[name].size })).sort((a, b) => b.value - a.value);
-  }, [recentReportsFiltered]);
+    return Object.keys(counts)
+      .map((name) => ({ name, value: counts[name].size }))
+      .sort((a, b) => b.value - a.value);
+  }, [recentReportsGlobal, filterAnimal, colorRules]);
+
+  const chartDataAnimalsBySymptom = useMemo(() => {
+    if (filterSymptom === 'Todos') return [];
+
+    const counts = {};
+    const baseReports = filterAnimal === 'Todas'
+      ? recentReportsGlobal
+      : recentReportsGlobal.filter((r) => r.animal_name === filterAnimal);
+
+    baseReports.forEach((r) => {
+      if (!reportHasSymptom(r, filterSymptom)) return;
+      const petName = r.animal_name.trim();
+      counts[petName] = (counts[petName] || 0) + 1;
+    });
+
+    return Object.keys(counts)
+      .map((name) => ({ name, Reportes: counts[name] }))
+      .sort((a, b) => b.Reportes - a.Reportes);
+  }, [recentReportsGlobal, filterAnimal, filterSymptom, colorRules]);
+
+  const showSymptomDrilldown = filterSymptom !== 'Todos';
 
 
   return (
@@ -314,42 +346,45 @@ export default function AuditoriaPanel() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-bold text-gray-800 mb-4">Reportes por Mascota</h3>
-          {chartDataMascotas.length > 0 ? (
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartDataMascotas}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                  <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#6b7280' }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 12, fill: '#6b7280' }} axisLine={false} tickLine={false} allowDecimals={false} />
-                  <RechartsTooltip cursor={{ fill: '#f3f4f6' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                  <Bar
-                    dataKey="Reportes"
-                    radius={[4, 4, 0, 0]}
-                    onClick={(data) => {
-                      if (filterAnimal === data.name) {
-                        setFilterAnimal('Todas');
-                      } else {
-                        setFilterAnimal(data.name);
-                      }
-                    }}
-                    className="cursor-pointer transition-all"
-                  >
-                    {chartDataMascotas.map((entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={filterAnimal === 'Todas' || filterAnimal === entry.name ? '#4f46e5' : '#c7d2fe'}
-                        className="hover:opacity-80 transition-opacity"
-                      />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+          <h3 className="text-lg font-bold text-gray-800 mb-1 flex items-center gap-2">
+            <Filter size={20} className="text-indigo-500" />
+            Filtrar por mascota
+          </h3>
+          <p className="text-sm text-gray-500 mb-4">
+            Últimas 48 h · afecta historial y gráfico de síntomas
+          </p>
+          <select
+            value={filterAnimal}
+            onChange={(e) => handleFilterAnimalChange(e.target.value)}
+            className="w-full border border-gray-300 rounded-xl px-4 py-3 bg-gray-50 text-gray-800 font-semibold focus:ring-2 focus:ring-indigo-500 outline-none"
+          >
+            <option value="Todas">Todas las mascotas</option>
+            {uniqueAnimals.map((name) => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
+          {filterAnimal !== 'Todas' && (
+            <div className="mt-4 flex items-center justify-between gap-2 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3">
+              <span className="text-sm font-bold text-indigo-800">
+                Mostrando: {filterAnimal}
+              </span>
+              <button
+                type="button"
+                onClick={() => handleFilterAnimalChange('Todas')}
+                className="text-xs font-bold text-indigo-600 hover:text-indigo-800 uppercase tracking-wide"
+              >
+                Quitar
+              </button>
             </div>
-          ) : <div className="h-64 flex items-center justify-center text-gray-400">Sin datos</div>}
+          )}
+          <p className="text-xs text-gray-400 mt-4">
+            {recentReportsFiltered.length} reporte{recentReportsFiltered.length !== 1 ? 's' : ''} en las últimas 48 h
+            {filterAnimal !== 'Todas' ? ` de ${filterAnimal}` : ''}
+          </p>
         </div>
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-bold text-gray-800 mb-4">Distribución de Síntomas</h3>
+          <h3 className="text-lg font-bold text-gray-800 mb-1">Distribución de Síntomas</h3>
+          <p className="text-sm text-gray-500 mb-4">Clic en un segmento para ver mascotas afectadas</p>
           {chartDataSintomas.length > 0 ? (
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
@@ -357,29 +392,32 @@ export default function AuditoriaPanel() {
                   <Pie
                     data={chartDataSintomas}
                     dataKey="value"
+                    nameKey="name"
                     cx="50%"
                     cy="50%"
                     innerRadius={60}
                     outerRadius={80}
                     paddingAngle={5}
-                    onClick={(data) => {
-                      if (filterSymptom === data.name) {
-                        setFilterSymptom('Todos');
-                      } else {
-                        setFilterSymptom(data.name);
-                      }
-                    }}
+                    onClick={handleSymptomPieClick}
                     className="cursor-pointer transition-all"
                   >
                     {chartDataSintomas.map((entry, i) => (
                       <Cell
-                        key={i}
-                        fill={filterSymptom === 'Todos' || filterSymptom === entry.name ? COLORS[i % COLORS.length] : '#f3f4f6'}
+                        key={entry.name}
+                        fill={filterSymptom === 'Todos' || filterSymptom === entry.name ? COLORS[i % COLORS.length] : '#e5e7eb'}
                         className="hover:opacity-80 transition-opacity"
+                        stroke={filterSymptom === entry.name ? '#312e81' : 'transparent'}
+                        strokeWidth={filterSymptom === entry.name ? 2 : 0}
                       />
                     ))}
                   </Pie>
-                  <RechartsTooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                  <RechartsTooltip
+                    formatter={(value, _name, props) => [
+                      `${value} mascota${value !== 1 ? 's' : ''}`,
+                      props.payload.name,
+                    ]}
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                  />
                   <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
                 </PieChart>
               </ResponsiveContainer>
@@ -387,6 +425,68 @@ export default function AuditoriaPanel() {
           ) : <div className="h-64 flex items-center justify-center text-gray-400">Sin datos</div>}
         </div>
       </div>
+
+      {showSymptomDrilldown && (
+        <div className="bg-white rounded-2xl shadow-sm border-2 border-indigo-200 p-6 animate-fade-in-up">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <div>
+              <h3 className="text-lg font-bold text-gray-800">
+                Mascotas con «{filterSymptom}»
+              </h3>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Reportes en las últimas 48 h
+                {filterAnimal !== 'Todas' ? ` · filtro activo: ${filterAnimal}` : ''}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={clearSymptomFilter}
+              className="inline-flex items-center gap-1.5 text-sm font-bold text-gray-600 hover:text-indigo-700 bg-gray-100 hover:bg-indigo-50 px-3 py-2 rounded-xl transition-colors"
+            >
+              <X size={16} /> Cerrar detalle
+            </button>
+          </div>
+          {chartDataAnimalsBySymptom.length > 0 ? (
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartDataAnimalsBySymptom} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                  <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#6b7280' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 12, fill: '#6b7280' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <RechartsTooltip
+                    cursor={{ fill: '#f3f4f6' }}
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                  />
+                  <Bar
+                    dataKey="Reportes"
+                    radius={[4, 4, 0, 0]}
+                    onClick={(data) => {
+                      if (!data?.name) return;
+                      setFilterAnimal(filterAnimal === data.name ? 'Todas' : data.name);
+                    }}
+                    className="cursor-pointer"
+                  >
+                    {chartDataAnimalsBySymptom.map((entry) => (
+                      <Cell
+                        key={entry.name}
+                        fill={filterAnimal === entry.name ? '#4f46e5' : '#818cf8'}
+                        className="hover:opacity-80 transition-opacity"
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-40 flex items-center justify-center text-gray-400 border border-dashed border-gray-200 rounded-xl">
+              No hay mascotas con este síntoma en el período
+            </div>
+          )}
+          <p className="text-xs text-gray-400 mt-3">
+            Clic en una barra para filtrar el historial por esa mascota. Cambiar color o fechas oculta este detalle.
+          </p>
+        </div>
+      )}
 
       <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="p-6 border-b border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gray-50/50">
@@ -429,7 +529,7 @@ export default function AuditoriaPanel() {
                 <button
                   key={opt.id}
                   type="button"
-                  onClick={() => setFilterColor(opt.id)}
+                  onClick={() => handleFilterColorChange(opt.id)}
                   className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${
                     filterColor === opt.id ? opt.active : opt.idle
                   }`}
@@ -447,7 +547,7 @@ export default function AuditoriaPanel() {
                 <input
                   type="date"
                   value={filterDateStart}
-                  onChange={(e) => setFilterDateStart(e.target.value)}
+                  onChange={(e) => handleFilterDateStartChange(e.target.value)}
                   className="audit-date-input w-full sm:w-auto min-w-0 px-3 py-2.5 rounded-xl border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-black font-semibold text-base normal-case"
                 />
               </div>
@@ -459,7 +559,7 @@ export default function AuditoriaPanel() {
                 <input
                   type="date"
                   value={filterDateEnd}
-                  onChange={(e) => setFilterDateEnd(e.target.value)}
+                  onChange={(e) => handleFilterDateEndChange(e.target.value)}
                   className="audit-date-input w-full sm:w-auto min-w-0 px-3 py-2.5 rounded-xl border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-black font-semibold text-base normal-case"
                 />
               </div>
@@ -467,7 +567,12 @@ export default function AuditoriaPanel() {
             <div className="flex items-center gap-2">
               {(filterDateStart || filterDateEnd || filterColor !== 'Todos') && (
                 <button
-                  onClick={() => { setFilterDateStart(''); setFilterDateEnd(''); setFilterColor('Todos'); }}
+                  onClick={() => {
+                    setFilterDateStart('');
+                    setFilterDateEnd('');
+                    setFilterColor('Todos');
+                    clearSymptomFilter();
+                  }}
                   className="text-sm text-indigo-600 font-bold hover:underline px-2 py-2 whitespace-nowrap"
                 >
                   Limpiar
