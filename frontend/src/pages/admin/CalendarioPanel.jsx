@@ -208,11 +208,11 @@ export default function CalendarioPanel() {
   }, [fetchReservationsAndAlerts]);
 
   const selectableAnimals = useMemo(() => {
-    // Vet / baño: solo mascotas de guardería
+    // Vet / baño: solo guardería externa (is_daycare)
     if (isServiceEvent(formData.status)) {
       return animals.filter(a => a.is_daycare === true);
     }
-    // Nueva Reserva: solo mascotas externas
+    // Nueva Reserva: solo internas
     return animals.filter(a => a.is_daycare === false);
   }, [animals, formData.status]);
 
@@ -297,7 +297,7 @@ export default function CalendarioPanel() {
     const validateDaycareAnimal = (aId) => {
       const selected = animals.find(a => String(a.id) === String(aId));
       if (!selected || selected.is_daycare !== true) {
-        alert("Vet / Baño / otras actividades solo se puede asignar a mascotas de guardería.");
+        alert("Vet / Baño / otras actividades solo se puede asignar a guardería externa.");
         return false;
       }
       return true;
@@ -314,7 +314,7 @@ export default function CalendarioPanel() {
         if (isServiceEvent(formData.status)) {
           if (!validateDaycareAnimal(aId)) return;
         } else if (!selected || selected.is_daycare !== false) {
-          alert("Las reservas solo se pueden asignar a mascotas externas.");
+          alert("Las reservas solo se pueden asignar a pacientes internos.");
           return;
         }
       }
@@ -490,8 +490,8 @@ export default function CalendarioPanel() {
   };
 
   const patientLabel = isServiceEvent(formData.status)
-    ? 'Paciente de guardería'
-    : 'Paciente (mascota externa)';
+    ? 'Paciente (guardería externa)'
+    : 'Paciente interno';
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 sm:p-6">
@@ -503,7 +503,7 @@ export default function CalendarioPanel() {
           </h2>
           <p className="text-gray-500 text-xs sm:text-sm mt-1">
             {isAdmin
-              ? "Nueva Reserva: externas. Vet/Baño/otras actividades: solo guardería."
+              ? "Nueva Reserva: internas. Vet/Baño/otras actividades: solo guardería externa."
               : "Haz clic en un evento para ver los detalles."}
           </p>
         </div>
@@ -779,7 +779,7 @@ export default function CalendarioPanel() {
                       <option value="">Seleccione...</option>
                       {selectableAnimals.map(a => (
                         <option key={a.id} value={a.id}>
-                          {a.name}{a.is_daycare ? ' (guardería)' : ''}
+                          {a.name}{a.is_daycare ? ' (guard. externa)' : ''}
                         </option>
                       ))}
                     </select>

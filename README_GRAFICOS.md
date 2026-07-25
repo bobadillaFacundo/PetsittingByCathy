@@ -2,6 +2,8 @@
 
 Los gráficos interactivos viven en el **Panel Admin → Auditoría Reportes** (`AuditoriaPanel.jsx`). Usan la librería [Recharts](https://recharts.org/) y se alimentan de `GET /api/reports/all`.
 
+> **Índice:** [docs/README.md](./docs/README.md) · [docs/FRONTEND.md](./docs/FRONTEND.md)
+
 ## Ubicación en la App
 
 ```

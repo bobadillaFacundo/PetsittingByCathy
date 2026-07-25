@@ -1,223 +1,248 @@
-# Petsitting by Cathy - Sistema Integral de Guardería Canina
+# Petsitting by Cathy
 
-Bienvenido al repositorio principal del sistema **Petsitting by Cathy**, una plataforma Full-Stack impulsada por Inteligencia Artificial (FastAPI + React) diseñada para gestionar y normalizar el historial clínico de mascotas en una guardería.
+Sistema integral de gestión para **guardería canina** (y mascotas externas): historial clínico, reportes por voz con IA, calendario de reservas, libreta sanitaria con escaneo de vacunas, panel de administración y PWA instalable en móviles.
 
-## Características Principales
-
-### 1. Motor NLP y Reconocimiento de Voz
-Los cuidadores graban un audio (*"Kira comió la mitad pero vomitó agua"*) y el sistema transcribe (Whisper local), interpreta con **Qwen 7B en el servidor vLLM**, extrae entidades y las normaliza en la base de datos.
-
-En la confirmación siempre aparecen **Comida, Agua, Pis y Caca** (opcionales) y se puede marcar el texto como **observación** (amarillo).
-
-> Ver detalles técnicos en [README_NLP.md](./README_NLP.md)
-
-### 2. Aplicación Web Progresiva (PWA)
-Instalable en teléfonos Android/iOS. Modo offline para reportes de voz, safe-area iOS, y acceso remoto vía **Microsoft DevTunnel**.
-
-> Ver guía en [README_PWA.md](./README_PWA.md)
-
-### 3. Dashboard de Inteligencia y Auditoría
-- **El Clima de la Guardería:** la IA resume reportes recientes y detecta anomalías (sin exagerar).
-- **Análisis por animal:** resumen neutro y factual de la evolución (sin alarmismo).
-- **Gráficos interactivos (Admin):** barras por mascota y donut de síntomas; clic filtra el panel.
-- **Filtro por color** en auditoría: Verde / Amarillo / Rojo.
-- **Alertas críticas:** banner rojo hasta marcarlas como resueltas.
-- **Colores semánticos:** verde, amarillo (observación) o rojo según reglas + tipo de evento.
-- **Historial clínico:** timeline, edición de transcripción y PDF asistido por IA.
-- **Fotos en reportes:** cámara o galería junto al audio.
-
-> Gráficos: [README_GRAFICOS.md](./README_GRAFICOS.md)
-
-### 4. Calendario de Reservas
-Tab **Calendario** en la app (`CalendarioPanel`):
-- **Estadía / Nueva Reserva** → solo mascotas **externas** (`is_daycare = false`). Estados: Pendiente, Confirmada, Ingresada, Finalizada, Cancelada.
-- **Vet / Baño** → solo mascotas de **guardería** (`is_daycare = true`). Estados: Llevar Veterinaria, Viene Veterinaria, Llevar a Bañar.
-
-Validación en frontend y en `POST/PUT /reservations`.
-
-### 5. Mascotas Guardería vs Externas
-- Campo `animals.is_daycare`:
-  - **Guardería** (`true`): aparecen en la casita / tablero diario.
-  - **Externas** (`false`): solo reservas de calendario (vet/baño usan guardería).
-- Panel Admin: secciones **Mascotas Guardería** y **Mascotas Externas**.
-- En el modal de mascota: pestañas Libreta sanitaria, Desparasitaciones y Laboratorios.
-
-#### Perfil del animal (alta / edición)
-| Campo | Descripción |
-|-------|-------------|
-| **Color del pelaje** | Texto libre (`coat_color`) |
-| **Edad** | Años exactos (`age_years`) si no es rescate |
-| **Rescate** | Check `is_rescue`: en lugar de edad exacta, rango estimado `age_estimate_min`–`age_estimate_max` |
-| **SÍMIL (raza)** | `is_simil_breed` + `breed_id` → se muestra como *SÍMIL Border Collie* (tamaño / carácter aproximado) |
-| **Características** | Ciego, sordo, sin olfato, temas neurológicos, movimientos involuntarios |
-
-También visibles en el listado admin y en el encabezado del historial clínico.
-
-### 6. Panel Admin
-Ruta `/admin` (rol `admin`). Super-admin (`username === 'cathy'`) ve además Diccionario IA, Colores, Análisis IA, Auditoría y Usuarios.
-
-| Sección | Quién | Función |
-|---------|-------|---------|
-| Diccionario IA | Super | TagSets y variantes aprendidas |
-| Colores de Reporte | Super | Keywords rojo / amarillo |
-| Análisis IA | Super | Evolución neutra por paciente |
-| Mascotas Guardería / Externas | Admin | CRUD + libreta / labs / desparasitaciones |
-| Gestión de Catálogos | Admin | Especies, razas, labs, vacunas, productos, vets |
-| Exportar Historias | Admin | PDF clínico IA (`1month`…`1year`) |
-| Auditoría Reportes | Super | Clima, gráficos, feed filtrable |
-| Usuarios | Super | Alta, password, activar/desactivar |
-
-Modales de alta/edición con portal a `document.body` (scroll nativo en iOS).
-
-### 7. Catálogos y Diccionarios IA
-- TagSets **obligatorios** (no eliminables): Comida, Agua, Pis, Caca.
-- Resto de conjuntos, especies, razas, labs, vacunas, productos, vets editables en Admin.
-- **Colores de reporte** (verde/amarillo/rojo por keywords) ≠ color del pelaje del animal.
-
-### 8. Esquema Relacional Normalizado
-Historiales médicos, desparasitaciones, libretas, reservas, reportes, alertas y multimedia.
-
-> Ver [README_BDD.md](./README_BDD.md)
+| | |
+|---|---|
+| **Frontend** | React 19 + Vite 6 + Tailwind 4 + PWA → [Vercel](https://vercel.com) |
+| **Backend** | FastAPI + SQLAlchemy → [Render](https://render.com) |
+| **Base de datos** | PostgreSQL en [Supabase](https://supabase.com) |
+| **IA** | [Groq](https://groq.com) (STT, NLP, visión) + vLLM/Qwen opcional en dev |
+| **Archivos** | Supabase Storage |
 
 ---
 
-## Estructura del Proyecto
+## Tabla de contenidos
 
-```
-PetsittingByCathy/
-├── backend/          # API FastAPI + SQLAlchemy + NLP
-│   ├── src/
-│   │   ├── models/   # Modelos ORM
-│   │   ├── routes/   # Endpoints REST
-│   │   └── services/ # Whisper, Qwen (vLLM), helpers
-│   └── uploads/      # Audios, fotos, labs (gitignored)
-├── frontend/         # React + Vite + TailwindCSS + PWA
-│   └── src/
-│       ├── components/   # VoiceRecorder, InstallPrompt
-│       └── pages/        # Dashboard, AnimalHistory, admin/
-├── PetsittingByCathy - START.bat   # Backend + Frontend + DevTunnel
-├── README.md
-├── README_NLP.md
-├── README_PWA.md
-├── README_BDD.md
-├── README_GRAFICOS.md
-└── LICENSE
-```
+1. [Características](#características)
+2. [Roles y permisos](#roles-y-permisos)
+3. [Inicio rápido](#inicio-rápido)
+4. [Estructura del proyecto](#estructura-del-proyecto)
+5. [Documentación](#documentación)
+6. [API resumida](#api-resumida)
+7. [Variables de entorno](#variables-de-entorno)
+8. [Licencia](#licencia)
 
 ---
 
-## Inicio Rápido
+## Características
+
+### Reportes por voz (NLP)
+
+El cuidador graba un audio (*"Kira comió la mitad pero vomitó agua"*). El sistema:
+
+1. **Transcribe** (Groq Whisper en producción; faster-whisper local en dev)
+2. **Interpreta** con LLM (Groq o Qwen 7B vía vLLM)
+3. **Normaliza** en TagSets (Comida, Agua, Pis, Caca + catálogo editable)
+4. **Confirma** en un wizard con severidad verde / amarillo / rojo
+5. **Alerta** si detecta keywords críticas
+
+Soporta **fotos**, **modo offline** (sync por lote) y **edición** posterior del texto.
+
+→ Detalle: [README_NLP.md](./README_NLP.md)
+
+### PWA móvil
+
+Instalable en Android/iOS, safe-area, reportes offline, cámara.
+
+→ Detalle: [README_PWA.md](./README_PWA.md)
+
+### Panel de inteligencia (admin)
+
+- **Clima de la guardería:** resumen IA de las últimas 48 h
+- **Análisis por animal:** evolución neutra y factual
+- **Gráficos interactivos:** barras por mascota, donut de síntomas (clic filtra)
+- **Alertas críticas** en tablero hasta resolverlas
+- **Exportación PDF** de historia clínica asistida por IA
+
+→ Gráficos: [README_GRAFICOS.md](./README_GRAFICOS.md)
+
+### Calendario
+
+| Tipo | Animales | Ejemplos de estado |
+|------|----------|-------------------|
+| **Estadía / reserva** | Internas (`is_daycare=false`) | Pendiente, Confirmada, Ingresada, Finalizada |
+| **Vet / Baño** | Guardería externa (`is_daycare=true`) | Llevar Veterinaria, Viene Veterinaria, Llevar a Bañar |
+
+### Guardería externa vs Internas
+
+| Sección admin | `is_daycare` | Uso |
+|---------------|--------------|-----|
+| **Guardería Externa** | `true` | Tablero diario (casita), vet/baño en calendario, estadía |
+| **Internas** | `false` | Reservas y servicios sin estadía permanente |
+
+Cada animal tiene perfil clínico completo: libreta, desparasitaciones, laboratorios, medicación, observaciones.
+
+**Perfil del animal:** color de pelaje, edad o rango (rescate), raza / SÍMIL, rasgos (ciego, sordo, neurológico, etc.).
+
+### Escaneo de vacunas con IA
+
+Subir foto, HEIC o PDF de libreta → **Groq Vision** extrae vacunas → lote editable → guardar con documento en Storage.
+
+→ Detalle: [docs/VACUNAS_ESCANEO.md](./docs/VACUNAS_ESCANEO.md)
+
+### Base de datos normalizada
+
+PostgreSQL con esquema 1FN/2FN, libreta sanitaria, reportes, reservas, catálogos IA.
+
+→ Detalle: [README_BDD.md](./README_BDD.md)
+
+---
+
+## Roles y permisos
+
+| Rol | Acceso |
+|-----|--------|
+| **Cuidador** (`user`) | Tablero, reportes, calendario, historial |
+| **Admin** (`admin`) | + Panel `/admin`: guardería, mascotas, catálogos, exportar |
+| **Super-admin** (`username === 'cathy'`) | + Diccionario IA, colores, análisis, auditoría, usuarios |
+
+---
+
+## Inicio rápido
 
 ### Requisitos
-- Python 3.9+
-- Node.js 18+
-- PostgreSQL
-- Servidor **vLLM** con Qwen 2.5 7B (recomendado) o Groq (`USE_GROQ=1`)
 
-### Todo-en-uno (Windows)
+- Python 3.11+
+- Node.js 20+ (22+ recomendado para React Router 8)
+- Cuenta Supabase (PostgreSQL + Storage)
+- `GROQ_API_KEY` (STT, NLP y visión en producción)
+
+### Windows — todo en uno
 
 ```bat
 PetsittingByCathy - START.bat
 ```
 
-Levanta backend (`:8000`), frontend (`:5173`) y el túnel `guarderia-canina.brs`.
+### Manual
 
-### Backend
-
-```powershell
+```bash
+# 1. Backend
 cd backend
-python -m pip install -r requirements.txt
+cp .env.example .env    # completar SUPABASE, GROQ, DATABASE_URL
+pip install -r requirements.txt
 python -m src.database.init_db
-python -m src.database.migrate_normalize
 uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
-```
 
-### Frontend
-
-```powershell
+# 2. Frontend (otra terminal)
 cd frontend
 npm install
-npx vite --port 5173 --host 0.0.0.0 --strictPort
+npm run dev
 ```
 
-La app corre en `http://localhost:5173` con proxy `/api` → `:8000`.
+App: `http://localhost:5173` — API: `http://localhost:8000` — Docs interactivas: `http://localhost:8000/docs`
+
+### Producción
+
+| Servicio | URL típica |
+|----------|------------|
+| API | `https://petsittingbycathy.onrender.com` |
+| Web | Vercel (configurado en `frontend/vercel.json`) |
+
+→ Guía completa: [docs/DESPLIEGUE.md](./docs/DESPLIEGUE.md)
 
 ---
 
-## API — Endpoints Relevantes
+## Estructura del proyecto
 
-Todos los endpoints (excepto login) requieren `Authorization: Bearer <token>`.
-
-Si el JWT venció, el frontend (`src/lib/auth.js` + interceptor en `main.jsx`) limpia la sesión y redirige a `/login`.
-
-### Auth y usuarios
-
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| `POST` | `/auth/login` | Login → JWT |
-| `GET` | `/auth/me` | Usuario actual |
-| `GET/POST` | `/users/` | Listar / crear usuarios (admin) |
-| `PUT` | `/users/{id}/password` | Cambiar contraseña |
-| `PUT` | `/users/{id}/toggle_status` | Activar / desactivar |
-
-### Reportes e IA
-
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| `POST` | `/reports/analyze-voice` | Transcribe audio y extrae entidades NLP |
-| `POST` | `/reports/analyze-text` | Mismo NLP sin audio |
-| `POST` | `/reports/confirm` | Guarda reporte + severidad + alertas |
-| `POST` | `/reports/analyze-and-confirm-batch` | Sync offline |
-| `PUT` | `/reports/{id}/edit` | Edita transcripción y recalcula |
-| `POST` | `/reports/{id}/attach-photo` | Adjunta foto |
-| `GET` | `/reports/all` | Feed de auditoría / gráficos |
-| `GET` | `/reports/export-pdf/{animal_id}` | PDF clínico IA (`?range=1month\|3months\|6months\|9months\|1year`) |
-
-### Animales y clínica
-
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| `GET/POST` | `/animals/` | Listar / crear |
-| `GET/PUT/DELETE` | `/animals/{id}` | Detalle / editar / borrar |
-| `GET` | `/animals/{id}/history` | Historial clínico |
-| `GET` | `/animals/{id}/evolution-analysis` | Análisis neutro por animal |
-| `GET` | `/animals/{id}/health_record` | Libreta sanitaria |
-| `GET/POST` | `/animals/{id}/vaccines` | Vacunas |
-| `GET/POST` | `/animals/{id}/internal_dewormings` | Desparasitaciones internas |
-| `GET/POST` | `/animals/{id}/external_dewormings` | Desparasitaciones externas |
-| `GET/POST` | `/animals/{id}/lab_results` | Estudios de laboratorio |
-| `POST` | `/animals/{id}/lab_results/upload` | Subir PDF/imagen de lab |
-
-### Dashboard, catálogos y reservas
-
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| `GET` | `/dashboard/` | Tablero + alertas |
-| `GET` | `/dashboard/weather` | Clima IA |
-| `PATCH` | `/dashboard/critical-alerts/{id}/resolve` | Resolver alerta |
-| `GET` | `/dashboard/dictionary` | Diccionario IA |
-| `GET/PUT` | `/catalogs/color-rules` | Reglas de color |
-| `CRUD` | `/catalogs/{species\|breeds\|laboratories\|vaccines\|products\|veterinarians\|tagsets}` | Catálogos admin |
-| `CRUD` | `/reservations/` | Calendario (reglas `is_daycare`) |
-| `POST` | `/chat/` | Q&A NLP (endpoint disponible) |
-
-Archivos estáticos: `/uploads/...` (audios, fotos, labs).
+```
+PetsittingByCathy/
+├── backend/                 # API FastAPI
+│   ├── src/routes/          # Endpoints REST
+│   ├── src/services/        # IA, storage, helpers
+│   ├── src/models/          # SQLAlchemy ORM
+│   ├── tests/               # pytest
+│   ├── render.yaml          # Render.com
+│   └── .env.example
+├── frontend/                # React PWA
+│   ├── src/pages/admin/     # Panel administración
+│   └── vercel.json
+├── docs/                    # Documentación segmentada
+│   ├── README.md            # Índice de docs
+│   ├── ARQUITECTURA.md
+│   ├── DESPLIEGUE.md
+│   ├── API.md
+│   ├── VACUNAS_ESCANEO.md
+│   ├── FRONTEND.md
+│   └── BACKEND.md
+├── migration/               # Scripts backup Postgres/Qdrant
+├── README_NLP.md
+├── README_PWA.md
+├── README_BDD.md
+├── README_GRAFICOS.md
+└── PetsittingByCathy - START.bat
+```
 
 ---
 
-## Variables de Entorno
+## Documentación
 
-| Variable | Dónde | Descripción |
-|----------|-------|-------------|
-| `SECRET_KEY` | Backend | Firma JWT (default de desarrollo; cambiar en producción) |
-| `VLLM_BASE_URL` | Backend | Default `http://100.82.178.56:8010/v1` |
-| `VLLM_MODEL` | Backend | Default `Qwen/Qwen2.5-7B-Instruct-AWQ` |
-| `USE_GROQ` | Backend | `1` para forzar Groq en lugar de vLLM |
-| `GROQ_API_KEY` | Backend | Requerido si `USE_GROQ=1` |
-| `GROQ_MODEL` | Backend | Default `llama-3.1-8b-instant` |
-| `VITE_DEV_HTTPS` | Frontend | `1` para HTTPS local (PWA en LAN) |
+### Índice principal
 
-PostgreSQL se configura en `backend/src/database/session.py`.
+📁 **[docs/README.md](./docs/README.md)** — punto de entrada a toda la documentación técnica.
+
+### Guías por tema
+
+| Documento | Contenido |
+|-----------|-----------|
+| [docs/ARQUITECTURA.md](./docs/ARQUITECTURA.md) | Capas, flujos, IA, Storage |
+| [docs/DESPLIEGUE.md](./docs/DESPLIEGUE.md) | Render, Vercel, Supabase, env |
+| [docs/API.md](./docs/API.md) | Referencia REST completa |
+| [docs/VACUNAS_ESCANEO.md](./docs/VACUNAS_ESCANEO.md) | Escaneo libretas Groq Vision |
+| [docs/FRONTEND.md](./docs/FRONTEND.md) | React, rutas, admin, PWA |
+| [docs/BACKEND.md](./docs/BACKEND.md) | FastAPI, servicios, tests |
+
+### Documentos temáticos (raíz)
+
+| Documento | Contenido |
+|-----------|-----------|
+| [README_NLP.md](./README_NLP.md) | Voz → texto → BD |
+| [README_PWA.md](./README_PWA.md) | Instalación móvil, offline |
+| [README_BDD.md](./README_BDD.md) | Esquema y normalización |
+| [README_GRAFICOS.md](./README_GRAFICOS.md) | Gráficos auditoría |
+
+### Por carpeta
+
+| Carpeta | README |
+|---------|--------|
+| [frontend/README.md](./frontend/README.md) | Resumen frontend |
+| [backend/README.md](./backend/README.md) | Resumen backend |
+| [backend/tests/README.md](./backend/tests/README.md) | Suite pytest |
+
+---
+
+## API resumida
+
+Autenticación: `Authorization: Bearer <JWT>` (excepto login).
+
+| Área | Rutas principales |
+|------|-------------------|
+| Auth | `POST /auth/login`, `GET /auth/me` |
+| Reportes | `POST /reports/analyze-voice`, `/confirm`, `GET /reports/all` |
+| Animales | `CRUD /animals/`, `/history`, `/vaccines/scan` |
+| Dashboard | `GET /dashboard/`, `/weather` |
+| Catálogos | `CRUD /catalogs/{species, breeds, ...}` |
+| Reservas | `CRUD /reservations/` |
+
+Referencia completa: [docs/API.md](./docs/API.md) — Swagger: `/docs` en el backend.
+
+---
+
+## Variables de entorno
+
+Plantilla completa: **`backend/.env.example`**
+
+| Variable | Descripción |
+|----------|-------------|
+| `SECRET_KEY` | Firma JWT |
+| `DATABASE_URL` | Supabase pooler (6543) |
+| `DIRECT_DATABASE_URL` | Supabase directo (5432) migraciones |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Storage |
+| `GROQ_API_KEY` | STT + NLP + visión |
+| `USE_GROQ` | `1` en producción |
+| `GROQ_VISION_MODEL` | `qwen/qwen3.6-27b` |
+| `VISION_SKIP_LOCAL_FALLBACKS` | `1` en Render |
+| `TZ` | `America/Argentina/Buenos_Aires` |
 
 ---
 
@@ -225,30 +250,18 @@ PostgreSQL se configura en `backend/src/database/session.py`.
 
 | Capa | Stack |
 |------|-------|
-| **Frontend** | React 19, Vite, TailwindCSS 4, React Router, Recharts, idb-keyval, VitePWA |
-| **Backend** | FastAPI, SQLAlchemy, Pydantic, JWT + bcrypt |
-| **Base de datos** | PostgreSQL |
-| **IA** | faster-whisper (`medium` local) + **Qwen 2.5 7B** vía vLLM en servidor (`100.82.178.56:8010`) |
-
----
-
-## Documentación Adicional
-
-| Archivo | Contenido |
-|---------|-----------|
-| [README_NLP.md](./README_NLP.md) | Pipeline voz → texto → JSON → BD |
-| [README_PWA.md](./README_PWA.md) | Instalación móvil, offline, túnel, responsive |
-| [README_BDD.md](./README_BDD.md) | DER, tablas, normalización |
-| [README_GRAFICOS.md](./README_GRAFICOS.md) | Gráficos y filtros de auditoría |
-| [frontend/README.md](./frontend/README.md) | Estructura UI y paneles |
-| [backend/tests/README.md](./backend/tests/README.md) | Suite de tests (pytest) |
+| Frontend | React 19, Vite 6, Tailwind 4, React Router 8, Recharts, PWA |
+| Backend | FastAPI, Starlette, SQLAlchemy, Pydantic, JWT |
+| BD | PostgreSQL (Supabase) |
+| IA | Groq (Whisper, Llama, Qwen Vision), vLLM/Qwen (dev) |
+| Archivos | Supabase Storage |
 
 ---
 
 ## Licencia
 
-Este proyecto está bajo la licencia [MIT](./LICENSE).
+[MIT](./LICENSE)
 
 ---
 
-*Desarrollado para facilitar el día a día de cuidadores y proveer control total a los administradores.*
+*Desarrollado para el día a día de cuidadores y control total de administradores de la guardería.*

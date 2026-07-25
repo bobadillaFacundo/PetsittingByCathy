@@ -2,10 +2,12 @@
 
 Este documento detalla el motor de Inteligencia Artificial: cómo la voz se transforma en registros normalizados, cómo aprende vocabulario nuevo y cómo interactúan alertas, observaciones, fotos y edición.
 
+> **Índice:** [docs/README.md](./docs/README.md) · [docs/ARQUITECTURA.md](./docs/ARQUITECTURA.md) · [docs/DESPLIEGUE.md](./docs/DESPLIEGUE.md)
+
 ## Arquitectura General
 
 ```
-[Micrófono] → Whisper (local) → Qwen 7B (vLLM servidor) → Auto-aprendizaje TagSet
+[Micrófono] → Groq Whisper (prod) / Whisper local (dev) → Qwen/Groq NLP → Auto-aprendizaje TagSet
                          ↓
               Wizard Frontend → /confirm → PostgreSQL
                          ↓
@@ -13,7 +15,7 @@ Este documento detalla el motor de Inteligencia Artificial: cómo la voz se tran
 ```
 
 Fases principales:
-1. **Captura y Transcripción** (voz → texto crudo) — Whisper local
+1. **Captura y Transcripción** (voz → texto) — Groq STT en producción; faster-whisper local en dev
 2. **Interpretación Semántica** (texto → JSON) — **Qwen en IP del servidor**
 3. **Auto-Aprendizaje** (diccionarios TagSet)
 4. **Validación e Inserción** (wizard → base de datos)
@@ -22,7 +24,7 @@ Fases principales:
 
 ---
 
-## Fase 1: Captura y Transcripción (Whisper)
+## Fase 1: Captura y Transcripción (STT)
 
 **Frontend (`VoiceRecorder.jsx`):**
 - Selección de especie → paciente → grabación `.webm`
@@ -30,9 +32,9 @@ Fases principales:
 - Si no hay red: IndexedDB + sync con `/reports/analyze-and-confirm-batch`
 
 **Backend (`audio_service.py`):**
-- Modelo: **`faster-whisper` medium** (CPU, `int8`) — solo transcripción
+- **Producción:** Groq Whisper (`GROQ_STT_MODEL`, ej. `whisper-large-v3-turbo`)
+- **Desarrollo:** Groq si hay `GROQ_API_KEY`; si no, **faster-whisper** `medium` (CPU)
 - Endpoint: `POST /reports/analyze-voice`
-- Salida: texto crudo
 
 ---
 
@@ -154,7 +156,8 @@ El historial de auditoría permite filtrar por **Verde / Amarillo / Rojo** y por
 |----------|-------------|
 | `GROQ_API_KEY` | API key de Groq (solo si `USE_GROQ=1`) |
 | `USE_GROQ` | `1` para forzar Groq; por defecto vLLM del servidor |
-| `GROQ_MODEL` | Default: `llama-3.1-8b-instant` |
+| `GROQ_STT_MODEL` | Default: `whisper-large-v3-turbo` |
+| `GROQ_VISION_MODEL` | Escaneo vacunas: `qwen/qwen3.6-27b` — ver [docs/VACUNAS_ESCANEO.md](./docs/VACUNAS_ESCANEO.md) |
 | `VLLM_BASE_URL` | Default: `http://100.82.178.56:8010/v1` |
 | `VLLM_MODEL` | Default: `Qwen/Qwen2.5-7B-Instruct-AWQ` |
 | `SECRET_KEY` | Firma JWT (cambiar en producción) |

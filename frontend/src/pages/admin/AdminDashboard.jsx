@@ -39,8 +39,8 @@ export default function AdminDashboard() {
       { id: 'colores', label: 'Colores de Reporte', icon: Palette },
       { id: 'analisis', label: 'Análisis IA', icon: Activity },
     ] : []),
-    { id: 'guarderia', label: 'Guardería', icon: PawPrint },
-    { id: 'pacientes', label: 'Mascotas', icon: HeartPulse },
+    { id: 'guarderia', label: 'Guardería Externa', icon: PawPrint },
+    { id: 'pacientes', label: 'Internas', icon: HeartPulse },
     { id: 'catalogos', label: 'Gestión de Catálogos', icon: Settings },
     { id: 'exportar', label: 'Exportar Historias', icon: FileText },
     ...(isSuperAdmin ? [

@@ -2,6 +2,8 @@
 
 Suite de pruebas automatizadas del **backend** (FastAPI + SQLAlchemy).
 
+> Documentación: [docs/BACKEND.md](../docs/BACKEND.md) · [docs/API.md](../docs/API.md)
+
 ## Requisitos
 
 ```powershell

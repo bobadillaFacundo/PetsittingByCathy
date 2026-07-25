@@ -2,7 +2,8 @@
 
 Este documento describe la estructura, el modelo Entidad-Relación (ER) y el análisis de **normalización** de la base de datos del sistema.
 
-> Documentación relacionada: [README.md](./README.md) · [README_NLP.md](./README_NLP.md) · [README_PWA.md](./README_PWA.md) · [README_GRAFICOS.md](./README_GRAFICOS.md)
+> **Índice de documentación:** [docs/README.md](./docs/README.md)  
+> Relacionado: [README.md](./README.md) · [README_NLP.md](./README_NLP.md) · [README_PWA.md](./README_PWA.md) · [README_GRAFICOS.md](./README_GRAFICOS.md) · [docs/VACUNAS_ESCANEO.md](./docs/VACUNAS_ESCANEO.md)
 
 ## Migración de normalización
 
@@ -182,6 +183,7 @@ Migración: `python -m src.database.migrate_normalize` agrega estas columnas si 
 ### `vaccines`
 - `veterinarian_id` FK nullable (reemplaza `veterinarian_name`)
 - `health_record_id`, `vaccine_id`, fechas, lote
+- `document_url` — URL pública en Supabase Storage (certificado/libreta escaneada; carpeta `vaccines/`)
 
 ### `critical_alerts`
 - `animal_id`, `report_id`, `keyword_detected`, `is_resolved`, fechas

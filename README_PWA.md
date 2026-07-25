@@ -2,6 +2,8 @@
 
 Guía de la aplicación web progresiva: instalación en móviles, modo offline, cámara, responsive iOS y acceso remoto.
 
+> **Índice:** [docs/README.md](./docs/README.md) · [docs/FRONTEND.md](./docs/FRONTEND.md) · [docs/DESPLIEGUE.md](./docs/DESPLIEGUE.md)
+
 ## ¿Qué es una PWA?
 
 Una PWA permite instalar la web como app nativa:
