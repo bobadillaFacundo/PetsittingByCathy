@@ -30,6 +30,26 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
+
+def _ddl_database_url() -> str:
+    """URL para DDL: conexión directa (no pooler en modo transacción)."""
+    url = os.getenv("DIRECT_DATABASE_URL") or SQLALCHEMY_DATABASE_URL
+    if ":6543" in url:
+        url = url.replace(":6543", ":5432")
+    return url
+
+
+def get_ddl_engine():
+    url = _ddl_database_url()
+    is_pooler = "supabase" in url or "pooler" in url
+    return create_engine(
+        url,
+        isolation_level="AUTOCOMMIT",
+        pool_pre_ping=True,
+        connect_args={"options": "-c statement_timeout=120000"} if not is_pooler else {},
+        execution_options={"prepared": False} if is_pooler else {},
+    )
+
 def get_db():
     db = SessionLocal()
     try:

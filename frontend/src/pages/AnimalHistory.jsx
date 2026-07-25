@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { API_BASE, mediaUrl } from '../lib/api';
 
 const SPECIES_INFO = {
   1: { name: "Perros", emoji: "🐶" },
@@ -52,13 +53,13 @@ export default function AnimalHistory({ animalId = 1 }) {
   const [expandedPhoto, setExpandedPhoto] = useState(null);
   const [expandedVideo, setExpandedVideo] = useState(null);
 
-  const mediaSrc = (url) => (url?.startsWith('http') ? url : `https://petsittingbycathy.onrender.com${url}`);
+  const mediaSrc = (url) => (url?.startsWith('http') ? url : `${API_BASE}${url}`);
 
   const fetchHistory = useCallback(() => {
     setLoading(true);
     Promise.all([
-      fetch(`https://petsittingbycathy.onrender.com/animals/${animalId}/history`, { headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` } }),
-      fetch('https://petsittingbycathy.onrender.com/catalogs/color-rules', { headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` } })
+      fetch(`${API_BASE}/animals/${animalId}/history`, { headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` } }),
+      fetch('${API_BASE}/catalogs/color-rules', { headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` } })
     ])
     .then(async ([histRes, rulesRes]) => {
       if (histRes.ok) setData(await histRes.json());
@@ -78,7 +79,7 @@ export default function AnimalHistory({ animalId = 1 }) {
   const downloadPDF = async (range) => {
     setExportingPDF(true);
     try {
-      const res = await fetch(`https://petsittingbycathy.onrender.com/reports/export-pdf/${animalId}?range=${range}`, {
+      const res = await fetch(`${API_BASE}/reports/export-pdf/${animalId}?range=${range}`, {
         headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
       });
       if (!res.ok) throw new Error("Error generating PDF");
@@ -108,7 +109,7 @@ export default function AnimalHistory({ animalId = 1 }) {
     if (!editingReport) return;
     setSavingEdit(true);
     try {
-      const res = await fetch(`https://petsittingbycathy.onrender.com/reports/${editingReport}/edit`, {
+      const res = await fetch(`${API_BASE}/reports/${editingReport}/edit`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -132,7 +133,7 @@ export default function AnimalHistory({ animalId = 1 }) {
     const when = new Date(report.created_at).toLocaleString('es-AR');
     if (!window.confirm(`¿Eliminar definitivamente este reporte del ${when}?\n\nEsta acción no se puede deshacer.`)) return;
     try {
-      const res = await fetch(`https://petsittingbycathy.onrender.com/reports/${report.id}`, {
+      const res = await fetch(`${API_BASE}/reports/${report.id}`, {
         method: "DELETE",
         headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` },
       });

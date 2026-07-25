@@ -25,13 +25,32 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Asistente Veterinario API", version="1.0.0", lifespan=lifespan)
 
 
+def _cors_headers(request: Request) -> dict:
+    origin = request.headers.get("origin")
+    if not origin:
+        return {}
+    return {
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Credentials": "true",
+    }
+
+
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     from fastapi import HTTPException as FastAPIHTTPException
+    headers = _cors_headers(request)
     if isinstance(exc, FastAPIHTTPException):
-        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail},
+            headers=headers,
+        )
     traceback.print_exc()
-    return JSONResponse(status_code=500, content={"detail": "Error interno del servidor"})
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Error interno del servidor"},
+        headers=headers,
+    )
 
 app.add_middleware(
     CORSMiddleware,
@@ -58,3 +77,18 @@ app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 @app.get("/")
 def read_root():
     return {"message": "Bienvenido a la API del Asistente Veterinario"}
+
+
+@app.get("/health/schema")
+def health_schema():
+    from sqlalchemy import inspect
+    from src.database.session import engine
+
+    inspector = inspect(engine)
+    if "reservations" not in inspector.get_table_names():
+        return {"reservations": "missing"}
+    cols = {c["name"]: c for c in inspector.get_columns("reservations")}
+    return {
+        "reservations_species_id": "species_id" in cols,
+        "reservations_animal_id_nullable": cols.get("animal_id", {}).get("nullable", False),
+    }

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 from src.database.session import get_db
 from src.models.models import Reservation, Animal
 from src.dtos.reservation_dto import ReservationCreate, ReservationUpdate, ReservationResponse
@@ -90,14 +90,21 @@ def create_reservation(reservation: ReservationCreate, db: Session = Depends(get
     db.add(db_reservation)
     try:
         db.commit()
-    except IntegrityError as exc:
+    except (IntegrityError, OperationalError, ProgrammingError) as exc:
         db.rollback()
         err = str(getattr(exc, "orig", exc)).lower()
-        if "animal_id" in err or "null value" in err or "not-null" in err:
+        if (
+            "animal_id" in err
+            or "species_id" in err
+            or "null value" in err
+            or "not-null" in err
+            or "does not exist" in err
+            or "undefinedcolumn" in err
+        ):
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    "No se pudo guardar la actividad sin mascota. "
+                    "No se pudo guardar la actividad. "
                     "Reiniciá el backend en Render para aplicar la migración de base de datos."
                 ),
             ) from exc

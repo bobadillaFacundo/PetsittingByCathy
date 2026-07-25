@@ -6,14 +6,19 @@ Ejecutar una vez después de actualizar modelos:
 """
 
 from sqlalchemy import inspect, text
-from src.database.session import engine, SessionLocal, Base
+from src.database.session import engine, SessionLocal, Base, get_ddl_engine
 from src.models import models
 from src.services.tag_helpers import parse_csv_values, set_tag_variants, set_color_keywords, set_dictionary_synonyms
 
+_ddl_engine = None
+
 
 def run_ddl(sql: str) -> None:
-    """DDL con autocommit (necesario con pgBouncer / Supabase pooler)."""
-    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+    """DDL con autocommit en conexión directa (Supabase pooler no soporta ALTER)."""
+    global _ddl_engine
+    if _ddl_engine is None:
+        _ddl_engine = get_ddl_engine()
+    with _ddl_engine.connect() as conn:
         conn.execute(text(sql))
 
 

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Pencil, UserPlus, X, Save, Lock, UserX, UserCheck } from 'lucide-react';
+import { API_BASE, mediaUrl } from '../../lib/api';
 
 export default function UsuariosPanel() {
   const [users, setUsers] = useState([]);
@@ -28,7 +29,7 @@ export default function UsuariosPanel() {
 
   const fetchUsers = async () => {
     try {
-      const res = await fetch('https://petsittingbycathy.onrender.com/users/', {
+      const res = await fetch('${API_BASE}/users/', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -58,7 +59,7 @@ export default function UsuariosPanel() {
   const handleCreateUser = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch('https://petsittingbycathy.onrender.com/users/', {
+      const res = await fetch('${API_BASE}/users/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -83,7 +84,7 @@ export default function UsuariosPanel() {
   const handleChangePassword = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch(`https://petsittingbycathy.onrender.com/users/${editingUser.id}/password`, {
+      const res = await fetch(`${API_BASE}/users/${editingUser.id}/password`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -114,7 +115,7 @@ export default function UsuariosPanel() {
     const action = user.is_active ? 'desactivar (dar de baja)' : 'reactivar';
     if (window.confirm(`¿Seguro que deseas ${action} al usuario ${user.name}?`)) {
       try {
-        const res = await fetch(`https://petsittingbycathy.onrender.com/users/${user.id}/toggle_status`, {
+        const res = await fetch(`${API_BASE}/users/${user.id}/toggle_status`, {
           method: 'PUT',
           headers: {
             'Authorization': `Bearer ${token}`

@@ -7,6 +7,7 @@ import LibretaTab from './LibretaTab';
 import MedicacionTab from './MedicacionTab';
 import ObservacionesTab from './ObservacionesTab';
 import { redirectToLogin } from '../../lib/auth';
+import { API_BASE, mediaUrl } from '../../lib/api';
 
 const SPECIES_INFO = {
   1: { name: "Perros", emoji: "🐶" },
@@ -112,7 +113,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
   const fetchMascotas = async () => {
     try {
       const res = await fetch(
-        `https://petsittingbycathy.onrender.com/animals/?is_daycare=${daycareOnly}&include_inactive=true`,
+        `${API_BASE}/animals/?is_daycare=${daycareOnly}&include_inactive=true`,
         {
           headers: { 'Authorization': `Bearer ${token}` }
         }
@@ -135,7 +136,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
 
   const fetchSpecies = async () => {
     try {
-      const res = await fetch(`https://petsittingbycathy.onrender.com/animals/species`, {
+      const res = await fetch(`${API_BASE}/animals/species`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) {
@@ -154,7 +155,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
 
   const fetchBreeds = async () => {
     try {
-      const res = await fetch(`https://petsittingbycathy.onrender.com/animals/breeds`, {
+      const res = await fetch(`${API_BASE}/animals/breeds`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -227,8 +228,8 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const url = editingId 
-      ? `https://petsittingbycathy.onrender.com/animals/${editingId}`
-      : `https://petsittingbycathy.onrender.com/animals/`;
+      ? `${API_BASE}/animals/${editingId}`
+      : `${API_BASE}/animals/`;
     
     const method = editingId ? 'PUT' : 'POST';
 
@@ -282,7 +283,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
   const handleDelete = async (id, name) => {
     if (window.confirm(`¿Dar de baja a ${name}? Seguirá visible aquí para reactivar o ver su historial; no aparecerá en la guardia.`)) {
       try {
-        const res = await fetch(`https://petsittingbycathy.onrender.com/animals/${id}`, {
+        const res = await fetch(`${API_BASE}/animals/${id}`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${token}`
@@ -302,7 +303,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
   const handleReactivate = async (id, name) => {
     if (!window.confirm(`¿Dar de alta de nuevo a ${name}? Volverá a aparecer en la guardia.`)) return;
     try {
-      const res = await fetch(`https://petsittingbycathy.onrender.com/animals/${id}`, {
+      const res = await fetch(`${API_BASE}/animals/${id}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -616,7 +617,6 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       <span className="text-sm font-semibold text-gray-700">{formData.name}</span>
                       <span className="text-xs text-gray-500">{sexLabel(formData.sex)}</span>
-                      <CastrationBadge isCastrated={formData.is_castrated} />
                     </div>
                   )}
                 </div>
@@ -632,7 +632,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
               {editingId && daycareOnly && speciesPeers.length > 1 && (
                 <div className="px-4 py-3 border-b border-gray-100 bg-white overflow-x-auto scroll-touch">
                   <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-2 px-1">
-                    Misma especie — castración
+                    Misma especie
                   </p>
                   <div className="flex gap-2 min-w-max pb-1">
                     {speciesPeers.map((m) => (
@@ -647,7 +647,6 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                         }`}
                       >
                         <span className="text-sm font-bold text-gray-900 whitespace-nowrap">{m.name}</span>
-                        <CastrationBadge isCastrated={m.is_castrated} />
                       </button>
                     ))}
                   </div>

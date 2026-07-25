@@ -5,6 +5,7 @@ import { es } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { Plus, X, Calendar as CalendarIcon, Save, Trash2 } from 'lucide-react';
 import { parseApiDateTime, toApiDateTime, formatForInput, isAllDayAlert } from '../../lib/datetimeAr';
+import { API_BASE, mediaUrl } from '../../lib/api';
 
 const locales = {
   'es': es,
@@ -85,7 +86,7 @@ export default function CalendarioPanel() {
 
   const fetchAnimals = async () => {
     try {
-      const res = await fetch(`https://petsittingbycathy.onrender.com/animals/`, {
+      const res = await fetch(`${API_BASE}/animals/`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -105,8 +106,8 @@ export default function CalendarioPanel() {
       const endStr = format(end, 'yyyy-MM-dd');
 
       const [resRes, resAlerts] = await Promise.all([
-        fetch(`https://petsittingbycathy.onrender.com/reservations/`, { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch(`https://petsittingbycathy.onrender.com/calendar/alerts?start=${startStr}&end=${endStr}`, { headers: { 'Authorization': `Bearer ${token}` } })
+        fetch(`${API_BASE}/reservations/`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch(`${API_BASE}/calendar/alerts?start=${startStr}&end=${endStr}`, { headers: { 'Authorization': `Bearer ${token}` } })
       ]);
 
       let calendarEvents = [];
@@ -296,8 +297,8 @@ export default function CalendarioPanel() {
 
       const postOrPut = async (payload, id = null) => {
         const url = id
-          ? `https://petsittingbycathy.onrender.com/reservations/${id}`
-          : `https://petsittingbycathy.onrender.com/reservations/`;
+          ? `${API_BASE}/reservations/${id}`
+          : `${API_BASE}/reservations/`;
         const res = await fetch(url, {
           method: id ? "PUT" : "POST",
           headers: {
@@ -361,7 +362,7 @@ export default function CalendarioPanel() {
           if (photosToUpload.length > 0) {
             const formDataObj = new FormData();
             photosToUpload.forEach(p => formDataObj.append('photos', p));
-            await fetch(`https://petsittingbycathy.onrender.com/reservations/${savedData.id}/photos`, {
+            await fetch(`${API_BASE}/reservations/${savedData.id}/photos`, {
               method: 'POST',
               headers: { 'Authorization': `Bearer ${token}` },
               body: formDataObj,
@@ -386,7 +387,7 @@ export default function CalendarioPanel() {
     if (!editingId || !window.confirm("¿Seguro que deseas cancelar/borrar esta reserva?")) return;
     
     try {
-      const res = await fetch(`https://petsittingbycathy.onrender.com/reservations/${editingId}`, {
+      const res = await fetch(`${API_BASE}/reservations/${editingId}`, {
         method: "DELETE",
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -826,7 +827,7 @@ export default function CalendarioPanel() {
                         {urls.map((url, i) => (
                           <div key={i} className="relative aspect-square">
                             <img 
-                              src={`https://petsittingbycathy.onrender.com${url}`} 
+                              src={mediaUrl(url)} 
                               alt="Pertenencia" 
                               className="w-full h-full object-cover rounded-lg border border-gray-200"
                             />

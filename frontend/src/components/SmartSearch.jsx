@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { API_BASE, mediaUrl } from '../lib/api';
 
 export default function SmartSearch() {
   const [query, setQuery] = useState("");
@@ -13,7 +14,7 @@ export default function SmartSearch() {
     setResponse("");
 
     try {
-      const res = await fetch(`https://petsittingbycathy.onrender.com/chat/`, {
+      const res = await fetch(`${API_BASE}/chat/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query })

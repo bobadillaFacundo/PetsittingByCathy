@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BookOpen, RefreshCw, AlertCircle } from 'lucide-react';
+import { API_BASE, mediaUrl } from '../../lib/api';
 
 export default function DiccionarioPanel() {
   const [dictionary, setDictionary] = useState([]);
@@ -12,7 +13,7 @@ export default function DiccionarioPanel() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch('https://petsittingbycathy.onrender.com/dashboard/dictionary', {
+      const res = await fetch('${API_BASE}/dashboard/dictionary', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Error al cargar el diccionario');

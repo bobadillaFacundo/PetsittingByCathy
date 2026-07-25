@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Trash2, Pencil, Plus, Check } from 'lucide-react';
+import { API_BASE, mediaUrl } from '../../lib/api';
 
 export default function MedicacionTab({ animalId }) {
   const [medications, setMedications] = useState([]);
@@ -27,7 +28,7 @@ export default function MedicacionTab({ animalId }) {
   const fetchMedications = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`https://petsittingbycathy.onrender.com/animals/${animalId}/medications`, {
+      const res = await fetch(`${API_BASE}/animals/${animalId}/medications`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -54,8 +55,8 @@ export default function MedicacionTab({ animalId }) {
 
     try {
       const url = isEditing
-        ? `https://petsittingbycathy.onrender.com/animals/${animalId}/medications/${isEditing}`
-        : `https://petsittingbycathy.onrender.com/animals/${animalId}/medications`;
+        ? `${API_BASE}/animals/${animalId}/medications/${isEditing}`
+        : `${API_BASE}/animals/${animalId}/medications`;
       const method = isEditing ? 'PUT' : 'POST';
 
       const res = await fetch(url, {
@@ -80,7 +81,7 @@ export default function MedicacionTab({ animalId }) {
   const handleDelete = async (id) => {
     if (!window.confirm("¿Eliminar esta medicación?")) return;
     try {
-      const res = await fetch(`https://petsittingbycathy.onrender.com/animals/${animalId}/medications/${id}`, {
+      const res = await fetch(`${API_BASE}/animals/${animalId}/medications/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Shield, ShieldAlert, CheckCircle } from 'lucide-react';
+import { API_BASE, mediaUrl } from '../../lib/api';
 
 export default function LibretaTab({ animalId, token }) {
   const [vaccines, setVaccines] = useState([]);
@@ -17,9 +18,9 @@ export default function LibretaTab({ animalId, token }) {
   const fetchData = async () => {
     try {
       const [resVac, resCat, resVet] = await Promise.all([
-        fetch(`https://petsittingbycathy.onrender.com/animals/${animalId}/vaccines`, { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch(`https://petsittingbycathy.onrender.com/animals/catalogs/vaccines`, { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch(`https://petsittingbycathy.onrender.com/animals/veterinarians`, { headers: { 'Authorization': `Bearer ${token}` } })
+        fetch(`${API_BASE}/animals/${animalId}/vaccines`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch(`${API_BASE}/animals/catalogs/vaccines`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch(`${API_BASE}/animals/veterinarians`, { headers: { 'Authorization': `Bearer ${token}` } })
       ]);
       if (resVac.ok) setVaccines(await resVac.json());
       if (resCat.ok) setCatalogs(await resCat.json());
@@ -45,7 +46,7 @@ export default function LibretaTab({ animalId, token }) {
         lot_number: newVaccine.lot_number || null,
         veterinarian_id: newVaccine.veterinarian_id ? Number(newVaccine.veterinarian_id) : null,
       };
-      const res = await fetch(`https://petsittingbycathy.onrender.com/animals/${animalId}/vaccines`, {
+      const res = await fetch(`${API_BASE}/animals/${animalId}/vaccines`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

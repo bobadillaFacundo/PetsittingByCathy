@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
+import { API_BASE, mediaUrl } from '../lib/api';
 
 export default function AnimalList() {
   const [animals, setAnimals] = useState([]);
 
   useEffect(() => {
     // Aquí luego integraremos la llamada a la API real
-    // fetch(`https://petsittingbycathy.onrender.com/animals/`)
+    // fetch(`${API_BASE}/animals/`)
     setAnimals([
       { id: 1, name: "Theo", species_id: 1, is_active: true },
       { id: 2, name: "Cleopatra", species_id: 1, is_active: true }

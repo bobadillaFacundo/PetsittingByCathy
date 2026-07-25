@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Send, RefreshCw, Activity, CheckCircle2, Filter, Mic, Square, Download, Database, Sun, CloudSun, AlertTriangle, X, Trash2 } from 'lucide-react';
 import VoiceRecorder from '../../components/VoiceRecorder';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { API_BASE, mediaUrl } from '../../lib/api';
 
 export default function AuditoriaPanel() {
   const [reports, setReports] = useState([]);
@@ -70,7 +71,7 @@ export default function AuditoriaPanel() {
   const fetchWeather = async () => {
     setLoadingWeather(true);
     try {
-      const res = await fetch(`https://petsittingbycathy.onrender.com/dashboard/weather`, {
+      const res = await fetch(`${API_BASE}/dashboard/weather`, {
         headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
       });
       const d = await res.json();
@@ -88,15 +89,15 @@ export default function AuditoriaPanel() {
     setIsLoading(true);
     try {
       const [reportsRes, animalsRes, rulesRes] = await Promise.all([
-        fetch('https://petsittingbycathy.onrender.com/reports/all', {
+        fetch('${API_BASE}/reports/all', {
           headers: {
             "Authorization": `Bearer ${localStorage.getItem("token")}`
           }
         }),
-        fetch('https://petsittingbycathy.onrender.com/animals/', {
+        fetch('${API_BASE}/animals/', {
           headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
         }),
-        fetch('https://petsittingbycathy.onrender.com/catalogs/color-rules', {
+        fetch('${API_BASE}/catalogs/color-rules', {
           headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
         })
       ]);
@@ -157,7 +158,7 @@ export default function AuditoriaPanel() {
     const when = new Date(r.created_at).toLocaleString('es-AR');
     if (!window.confirm(`¿Eliminar definitivamente el reporte de ${r.animal_name} (${when})?\n\nSe borra de la base de datos. No se puede deshacer.`)) return;
     try {
-      const res = await fetch(`https://petsittingbycathy.onrender.com/reports/${r.id}`, {
+      const res = await fetch(`${API_BASE}/reports/${r.id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
       });

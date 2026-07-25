@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Trash2, Camera, Video, ImagePlus } from 'lucide-react';
 
-const API = 'https://petsittingbycathy.onrender.com';
+const API = '${API_BASE}';
 
 function mediaUrl(url) {
   if (!url) return '';

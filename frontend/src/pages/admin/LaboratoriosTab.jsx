@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, FileText, Link as LinkIcon, Trash2 } from 'lucide-react';
+import { API_BASE, mediaUrl } from '../../lib/api';
 
 export default function LaboratoriosTab({ animalId, token }) {
   const [labs, setLabs] = useState([]);
@@ -11,12 +12,12 @@ export default function LaboratoriosTab({ animalId, token }) {
 
   const fetchLabs = async () => {
     try {
-      const resLabs = await fetch(`https://petsittingbycathy.onrender.com/animals/${animalId}/lab_results`, {
+      const resLabs = await fetch(`${API_BASE}/animals/${animalId}/lab_results`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (resLabs.ok) setLabs(await resLabs.json());
 
-      const resCat = await fetch(`https://petsittingbycathy.onrender.com/animals/catalogs/laboratories`, {
+      const resCat = await fetch(`${API_BASE}/animals/catalogs/laboratories`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (resCat.ok) setCatalogs(await resCat.json());
@@ -43,7 +44,7 @@ export default function LaboratoriosTab({ animalId, token }) {
 
     setUploading(true);
     try {
-      const res = await fetch(`https://petsittingbycathy.onrender.com/animals/${animalId}/lab_results/upload?${params}`, {
+      const res = await fetch(`${API_BASE}/animals/${animalId}/lab_results/upload?${params}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -75,7 +76,7 @@ export default function LaboratoriosTab({ animalId, token }) {
   const handleDelete = async (id) => {
     if (!window.confirm("¿Seguro que quieres eliminar este estudio?")) return;
     try {
-      const res = await fetch(`https://petsittingbycathy.onrender.com/animals/${animalId}/lab_results/${id}`, {
+      const res = await fetch(`${API_BASE}/animals/${animalId}/lab_results/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -147,7 +148,7 @@ export default function LaboratoriosTab({ animalId, token }) {
                 <p className="text-xs text-gray-500">Fecha: {lab.date}</p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <a href={lab.document_url.startsWith('http') ? lab.document_url : `https://petsittingbycathy.onrender.com${lab.document_url}`} target="_blank" rel="noreferrer" className="text-blue-600 bg-blue-50 hover:bg-blue-100 p-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors">
+                <a href={lab.document_url.startsWith('http') ? lab.document_url : `${API_BASE}${lab.document_url}`} target="_blank" rel="noreferrer" className="text-blue-600 bg-blue-50 hover:bg-blue-100 p-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors">
                   <LinkIcon size={16} /> Ver Archivo
                 </a>
                 <button onClick={() => handleDelete(lab.id)} className="text-red-600 bg-red-50 hover:bg-red-100 p-2 rounded-lg flex items-center transition-colors" title="Eliminar estudio">

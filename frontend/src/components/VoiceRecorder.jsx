@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { redirectToLogin } from "../lib/auth";
+import { API_BASE, mediaUrl } from '../lib/api';
 
 const SPECIES_INFO = {
   1: { name: "Perros", emoji: "🐶" },
@@ -94,7 +95,7 @@ export default function VoiceRecorder({ onSave }) {
     checkPending();
     window.addEventListener('online', checkPending);
     
-    fetch(`https://petsittingbycathy.onrender.com/animals/?t=${Date.now()}`, {
+    fetch(`${API_BASE}/animals/?t=${Date.now()}`, {
       headers: { 
         "Authorization": `Bearer ${localStorage.getItem("token")}`,
         "Cache-Control": "no-cache"
@@ -151,7 +152,7 @@ export default function VoiceRecorder({ onSave }) {
     formData.append("animal_name", selectedAnimal.name);
     
     try {
-      const response = await fetch(`https://petsittingbycathy.onrender.com/reports/analyze-voice`, {
+      const response = await fetch(`${API_BASE}/reports/analyze-voice`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${localStorage.getItem("token")}`
@@ -234,7 +235,7 @@ export default function VoiceRecorder({ onSave }) {
         formData.append("animal_name", item.animal_name);
         
         try {
-          const response = await fetch(`https://petsittingbycathy.onrender.com/reports/analyze-and-confirm-batch`, {
+          const response = await fetch(`${API_BASE}/reports/analyze-and-confirm-batch`, {
             method: "POST",
             headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` },
             body: formData,
@@ -275,7 +276,7 @@ export default function VoiceRecorder({ onSave }) {
     };
 
     try {
-      const response = await fetch(`https://petsittingbycathy.onrender.com/reports/confirm`, {
+      const response = await fetch(`${API_BASE}/reports/confirm`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -296,7 +297,7 @@ export default function VoiceRecorder({ onSave }) {
             const obsId = saved.observation_ids?.[0];
             const params = obsId ? `?observation_id=${obsId}` : "";
             const uploadRes = await fetch(
-              `https://petsittingbycathy.onrender.com/reports/${saved.report_id}/attach-media${params}`,
+              `${API_BASE}/reports/${saved.report_id}/attach-media${params}`,
               {
                 method: "POST",
                 headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },

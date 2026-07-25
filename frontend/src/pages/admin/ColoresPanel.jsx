@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Save, RefreshCw, Palette } from 'lucide-react';
+import { API_BASE, mediaUrl } from '../../lib/api';
 
 export default function ColoresPanel() {
   const [rules, setRules] = useState([]);
@@ -9,7 +10,7 @@ export default function ColoresPanel() {
   const fetchRules = async () => {
     setLoading(true);
     try {
-      const res = await fetch('https://petsittingbycathy.onrender.com/catalogs/color-rules', {
+      const res = await fetch('${API_BASE}/catalogs/color-rules', {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       if (res.ok) {
@@ -30,7 +31,7 @@ export default function ColoresPanel() {
   const handleUpdate = async (id, newKeywords) => {
     setSavingId(id);
     try {
-      const res = await fetch(`https://petsittingbycathy.onrender.com/catalogs/color-rules/${id}`, {
+      const res = await fetch(`${API_BASE}/catalogs/color-rules/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -43,7 +44,7 @@ export default function ColoresPanel() {
         
         // Recalcular alertas
         try {
-          await fetch('https://petsittingbycathy.onrender.com/reports/recalculate-alerts', {
+          await fetch('${API_BASE}/reports/recalculate-alerts', {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
           });

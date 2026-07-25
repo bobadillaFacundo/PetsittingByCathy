@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, Calendar, Syringe } from 'lucide-react';
+import { API_BASE, mediaUrl } from '../../lib/api';
 
 export default function DesparasitacionesTab({ animalId, token }) {
   const [internas, setInternas] = useState([]);
@@ -14,9 +15,9 @@ export default function DesparasitacionesTab({ animalId, token }) {
   const fetchData = async () => {
     try {
       const [resInt, resExt, resCat] = await Promise.all([
-        fetch(`https://petsittingbycathy.onrender.com/animals/${animalId}/internal_dewormings`, { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch(`https://petsittingbycathy.onrender.com/animals/${animalId}/external_dewormings`, { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch(`https://petsittingbycathy.onrender.com/animals/catalogs/products`, { headers: { 'Authorization': `Bearer ${token}` } })
+        fetch(`${API_BASE}/animals/${animalId}/internal_dewormings`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch(`${API_BASE}/animals/${animalId}/external_dewormings`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch(`${API_BASE}/animals/catalogs/products`, { headers: { 'Authorization': `Bearer ${token}` } })
       ]);
       if (resInt.ok) setInternas(await resInt.json());
       if (resExt.ok) setExternas(await resExt.json());
@@ -41,8 +42,8 @@ export default function DesparasitacionesTab({ animalId, token }) {
   const handleAdd = async (type, data, setter) => {
     if (!data.product_id) return alert("Debes seleccionar un producto.");
     const url = type === 'interna' 
-      ? `https://petsittingbycathy.onrender.com/animals/${animalId}/internal_dewormings`
-      : `https://petsittingbycathy.onrender.com/animals/${animalId}/external_dewormings`;
+      ? `${API_BASE}/animals/${animalId}/internal_dewormings`
+      : `${API_BASE}/animals/${animalId}/external_dewormings`;
 
     const payload = {
       product_id: Number(data.product_id),
@@ -73,8 +74,8 @@ export default function DesparasitacionesTab({ animalId, token }) {
   const handleDelete = async (type, id, productName) => {
     if (!window.confirm(`¿Eliminar la desparasitación "${productName}"?`)) return;
     const url = type === 'interna'
-      ? `https://petsittingbycathy.onrender.com/animals/${animalId}/internal_dewormings/${id}`
-      : `https://petsittingbycathy.onrender.com/animals/${animalId}/external_dewormings/${id}`;
+      ? `${API_BASE}/animals/${animalId}/internal_dewormings/${id}`
+      : `${API_BASE}/animals/${animalId}/external_dewormings/${id}`;
     try {
       const res = await fetch(url, {
         method: 'DELETE',
