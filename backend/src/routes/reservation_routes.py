@@ -26,6 +26,8 @@ SERVICE_STATUSES = {
     "Otras actividades",
 }
 
+OTHER_ACTIVITY_STATUS = "Otras actividades"
+
 
 def _validate_reservation_animal(db: Session, animal_id: int, status: str):
     animal = db.query(Animal).filter(Animal.id == animal_id).first()
@@ -46,6 +48,31 @@ def _validate_reservation_animal(db: Session, animal_id: int, status: str):
     return animal
 
 
+def _get_reservation_query(db: Session):
+    from src.models.models import Species
+    return db.query(Reservation).options(
+        joinedload(Reservation.animal),
+        joinedload(Reservation.species),
+    )
+
+
+def _validate_reservation_data(db: Session, data: dict, *, is_update: bool = False) -> None:
+    status_val = data.get("status") or "Pendiente"
+    animal_id = data.get("animal_id")
+    notes = (data.get("notes") or "").strip()
+
+    if status_val == OTHER_ACTIVITY_STATUS:
+        if not notes:
+            raise HTTPException(status_code=400, detail="La descripción de la actividad es obligatoria")
+        if animal_id is not None:
+            _validate_reservation_animal(db, animal_id, status_val)
+        return
+
+    if animal_id is None:
+        raise HTTPException(status_code=400, detail="Debes seleccionar una mascota")
+    _validate_reservation_animal(db, animal_id, status_val)
+
+
 def _normalize_reservation_payload(data: dict) -> dict:
     if "start_date" in data and data["start_date"] is not None:
         data["start_date"] = to_ar_naive(data["start_date"])
@@ -57,19 +84,18 @@ def _normalize_reservation_payload(data: dict) -> dict:
 @router.post("/", response_model=ReservationResponse)
 def create_reservation(reservation: ReservationCreate, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
     status_val = reservation.status or "Pendiente"
-    _validate_reservation_animal(db, reservation.animal_id, status_val)
     data = _normalize_reservation_payload(reservation.model_dump())
+    _validate_reservation_data(db, data)
     db_reservation = Reservation(**data)
     db.add(db_reservation)
     db.commit()
     db.refresh(db_reservation)
-    return db.query(Reservation).options(joinedload(Reservation.animal)).filter(Reservation.id == db_reservation.id).first()
+    return _get_reservation_query(db).filter(Reservation.id == db_reservation.id).first()
 
 
 @router.get("/", response_model=List[ReservationResponse])
 def get_reservations(db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
-    reservations = db.query(Reservation).options(joinedload(Reservation.animal)).all()
-    return reservations
+    return _get_reservation_query(db).all()
 
 
 @router.put("/{reservation_id}", response_model=ReservationResponse)
@@ -80,16 +106,19 @@ def update_reservation(reservation_id: int, reservation_update: ReservationUpdat
 
     update_data = reservation_update.model_dump(exclude_unset=True)
     update_data = _normalize_reservation_payload(update_data)
-    animal_id = update_data.get("animal_id", db_reservation.animal_id)
-    status_val = update_data.get("status", db_reservation.status) or "Pendiente"
-    _validate_reservation_animal(db, animal_id, status_val)
+    _validate_reservation_data(db, {
+        "status": update_data.get("status", db_reservation.status),
+        "animal_id": update_data.get("animal_id", db_reservation.animal_id),
+        "notes": update_data.get("notes", db_reservation.notes),
+        "species_id": update_data.get("species_id", db_reservation.species_id),
+    }, is_update=True)
 
     for key, value in update_data.items():
         setattr(db_reservation, key, value)
 
     db.commit()
     db.refresh(db_reservation)
-    return db.query(Reservation).options(joinedload(Reservation.animal)).filter(Reservation.id == reservation_id).first()
+    return _get_reservation_query(db).filter(Reservation.id == reservation_id).first()
 
 
 @router.delete("/{reservation_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -248,6 +248,33 @@ def migrate():
                 db.commit()
                 print("  OK reservations timezone")
 
+        # --- Reservas: species_id y animal_id opcional (Otras actividades) ---
+        inspector = inspect(engine)
+        if table_exists(inspector, "reservations"):
+            if not column_exists(inspector, "reservations", "species_id"):
+                print("Agregando reservations.species_id...")
+                db.execute(text(
+                    "ALTER TABLE reservations ADD COLUMN species_id INTEGER REFERENCES species(id)"
+                ))
+                db.commit()
+                print("  OK reservations.species_id")
+            if not db.execute(text(
+                "SELECT 1 FROM schema_migrations WHERE name = 'reservations_nullable_animal'"
+            )).fetchone():
+                if not table_exists(inspector, "schema_migrations"):
+                    db.execute(text(
+                        "CREATE TABLE IF NOT EXISTS schema_migrations ("
+                        "name VARCHAR(255) PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+                    ))
+                    db.commit()
+                print("Permitiendo animal_id NULL en reservations...")
+                db.execute(text("ALTER TABLE reservations ALTER COLUMN animal_id DROP NOT NULL"))
+                db.execute(text(
+                    "INSERT INTO schema_migrations (name) VALUES ('reservations_nullable_animal')"
+                ))
+                db.commit()
+                print("  OK reservations.animal_id nullable")
+
         print("\nMigración completada. Reinicia el backend.")
     except Exception as e:
         db.rollback()

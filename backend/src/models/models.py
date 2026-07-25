@@ -169,7 +169,8 @@ class Animal(Base):
 class Reservation(Base):
     __tablename__ = "reservations"
     id = Column(Integer, primary_key=True, index=True)
-    animal_id = Column(Integer, ForeignKey("animals.id"), nullable=False)
+    animal_id = Column(Integer, ForeignKey("animals.id"), nullable=True)
+    species_id = Column(Integer, ForeignKey("species.id"), nullable=True)
     start_date = Column(DateTime, nullable=False)
     end_date = Column(DateTime, nullable=False)
     status = Column(String, default="Pendiente")
@@ -177,6 +178,7 @@ class Reservation(Base):
     belongings_photos = Column(Text, nullable=True)
 
     animal = relationship("Animal", back_populates="reservations")
+    species = relationship("Species")
 
 # ----------------- ENTIDADES DÉBILES (ANIMAL) ----------------- #
 

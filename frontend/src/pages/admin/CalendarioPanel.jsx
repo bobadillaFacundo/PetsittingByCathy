@@ -29,10 +29,21 @@ const isServiceEvent = (status) => SERVICE_STATUSES.has(status);
 const isOtherActivity = (status) => status === 'Otras actividades';
 
 const reservationTitle = (r) => {
-  const name = r.animal?.name || `Paciente #${r.animal_id}`;
-  if (r.status === 'Otras actividades' && r.notes?.trim()) {
-    return `${name} - ${r.notes.trim()}`;
+  const desc = r.notes?.trim();
+  if (r.status === 'Otras actividades') {
+    const speciesKey = r.species_id || r.species?.id;
+    const speciesInfo = speciesKey ? SPECIES_INFO[speciesKey] : null;
+    const speciesLabel = speciesInfo
+      ? `${speciesInfo.emoji} ${speciesInfo.name}`
+      : (r.species?.name || null);
+    const animalName = r.animal?.name;
+    const parts = [];
+    if (speciesLabel) parts.push(speciesLabel);
+    if (animalName) parts.push(animalName);
+    if (desc) parts.push(desc);
+    return parts.length ? parts.join(' - ') : 'Otras actividades';
   }
+  const name = r.animal?.name || (r.animal_id ? `Paciente #${r.animal_id}` : 'Actividad');
   return `${name} - ${r.status}`;
 };
 
@@ -205,13 +216,15 @@ export default function CalendarioPanel() {
     }
     const r = event.resource;
     openModal({
-      animal_id: r.animal_id,
+      animal_id: r.animal_id || '',
       start_date: formatForInput(r.start_date),
       end_date: formatForInput(r.end_date),
       status: r.status,
       notes: r.notes || '',
       belongings_photos: r.belongings_photos || null
     }, r.id);
+    setSelectedSpecies(r.species_id ? String(r.species_id) : '');
+    setSelectedAnimalIds([]);
   };
 
   const handleStatusChange = (status) => {
@@ -228,84 +241,138 @@ export default function CalendarioPanel() {
 
   const saveReservation = async () => {
     if (!isAdmin) return;
-    const isMultiple = !editingId && isServiceEvent(formData.status) && selectedAnimalIds.length > 0;
-    
-    if (!isMultiple && !formData.animal_id) {
-      alert("Por favor, selecciona un paciente.");
-      return;
-    }
+
     if (!formData.start_date || !formData.end_date) {
       alert("Por favor, completa las fechas.");
       return;
     }
-    if (isOtherActivity(formData.status) && !formData.notes?.trim()) {
+
+    const isOther = isOtherActivity(formData.status);
+    const speciesId = selectedSpecies ? parseInt(selectedSpecies, 10) : null;
+
+    if (isOther && !formData.notes?.trim()) {
       alert("Por favor, ingresa una descripción para la actividad.");
       return;
     }
 
-    const animalIdsToSave = isMultiple ? selectedAnimalIds : [parseInt(formData.animal_id)];
+    const isMultiple = !editingId && !isOther && isServiceEvent(formData.status) && selectedAnimalIds.length > 0;
+    const isOtherMulti = !editingId && isOther && selectedAnimalIds.length > 0;
 
-    for (const aId of animalIdsToSave) {
+    if (!isOther && !isMultiple && !formData.animal_id) {
+      alert("Por favor, selecciona un paciente.");
+      return;
+    }
+
+    const validateDaycareAnimal = (aId) => {
       const selected = animals.find(a => String(a.id) === String(aId));
-      if (isServiceEvent(formData.status)) {
-        if (!selected || selected.is_daycare !== true) {
-          alert("Vet / Baño / otras actividades solo se puede asignar a mascotas de guardería.");
+      if (!selected || selected.is_daycare !== true) {
+        alert("Vet / Baño / otras actividades solo se puede asignar a mascotas de guardería.");
+        return false;
+      }
+      return true;
+    };
+
+    if (isOtherMulti) {
+      for (const aId of selectedAnimalIds) {
+        if (!validateDaycareAnimal(aId)) return;
+      }
+    } else if (!isOther) {
+      const animalIdsToCheck = isMultiple ? selectedAnimalIds : [parseInt(formData.animal_id, 10)];
+      for (const aId of animalIdsToCheck) {
+        const selected = animals.find(a => String(a.id) === String(aId));
+        if (isServiceEvent(formData.status)) {
+          if (!validateDaycareAnimal(aId)) return;
+        } else if (!selected || selected.is_daycare !== false) {
+          alert("Las reservas solo se pueden asignar a mascotas externas.");
           return;
         }
-      } else if (!selected || selected.is_daycare !== false) {
-        alert("Las reservas solo se pueden asignar a mascotas externas.");
-        return;
       }
+    } else if (isOther && editingId && formData.animal_id) {
+      if (!validateDaycareAnimal(formData.animal_id)) return;
     }
 
     try {
       const method = editingId ? "PUT" : "POST";
-      
-      for (const aId of animalIdsToSave) {
-        const payload = {
-          animal_id: aId,
-          start_date: toApiDateTime(formData.start_date),
-          end_date: toApiDateTime(formData.end_date),
-          status: formData.status,
-          notes: formData.notes
-        };
 
-        const url = editingId 
-          ? `https://petsittingbycathy.onrender.com/reservations/${editingId}` 
+      const postOrPut = async (payload, id = null) => {
+        const url = id
+          ? `https://petsittingbycathy.onrender.com/reservations/${id}`
           : `https://petsittingbycathy.onrender.com/reservations/`;
-          
         const res = await fetch(url, {
-          method,
+          method: id ? "PUT" : "POST",
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(payload),
         });
-
         if (!res.ok) {
           const errText = await res.text();
           alert(errText || "Error al guardar reserva");
-          return;
+          return null;
         }
-        
-        const savedData = await res.json();
-        
-        // Upload photos if any
-        if (photosToUpload.length > 0) {
-          const formDataObj = new FormData();
-          photosToUpload.forEach(p => formDataObj.append('photos', p));
-          
-          await fetch(`https://petsittingbycathy.onrender.com/reservations/${savedData.id}/photos`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`
-            },
-            body: formDataObj
+        return res.json();
+      };
+
+      if (isOther && editingId) {
+        const savedData = await postOrPut({
+          animal_id: formData.animal_id ? parseInt(formData.animal_id, 10) : null,
+          species_id: speciesId,
+          start_date: toApiDateTime(formData.start_date),
+          end_date: toApiDateTime(formData.end_date),
+          status: formData.status,
+          notes: formData.notes,
+        }, editingId);
+        if (!savedData) return;
+      } else if (isOtherMulti) {
+        for (const aId of selectedAnimalIds) {
+          const savedData = await postOrPut({
+            animal_id: aId,
+            species_id: speciesId,
+            start_date: toApiDateTime(formData.start_date),
+            end_date: toApiDateTime(formData.end_date),
+            status: formData.status,
+            notes: formData.notes,
           });
+          if (!savedData) return;
         }
+      } else if (isOther) {
+        const savedData = await postOrPut({
+          animal_id: null,
+          species_id: speciesId,
+          start_date: toApiDateTime(formData.start_date),
+          end_date: toApiDateTime(formData.end_date),
+          status: formData.status,
+          notes: formData.notes,
+        });
+        if (!savedData) return;
+      } else {
+        const animalIdsToSave = isMultiple ? selectedAnimalIds : [parseInt(formData.animal_id, 10)];
+        for (const aId of animalIdsToSave) {
+          const savedData = await postOrPut({
+            animal_id: aId,
+            start_date: toApiDateTime(formData.start_date),
+            end_date: toApiDateTime(formData.end_date),
+            status: formData.status,
+            notes: formData.notes,
+          }, editingId || null);
+          if (!savedData) return;
+
+          if (photosToUpload.length > 0) {
+            const formDataObj = new FormData();
+            photosToUpload.forEach(p => formDataObj.append('photos', p));
+            await fetch(`https://petsittingbycathy.onrender.com/reservations/${savedData.id}/photos`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}` },
+              body: formDataObj,
+            });
+          }
+        }
+        setIsModalOpen(false);
+        fetchReservationsAndAlerts();
+        return;
       }
-      
+
       setIsModalOpen(false);
       fetchReservationsAndAlerts();
     } catch (err) {
@@ -492,7 +559,100 @@ export default function CalendarioPanel() {
             
             <div className="space-y-4">
               <div>
-                {!editingId && isServiceEvent(formData.status) ? (
+                {isOtherActivity(formData.status) ? (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Especie (opcional)</label>
+                      <select
+                        className="w-full border border-gray-300 rounded-lg p-2 bg-gray-50 text-gray-800 disabled:opacity-70 disabled:bg-gray-100"
+                        value={selectedSpecies}
+                        onChange={(e) => {
+                          setSelectedSpecies(e.target.value);
+                          setSelectedAnimalIds([]);
+                          if (editingId) setFormData({ ...formData, animal_id: '' });
+                        }}
+                        disabled={!isAdmin}
+                      >
+                        <option value="">Sin especie definida</option>
+                        {Object.entries(SPECIES_INFO).map(([id, info]) => (
+                          <option key={id} value={id}>
+                            {info.emoji} {info.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {!editingId ? (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Pacientes (opcional)</label>
+                        <div className="border border-gray-200 rounded-lg p-3 max-h-40 overflow-y-auto bg-gray-50">
+                          <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-200">
+                            <input
+                              type="checkbox"
+                              id="select-all-other"
+                              checked={
+                                selectableAnimals.filter(a => !selectedSpecies || String(a.species_id) === selectedSpecies).length > 0 &&
+                                selectedAnimalIds.length === selectableAnimals.filter(a => !selectedSpecies || String(a.species_id) === selectedSpecies).length
+                              }
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  const ids = selectableAnimals
+                                    .filter(a => !selectedSpecies || String(a.species_id) === selectedSpecies)
+                                    .map(a => a.id);
+                                  setSelectedAnimalIds(ids);
+                                } else {
+                                  setSelectedAnimalIds([]);
+                                }
+                              }}
+                            />
+                            <label htmlFor="select-all-other" className="text-sm font-bold text-gray-800">Seleccionar todos</label>
+                          </div>
+                          {selectableAnimals
+                            .filter(a => !selectedSpecies || String(a.species_id) === selectedSpecies)
+                            .map(a => (
+                              <div key={a.id} className="flex items-center gap-2 mb-1.5 last:mb-0">
+                                <input
+                                  type="checkbox"
+                                  id={`animal-other-${a.id}`}
+                                  checked={selectedAnimalIds.includes(a.id)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedAnimalIds(prev => [...prev, a.id]);
+                                    } else {
+                                      setSelectedAnimalIds(prev => prev.filter(id => id !== a.id));
+                                    }
+                                  }}
+                                />
+                                <label htmlFor={`animal-other-${a.id}`} className="text-sm text-gray-700">
+                                  {a.name}
+                                </label>
+                              </div>
+                            ))}
+                          {selectableAnimals.filter(a => !selectedSpecies || String(a.species_id) === selectedSpecies).length === 0 && (
+                            <p className="text-xs text-gray-500 italic">No hay pacientes para esta especie.</p>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Paciente (opcional)</label>
+                        <select
+                          className="w-full border border-gray-300 rounded-lg p-2 bg-gray-50 text-gray-800 disabled:opacity-70 disabled:bg-gray-100"
+                          value={formData.animal_id}
+                          onChange={(e) => setFormData({ ...formData, animal_id: e.target.value })}
+                          disabled={!isAdmin}
+                        >
+                          <option value="">Ningún paciente</option>
+                          {selectableAnimals
+                            .filter(a => !selectedSpecies || String(a.species_id) === selectedSpecies)
+                            .map(a => (
+                              <option key={a.id} value={a.id}>{a.name}</option>
+                            ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                ) : !editingId && isServiceEvent(formData.status) ? (
                   <div className="space-y-3">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Especie</label>
