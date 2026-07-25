@@ -1,8 +1,16 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { registerSW } from 'virtual:pwa-register'
 import './index.css'
 import App from './App.jsx'
 import { redirectToLogin } from './lib/auth.js'
+
+registerSW({
+  immediate: true,
+  onNeedRefresh() {
+    window.location.reload()
+  },
+})
 
 const originalFetch = window.fetch;
 window.fetch = async function (...args) {
