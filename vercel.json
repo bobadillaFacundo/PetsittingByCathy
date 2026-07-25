@@ -1,0 +1,19 @@
+{
+  "buildCommand": "cd frontend && npm ci && npm run build",
+  "outputDirectory": "frontend/dist",
+  "installCommand": "cd frontend && npm ci",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://petsittingbycathy.onrender.com/:path*"
+    },
+    {
+      "source": "/uploads/:path*",
+      "destination": "https://petsittingbycathy.onrender.com/uploads/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
