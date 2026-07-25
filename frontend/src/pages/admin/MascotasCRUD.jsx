@@ -127,7 +127,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
   const [formData, setFormData] = useState(() => emptyForm(daycareOnly));
 
   const token = localStorage.getItem('token');
-  const sectionTitle = title || (daycareOnly ? 'Mascotas Guardería' : 'Mascotas Externas');
+  const sectionTitle = title || (daycareOnly ? 'Guardería' : 'Mascotas');
   const sectionSubtitle = subtitle || (daycareOnly
     ? 'Pacientes que se alojan en la guardería'
     : 'Mascotas para servicios de veterinaria o baño (sin estadía)');
