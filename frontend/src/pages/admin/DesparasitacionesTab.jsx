@@ -1,8 +1,44 @@
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, Syringe, Camera, ScanLine } from 'lucide-react';
 import { API_BASE, apiUrl } from '../../lib/api';
+import { AR_TIMEZONE } from '../../lib/datetimeAr';
 
 const SCAN_ERROR_MSG = 'Error. Intentá más tarde.';
+
+/** Días hasta la próxima dosis sugerida (editable después del escaneo). */
+const DEWORMING_NEXT_DAYS = {
+  INTERNAL: 90,
+  EXTERNAL: 30,
+};
+
+function todayArDate() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: AR_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
+function addDaysToIsoDate(isoDate, days) {
+  const [year, month, day] = isoDate.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  return date.toISOString().slice(0, 10);
+}
+
+function defaultNextDueDate(startDate, productType) {
+  const interval = DEWORMING_NEXT_DAYS[productType] || DEWORMING_NEXT_DAYS.INTERNAL;
+  return addDaysToIsoDate(startDate, interval);
+}
+
+function buildFormFromScan(item, productType) {
+  const startDate = todayArDate();
+  return {
+    date: startDate,
+    product_id: item.product_id ? String(item.product_id) : '',
+    next_due_date: defaultNextDueDate(startDate, productType),
+  };
+}
 
 async function prepareScanFile(file) {
   if (!file) return null;
@@ -91,10 +127,10 @@ export default function DesparasitacionesTab({ animalId, token }) {
 
   const applyScanToForm = (item) => {
     const type = resolveProductType(item);
-    const formData = {
-      date: item.date || '',
+    const formData = type ? buildFormFromScan(item, type) : {
+      date: todayArDate(),
       product_id: item.product_id ? String(item.product_id) : '',
-      next_due_date: item.next_due_date || '',
+      next_due_date: '',
     };
 
     if (type === 'INTERNAL') {
@@ -291,7 +327,7 @@ export default function DesparasitacionesTab({ animalId, token }) {
           <div className="bg-gray-50 p-4 rounded-xl space-y-3 mb-4">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Fecha</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Fecha de inicio</label>
                 <input type="date" value={newInterna.date} onChange={(e) => setNewInterna({ ...newInterna, date: e.target.value })} className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-900" />
               </div>
               <div>
@@ -351,7 +387,7 @@ export default function DesparasitacionesTab({ animalId, token }) {
           <div className="bg-gray-50 p-4 rounded-xl space-y-3 mb-4">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Fecha</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Fecha de inicio</label>
                 <input type="date" value={newExterna.date} onChange={(e) => setNewExterna({ ...newExterna, date: e.target.value })} className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-900" />
               </div>
               <div>
