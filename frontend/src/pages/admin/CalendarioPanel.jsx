@@ -6,6 +6,7 @@ import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { Plus, X, Calendar as CalendarIcon, Save, Trash2 } from 'lucide-react';
 import { parseApiDateTime, toApiDateTime, formatForInput, isAllDayAlert } from '../../lib/datetimeAr';
 import { API_BASE, mediaUrl } from '../../lib/api';
+import AgendaGroupedView from './AgendaGroupedView';
 
 const locales = {
   'es': es,
@@ -563,6 +564,12 @@ export default function CalendarioPanel() {
             onRangeChange={handleCalendarRangeChange}
             view={currentView}
             onView={(newView) => setCurrentView(newView)}
+            views={{
+              month: true,
+              week: true,
+              day: true,
+              agenda: AgendaGroupedView,
+            }}
             culture="es"
             dayLayoutAlgorithm="no-overlap"
             messages={{
