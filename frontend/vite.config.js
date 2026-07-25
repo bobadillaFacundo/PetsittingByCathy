@@ -2,15 +2,28 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
-// import basicSsl from '@vitejs/plugin-basic-ssl'
-// import basicSsl from '@vitejs/plugin-basic-ssl' // <-- Comentado temporalmente
+
+const buildId = process.env.VERCEL_GIT_COMMIT_SHA
+  || process.env.VITE_BUILD_ID
+  || `dev-${Date.now()}`
+
+/** Limpia SW/caché cuando hay deploy nuevo (evita 404 en bundles viejos). */
+function deployCacheBustPlugin() {
+  const snippet = `<script>(function(){var v=${JSON.stringify(buildId)},k="pbc_build",r="pbc_reload";try{if(sessionStorage.getItem(r))return sessionStorage.removeItem(r);var p=localStorage.getItem(k);if(p&&p!==v){localStorage.setItem(k,v);sessionStorage.setItem(r,"1");var done=function(){location.reload()};var jobs=[Promise.resolve()];if("serviceWorker"in navigator){jobs.push(navigator.serviceWorker.getRegistrations().then(function(rs){return Promise.all(rs.map(function(x){return x.unregister()}))}))}if(window.caches){jobs.push(caches.keys().then(function(ks){return Promise.all(ks.map(function(c){return caches.delete(c)}))}))}Promise.all(jobs).then(done).catch(done);return}localStorage.setItem(k,v)}catch(e){}})();</script>`
+  return {
+    name: 'deploy-cache-bust',
+    transformIndexHtml(html) {
+      return html.replace('<head>', `<head>\n    ${snippet}`)
+    },
+  }
+}
 
 // HTTPS local solo si lo pedís: VITE_DEV_HTTPS=1 npm run dev
-// Con localtunnel no hace falta: el túnel ya da https://xxx.loca.lt
 const useDevHttps = process.env.VITE_DEV_HTTPS === '1'
 
 export default defineConfig({
   plugins: [
+    deployCacheBustPlugin(),
     react(),
     tailwindcss(),
     // ...(useDevHttps ? [basicSsl()] : []),
@@ -61,7 +74,8 @@ export default defineConfig({
         navigateFallback: '/index.html',
         // /api y /uploads no pasan por el SW (evita no-response de Workbox si falla la red)
         navigateFallbackDenylist: [/^\/api/, /^\/uploads/],
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // index.html siempre desde red (evita shell viejo con hashes de JS obsoletos)
+        globPatterns: ['**/*.{js,css,ico,png,svg,woff2}'],
       },
     }),
   ],
