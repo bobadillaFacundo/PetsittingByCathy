@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { Plus, Shield, ShieldAlert, CheckCircle, Camera, ScanLine, Link as LinkIcon, Trash2, ListPlus, Save } from 'lucide-react';
 import { API_BASE, apiUrl, mediaUrl } from '../../lib/api';
 
+const SCAN_ERROR_MSG = 'Error. Intentá más tarde.';
+
 async function prepareScanFile(file) {
   if (!file) return null;
   const name = file.name || 'certificado';
@@ -139,15 +141,8 @@ export default function LibretaTab({ animalId, token }) {
       }
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const detail = payload.detail;
-        const msg = Array.isArray(detail)
-          ? detail.map((d) => d.msg || JSON.stringify(d)).join(', ')
-          : (typeof detail === 'string'
-            ? detail
-            : res.status === 502
-              ? 'El servidor tardó demasiado analizando la imagen. Esperá unos segundos y reintentá con buena conexión.'
-              : 'Error al analizar la imagen');
-        alert(msg);
+        console.warn('Escaneo falló', res.status, payload);
+        alert(SCAN_ERROR_MSG);
         return;
       }
       const data = payload;
@@ -175,7 +170,7 @@ export default function LibretaTab({ animalId, token }) {
       }
     } catch (err) {
       console.error(err);
-      alert('Error de conexión al escanear. Revisá la red y recargá la página (Ctrl+Shift+R).');
+      alert(SCAN_ERROR_MSG);
     } finally {
       setScanning(false);
     }

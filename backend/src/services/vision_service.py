@@ -7,7 +7,9 @@ import json
 import logging
 import os
 import re
+import time
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 import requests
 from dotenv import load_dotenv
@@ -29,9 +31,10 @@ VLLM_URL = f"{_VLLM_BASE}/chat/completions"
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "qwen/qwen3.6-27b")
+GROQ_VISION_MODEL_FALLBACK = os.getenv("GROQ_VISION_MODEL_FALLBACK", "llama-3.2-11b-vision-preview").strip()
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
-OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "15"))
+OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "90"))
 OCR_TIMEOUT = int(os.getenv("OCR_TIMEOUT", "10"))
 GROQ_VISION_TIMEOUT = int(
     os.getenv(
@@ -42,7 +45,7 @@ GROQ_VISION_TIMEOUT = int(
 VISION_MAX_IMAGE_SIDE = int(
     os.getenv(
         "VISION_MAX_IMAGE_SIDE",
-        "1536" if VISION_SKIP_LOCAL_FALLBACKS else "2048",
+        "1024" if VISION_SKIP_LOCAL_FALLBACKS else "2048",
     )
 )
 GROQ_MAX_IMAGE_BYTES = 18 * 1024 * 1024  # margen bajo el límite de 20 MB de Groq
@@ -76,19 +79,24 @@ EJEMPLO (dos etiquetas en una foto):
 """
 
 _VACCINE_VISION_PROMPT = (
-    "Sos un lector de certificados y etiquetas de vacunación veterinaria (Argentina). "
-    "La imagen puede ser libreta, certificado del Colegio de Veterinarios, o foto de stickers del vial. "
-    "Enfocate en las ETIQUETAS ADHESIVAS: ahí están el lote y las fechas F. Elab / F. Cad.\n"
-    + _VACCINE_FIELD_RULES
-    + "\nDevuelve JSON con esta estructura exacta:\n"
-    '{"vaccines": [{"vaccine_name": string|null, "lot_number": string|null, '
-    '"date_administered": string|null, "next_due_date": string|null, "veterinarian_name": string|null}]}\n'
-    "Responde SOLO con JSON válido, sin markdown ni explicación."
+    "Leé etiquetas/stickers de vacunas veterinarias (Argentina). "
+    "Por cada etiqueta visible extraé: vaccine_name (nombre comercial), "
+    "lot_number (N. Lote/Lote/Lot), next_due_date (F. Cad/Vto/Venc), "
+    "date_administered solo si hay fecha de aplicación escrita (NO usar F. Elab), "
+    "veterinarian_name si hay firma/sello.\n"
+    "Fechas en YYYY-MM-DD. null si no se lee. Una etiqueta = un elemento en vaccines.\n"
+    '{"vaccines":[{"vaccine_name":null,"lot_number":null,"date_administered":null,'
+    '"next_due_date":null,"veterinarian_name":null}]}\n'
+    "Responde SOLO JSON válido, sin markdown."
 )
 
 
 class GroqUnavailableError(Exception):
     """Groq no disponible (límite de uso, error de red, etc.)."""
+
+
+class GroqRateLimitError(GroqUnavailableError):
+    """Groq devolvió 429 (límite TPM/RPM)."""
 
 
 class ScanImageError(ValueError):
@@ -232,7 +240,7 @@ def _catalog_hint(catalog_names: Optional[list[str]], limit: Optional[int] = Non
     if not catalog_names:
         return ""
     if limit is None:
-        limit = 20 if VISION_SKIP_LOCAL_FALLBACKS else 40
+        limit = 12 if VISION_SKIP_LOCAL_FALLBACKS else 40
     names = catalog_names[:limit]
     extra = f" (y {len(catalog_names) - limit} más)" if len(catalog_names) > limit else ""
     return (
@@ -253,26 +261,88 @@ def _guess_mime(filename: str, image_bytes: bytes) -> str:
     return "image/jpeg"
 
 
-def _is_local_service_url(url: str) -> bool:
-    if not url:
+def _host_from_service_url(url: str) -> str:
+    try:
+        return (urlparse(url).hostname or "").lower()
+    except Exception:
+        return ""
+
+
+def _is_private_or_loopback_host(host: str) -> bool:
+    """True si el host no es alcanzable desde un PaaS cloud (LAN, loopback, Tailscale)."""
+    if not host:
         return True
-    lower = url.lower()
-    return any(
-        token in lower
-        for token in ("localhost", "127.0.0.1", "0.0.0.0", "100.82.178.56")
-    )
+    if host in ("localhost", "127.0.0.1", "0.0.0.0", "::1"):
+        return True
+    parts = host.split(".")
+    if len(parts) != 4:
+        return False
+    try:
+        a, b, _, _ = (int(x) for x in parts)
+    except ValueError:
+        return False
+    if a == 10:
+        return True
+    if a == 172 and 16 <= b <= 31:
+        return True
+    if a == 192 and b == 168:
+        return True
+    if a == 100 and 64 <= b <= 127:
+        return True
+    return False
+
+
+def _service_url_reachable_from_backend(url: str) -> bool:
+    if not url:
+        return False
+    if VISION_SKIP_LOCAL_FALLBACKS and _is_private_or_loopback_host(_host_from_service_url(url)):
+        return False
+    return True
+
+
+def _ollama_usable() -> bool:
+    return bool(OLLAMA_BASE_URL) and _service_url_reachable_from_backend(OLLAMA_BASE_URL)
+
+
+def _groq_rate_limit_retries() -> int:
+    """Menos reintentos en prod para no superar el timeout de Render (~30 s)."""
+    explicit = (os.getenv("GROQ_RATE_LIMIT_RETRIES") or "").strip()
+    if explicit:
+        return max(1, int(explicit))
+    if _ollama_usable():
+        return 1
+    if VISION_SKIP_LOCAL_FALLBACKS:
+        return 2
+    return 4
 
 
 def _local_fallbacks_enabled() -> bool:
+    """True en local (Groq → Ollama → OCR). False en Render/Vercel (solo Groq)."""
     if VISION_SKIP_LOCAL_FALLBACKS:
         return False
-    return (bool(OLLAMA_BASE_URL) and not _is_local_service_url(OLLAMA_BASE_URL)) or (
-        bool(OCR_SERVICE_URL) and not _is_local_service_url(OCR_SERVICE_URL)
+    return _ollama_usable() or (
+        bool(OCR_SERVICE_URL) and _service_url_reachable_from_backend(OCR_SERVICE_URL)
     )
 
 
 def _is_groq_retryable(status_code: int) -> bool:
-    return status_code in (400, 429, 500, 502, 503, 504)
+    return status_code in (400, 500, 502, 503, 504)
+
+
+def _parse_groq_retry_seconds(response_text: str) -> float:
+    match = re.search(r"try again in ([\d.]+)s", response_text, re.IGNORECASE)
+    if match:
+        return min(float(match.group(1)) + 0.5, 20.0)
+    return 5.0
+
+
+def _groq_error_message(status_code: int, response_text: str) -> str:
+    if status_code == 429:
+        return (
+            "Groq alcanzó el límite de consultas por minuto. "
+            "Esperá 30–60 segundos y volvé a escanear."
+        )
+    return f"Groq HTTP {status_code}: {response_text[:200]}"
 
 
 def _parse_json_from_text(content: str) -> dict:
@@ -404,26 +474,36 @@ def _call_groq(
         }
         if max_tokens is not None:
             payload["max_tokens"] = max_tokens
-        try:
-            resp = requests.post(
-                GROQ_URL,
-                headers=headers,
-                json=payload,
-                timeout=request_timeout,
-            )
-        except requests.Timeout as e:
-            raise GroqUnavailableError(
-                "Groq tardó demasiado en responder. Probá con una foto más clara o más liviana."
-            ) from e
-        except requests.RequestException as e:
-            raise GroqUnavailableError(str(e)) from e
 
-        if resp.status_code == 200:
-            return resp.json()["choices"][0]["message"]["content"]
+        for rate_attempt in range(_groq_rate_limit_retries()):
+            try:
+                resp = requests.post(
+                    GROQ_URL,
+                    headers=headers,
+                    json=payload,
+                    timeout=request_timeout,
+                )
+            except requests.Timeout as e:
+                raise GroqUnavailableError(
+                    "Groq tardó demasiado en responder. Probá con una foto más clara o más liviana."
+                ) from e
+            except requests.RequestException as e:
+                raise GroqUnavailableError(str(e)) from e
 
-        last_error = f"Groq HTTP {resp.status_code}: {resp.text[:300]}"
-        if not _is_groq_retryable(resp.status_code):
-            resp.raise_for_status()
+            if resp.status_code == 200:
+                return resp.json()["choices"][0]["message"]["content"]
+
+            if resp.status_code == 429:
+                last_error = _groq_error_message(429, resp.text)
+                if rate_attempt < GROQ_RATE_LIMIT_RETRIES - 1:
+                    time.sleep(_parse_groq_retry_seconds(resp.text))
+                    continue
+                raise GroqRateLimitError(last_error)
+
+            last_error = _groq_error_message(resp.status_code, resp.text)
+            if not _is_groq_retryable(resp.status_code):
+                resp.raise_for_status()
+            break
 
     raise GroqUnavailableError(last_error or "Groq no respondió")
 
@@ -487,23 +567,45 @@ def extract_fields_groq_vision(
         },
     ]
     content = ""
-    try:
-        content = _call_groq(
-            messages,
-            GROQ_VISION_MODEL,
-            json_mode=True,
-            max_tokens=1200,
-        )
-    except GroqUnavailableError:
-        raise
-    except (json.JSONDecodeError, KeyError) as e:
-        logger.warning("Groq vision JSON inválido, reintento sin json_mode: %s", e)
-        content = _call_groq(
-            messages,
-            GROQ_VISION_MODEL,
-            json_mode=False,
-            max_tokens=1200,
-        )
+    models_to_try = [GROQ_VISION_MODEL]
+    if (
+        GROQ_VISION_MODEL_FALLBACK
+        and GROQ_VISION_MODEL_FALLBACK != GROQ_VISION_MODEL
+        and not VISION_SKIP_LOCAL_FALLBACKS
+    ):
+        models_to_try.append(GROQ_VISION_MODEL_FALLBACK)
+
+    last_error: Optional[Exception] = None
+    for model_name in models_to_try:
+        try:
+            content = _call_groq(
+                messages,
+                model_name,
+                json_mode=True,
+                max_tokens=512,
+            )
+            break
+        except GroqRateLimitError:
+            raise
+        except (GroqUnavailableError, json.JSONDecodeError, KeyError) as e:
+            last_error = e
+            logger.warning("Groq vision con %s falló: %s", model_name, e)
+            continue
+
+    if not content:
+        if isinstance(last_error, GroqUnavailableError):
+            raise last_error
+        try:
+            content = _call_groq(
+                messages,
+                models_to_try[0],
+                json_mode=False,
+                max_tokens=512,
+            )
+        except GroqRateLimitError:
+            raise
+        except GroqUnavailableError as e:
+            raise e
     if not content:
         raise GroqUnavailableError("Groq no devolvió contenido")
 
@@ -739,13 +841,16 @@ def _scan_with_auto_fallback(
     catalog_names: Optional[list[str]] = None,
 ) -> dict[str, Any]:
     """
-    Cadena automática: PDF → Groq Vision → Ollama → OCR (solo si están configurados).
+    Cadena automática:
+      - Producción (VISION_SKIP_LOCAL_FALLBACKS=1): solo Groq Vision.
+      - Local (VISION_SKIP_LOCAL_FALLBACKS=0): Groq → Ollama → OCR.
     """
     if _is_pdf(image_bytes, filename):
         return _scan_pdf(image_bytes, catalog_names)
 
     errors: list[str] = []
     groq_available = bool(GROQ_API_KEY)
+    groq_rate_limited = False
     no_vaccines_error: Optional[ScanNoVaccinesError] = None
 
     if groq_available:
@@ -756,6 +861,12 @@ def _scan_with_auto_fallback(
         except ScanNoVaccinesError as e:
             no_vaccines_error = e
             errors.append("Groq: no se detectaron vacunas en la imagen")
+        except GroqRateLimitError as e:
+            groq_rate_limited = True
+            msg = f"Groq: {e}"
+            logger.warning("Escaneo vacuna - %s", msg)
+            errors.append(msg)
+            groq_available = False
         except (GroqUnavailableError, json.JSONDecodeError, KeyError, requests.RequestException) as e:
             msg = f"Groq: {e}"
             logger.warning("Escaneo vacuna - %s", msg)
@@ -763,6 +874,7 @@ def _scan_with_auto_fallback(
             groq_available = False
 
     if not _local_fallbacks_enabled():
+        logger.info("Escaneo: fallbacks locales deshabilitados (solo Groq en producción)")
         if no_vaccines_error:
             return _scan_result(
                 [],
@@ -773,6 +885,12 @@ def _scan_with_auto_fallback(
                     "Revisá el texto extraído abajo o cargá los datos a mano."
                 ),
             )
+        if groq_rate_limited:
+            raise GroqRateLimitError(
+                errors[0].removeprefix("Groq: ")
+                if errors
+                else "Groq alcanzó el límite de consultas por minuto."
+            )
         if errors:
             raise RuntimeError(
                 "No se pudo analizar la imagen con Groq. "
@@ -781,7 +899,8 @@ def _scan_with_auto_fallback(
             )
         raise RuntimeError("GROQ_API_KEY no configurada en el servidor.")
 
-    if OLLAMA_BASE_URL and not _is_local_service_url(OLLAMA_BASE_URL):
+    if _ollama_usable():
+        logger.info("Escaneo: Groq no alcanzó; probando Ollama en %s", OLLAMA_BASE_URL)
         try:
             raw_text = extract_text_moondream(image_bytes)
             fields = parse_vaccine_fields(raw_text, catalog_names=catalog_names, prefer_groq=groq_available)
@@ -794,7 +913,7 @@ def _scan_with_auto_fallback(
             logger.warning("Escaneo vacuna - %s", msg)
             errors.append(msg)
 
-    if OCR_SERVICE_URL and not _is_local_service_url(OCR_SERVICE_URL):
+    if OCR_SERVICE_URL and _service_url_reachable_from_backend(OCR_SERVICE_URL):
         try:
             raw_text = extract_text_ocr(image_bytes, filename=filename)
             if not raw_text.strip():

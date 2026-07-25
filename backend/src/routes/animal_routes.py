@@ -591,6 +591,7 @@ async def scan_vaccine_certificate(
         scan_vaccine_image,
         ScanImageError,
         GroqUnavailableError,
+        GroqRateLimitError,
     )
 
     animal = db.query(Animal).filter(Animal.id == animal_id).first()
@@ -615,6 +616,8 @@ async def scan_vaccine_certificate(
         )
     except ScanImageError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except GroqRateLimitError as e:
+        raise HTTPException(status_code=429, detail=str(e))
     except GroqUnavailableError as e:
         raise HTTPException(status_code=502, detail=str(e))
     except ValueError as e:

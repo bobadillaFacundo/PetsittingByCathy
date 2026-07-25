@@ -14,7 +14,7 @@ services:
         value: "3.11.0"
 
       # ── JWT ───────────────────────────────────────────────────────────────
-      - key: f5e3400ff1cf118e40eb8d84da2944c26bd842fdb5a1c4d162c0ddfc56b158c4
+      - key: SECRET_KEY
         sync: false           # se carga desde Render Dashboard > Environment
 
       # ── Supabase (Base de datos relacional) ───────────────────────────────
@@ -42,14 +42,18 @@ services:
         value: llama-3.1-8b-instant
       - key: GROQ_VISION_MODEL
         value: qwen/qwen3.6-27b
+      - key: GROQ_VISION_MODEL_FALLBACK
+        value: llama-3.2-11b-vision-preview
       - key: VISION_SKIP_LOCAL_FALLBACKS
         value: "1"
       - key: GROQ_VISION_TIMEOUT
-        value: "28"
+        value: "20"
+      - key: GROQ_RATE_LIMIT_RETRIES
+        value: "1"
 
-      # ── Escaneo de vacunas (fallback Ollama/OCR solo si URL pública accesible) ─
+      # ── Escaneo de vacunas: en producción solo Groq (sin Ollama/OCR en LAN) ─
       - key: OLLAMA_BASE_URL
-        sync: false
+        sync: false   # dejar vacío en Render
       - key: OLLAMA_VISION_MODEL
         value: moondream
       - key: OCR_SERVICE_URL
