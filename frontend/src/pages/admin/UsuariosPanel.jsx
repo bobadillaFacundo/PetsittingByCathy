@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Pencil, UserPlus, X, Save, Lock, UserX, UserCheck } from 'lucide-react';
-import { API_BASE, mediaUrl } from '../../lib/api';
+import { API_BASE, apiUrl, mediaUrl } from '../../lib/api';
 
 export default function UsuariosPanel() {
   const [users, setUsers] = useState([]);
@@ -29,7 +29,7 @@ export default function UsuariosPanel() {
 
   const fetchUsers = async () => {
     try {
-      const res = await fetch(`${API_BASE}/users/`, {
+      const res = await fetch(apiUrl('/users'), {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -59,7 +59,7 @@ export default function UsuariosPanel() {
   const handleCreateUser = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch(`${API_BASE}/users/`, {
+      const res = await fetch(apiUrl('/users'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

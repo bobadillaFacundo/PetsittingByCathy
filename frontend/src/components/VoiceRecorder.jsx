@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { redirectToLogin } from "../lib/auth";
-import { API_BASE, mediaUrl } from '../lib/api';
+import { API_BASE, apiUrl, mediaUrl } from '../lib/api';
 
 const SPECIES_INFO = {
   1: { name: "Perros", emoji: "🐶" },
@@ -101,7 +101,7 @@ export default function VoiceRecorder({ onSave }) {
     checkPending();
     window.addEventListener('online', checkPending);
     
-    fetch(`${API_BASE}/animals/?t=${Date.now()}`, {
+    fetch(apiUrl(`/animals?t=${Date.now()}`), {
       headers: { 
         "Authorization": `Bearer ${localStorage.getItem("token")}`,
         "Cache-Control": "no-cache"

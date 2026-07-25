@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Send, RefreshCw, Activity, CheckCircle2, Filter, Mic, Square, Download, Database, Sun, CloudSun, AlertTriangle, X, Trash2 } from 'lucide-react';
 import VoiceRecorder from '../../components/VoiceRecorder';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { API_BASE, mediaUrl } from '../../lib/api';
+import { API_BASE, apiUrl, mediaUrl } from '../../lib/api';
 import {
   resolveEventColor,
   getEventBadgeClasses,
@@ -119,7 +119,7 @@ export default function AuditoriaPanel() {
             "Authorization": `Bearer ${localStorage.getItem("token")}`
           }
         }),
-        fetch(`${API_BASE}/animals/`, {
+        fetch(apiUrl('/animals'), {
           headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
         }),
         fetch(`${API_BASE}/catalogs/color-rules`, {

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Activity, Play, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { API_BASE, mediaUrl } from '../../lib/api';
+import { API_BASE, apiUrl, mediaUrl } from '../../lib/api';
 
 const SPECIES_INFO = {
   1: { name: "Perros", emoji: "🐶" },
@@ -26,7 +26,7 @@ export default function AnalisisPanel() {
   const fetchAnimals = async () => {
     try {
       setLoadingAnimals(true);
-      const res = await fetch(`${API_BASE}/animals/`, {
+      const res = await fetch(apiUrl('/animals'), {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) throw new Error();

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import AnimalHistory from "./AnimalHistory";
-import { API_BASE, mediaUrl } from '../lib/api';
+import { API_BASE, apiUrl, mediaUrl } from '../lib/api';
 
 const SPECIES_INFO = {
   1: { name: "Perros", emoji: "🐶" },
@@ -20,7 +20,7 @@ export default function Dashboard() {
   const [selectedSpeciesId, setSelectedSpeciesId] = useState(null);
 
   const fetchData = () => {
-    fetch(`${API_BASE}/dashboard/?t=${Date.now()}`, {
+    fetch(apiUrl(`/dashboard?t=${Date.now()}`), {
       headers: { 
         "Authorization": `Bearer ${localStorage.getItem("token")}`,
         "Cache-Control": "no-cache"

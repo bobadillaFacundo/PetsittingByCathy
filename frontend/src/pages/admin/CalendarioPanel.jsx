@@ -5,7 +5,7 @@ import { es } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { Plus, X, Calendar as CalendarIcon, Save, Trash2 } from 'lucide-react';
 import { parseApiDateTime, toApiDateTime, formatForInput, isAllDayAlert } from '../../lib/datetimeAr';
-import { API_BASE, mediaUrl } from '../../lib/api';
+import { API_BASE, apiUrl, mediaUrl } from '../../lib/api';
 import AgendaGroupedView from './AgendaGroupedView';
 
 const locales = {
@@ -113,7 +113,7 @@ export default function CalendarioPanel() {
 
   const fetchAnimals = async () => {
     try {
-      const res = await fetch(`${API_BASE}/animals/`, {
+      const res = await fetch(apiUrl('/animals'), {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -133,7 +133,7 @@ export default function CalendarioPanel() {
       const endStr = format(end, 'yyyy-MM-dd');
 
       const [resRes, resAlerts] = await Promise.all([
-        fetch(`${API_BASE}/reservations/`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch(apiUrl('/reservations'), { headers: { 'Authorization': `Bearer ${token}` } }),
         fetch(`${API_BASE}/calendar/alerts?start=${startStr}&end=${endStr}`, { headers: { 'Authorization': `Bearer ${token}` } })
       ]);
 
@@ -328,7 +328,7 @@ export default function CalendarioPanel() {
       const postOrPut = async (payload, id = null) => {
         const url = id
           ? `${API_BASE}/reservations/${id}`
-          : `${API_BASE}/reservations/`;
+          : apiUrl('/reservations');
         const res = await fetch(url, {
           method: id ? "PUT" : "POST",
           headers: {

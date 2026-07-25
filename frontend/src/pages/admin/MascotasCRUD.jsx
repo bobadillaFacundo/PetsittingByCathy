@@ -7,7 +7,7 @@ import LibretaTab from './LibretaTab';
 import MedicacionTab from './MedicacionTab';
 import ObservacionesTab from './ObservacionesTab';
 import { redirectToLogin } from '../../lib/auth';
-import { API_BASE, mediaUrl } from '../../lib/api';
+import { API_BASE, apiUrl, mediaUrl } from '../../lib/api';
 
 const SPECIES_INFO = {
   1: { name: "Perros", emoji: "🐶" },
@@ -143,7 +143,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
   const fetchMascotas = async () => {
     try {
       const res = await fetch(
-        `${API_BASE}/animals/?is_daycare=${daycareOnly}&include_inactive=true`,
+        apiUrl(`/animals?is_daycare=${daycareOnly}&include_inactive=true`),
         {
           headers: { 'Authorization': `Bearer ${token}` }
         }
@@ -260,7 +260,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
     e.preventDefault();
     const url = editingId 
       ? `${API_BASE}/animals/${editingId}`
-      : `${API_BASE}/animals/`;
+      : apiUrl('/animals');
     
     const method = editingId ? 'PUT' : 'POST';
 

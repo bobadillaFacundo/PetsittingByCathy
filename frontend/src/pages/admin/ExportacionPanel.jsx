@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import AnimalHistory from '../AnimalHistory';
-import { API_BASE, mediaUrl } from '../../lib/api';
+import { API_BASE, apiUrl, mediaUrl } from '../../lib/api';
 
 export default function ExportacionPanel() {
   const [animals, setAnimals] = useState([]);
@@ -13,7 +13,7 @@ export default function ExportacionPanel() {
 
   const fetchAnimals = async () => {
     try {
-      const res = await fetch(`${API_BASE}/animals/`, {
+      const res = await fetch(apiUrl('/animals'), {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       if (res.ok) {
