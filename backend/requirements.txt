@@ -12,6 +12,8 @@ qdrant-client
 fastembed
 pypdf
 fpdf2
+Pillow
+pillow-heif
 pytest
 pytest-cov
 httpx

@@ -70,7 +70,82 @@ def _is_heic(image_bytes: bytes, filename: str = "") -> bool:
     lower = (filename or "").lower()
     if lower.endswith((".heic", ".heif")):
         return True
-    return len(image_bytes) > 12 and image_bytes[4:8] == b"ftyp"
+    if len(image_bytes) > 16 and image_bytes[4:8] == b"ftyp":
+        brand = image_bytes[8:16].lower()
+        return any(tag in brand for tag in (b"heic", b"heix", b"hevc", b"mif1", b"msf1"))
+    return False
+
+
+def _prepare_image_for_vision(image_bytes: bytes, filename: str = "image.jpg") -> tuple[bytes, str]:
+    """
+    Normaliza la imagen a JPEG razonable para Groq (HEIC, PNG grande, etc.).
+  Devuelve (bytes, filename).
+    """
+    if _is_pdf(image_bytes, filename):
+        raise ValueError("Para PDF usá escaneo automático; si falla, subí una foto JPG del certificado.")
+
+    try:
+        from PIL import Image
+    except ImportError:
+        if _is_heic(image_bytes, filename):
+            raise ValueError(
+                "Formato HEIC no soportado en el servidor. Exportá la foto como JPG o PNG."
+            )
+        if len(image_bytes) > GROQ_MAX_IMAGE_BYTES:
+            raise ValueError("La imagen supera 18 MB. Usá una foto más liviana.")
+        return image_bytes, filename or "image.jpg"
+
+    try:
+        import pillow_heif
+        pillow_heif.register_heif_opener()
+    except ImportError:
+        pass
+
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+        img.load()
+    except Exception as e:
+        raise ValueError(
+            f"No se pudo leer la imagen ({filename or 'archivo'}). "
+            f"Usá JPG o PNG. Detalle: {e}"
+        ) from e
+
+    if img.mode not in ("RGB", "L"):
+        img = img.convert("RGB")
+    elif img.mode == "L":
+        img = img.convert("RGB")
+
+    max_side = 2048
+    w, h = img.size
+    if max(w, h) > max_side:
+        ratio = max_side / max(w, h)
+        img = img.resize((int(w * ratio), int(h * ratio)), Image.Resampling.LANCZOS)
+
+    out = io.BytesIO()
+    quality = 88
+    while quality >= 55:
+        out = io.BytesIO()
+        img.save(out, format="JPEG", quality=quality, optimize=True)
+        if out.tell() <= 4 * 1024 * 1024:
+            break
+        quality -= 8
+
+    data = out.getvalue()
+    if len(data) > GROQ_MAX_IMAGE_BYTES:
+        raise ValueError("La imagen es demasiado grande incluso comprimida. Probá con menor resolución.")
+    return data, "scan.jpg"
+
+
+def _catalog_hint(catalog_names: Optional[list[str]], limit: int = 40) -> str:
+    if not catalog_names:
+        return ""
+    names = catalog_names[:limit]
+    extra = f" (y {len(catalog_names) - limit} más)" if len(catalog_names) > limit else ""
+    return (
+        "\nNombres de vacunas conocidos en el catálogo (elige el más cercano si aplica):\n"
+        + ", ".join(names)
+        + extra
+    )
 
 
 def _guess_mime(filename: str, image_bytes: bytes) -> str:
@@ -276,22 +351,10 @@ def extract_fields_groq_vision(
     catalog_names: Optional[list[str]] = None,
 ) -> dict[str, Any]:
     """Analiza la imagen directamente con Groq Vision (qwen/qwen3.6-27b)."""
-    if _is_heic(image_bytes, filename):
-        raise ValueError(
-            "Formato HEIC no soportado. Configurá la cámara en JPG o exportá la foto como JPG/PNG."
-        )
-    if len(image_bytes) > GROQ_MAX_IMAGE_BYTES:
-        raise ValueError("La imagen supera 18 MB. Usá una foto más liviana o menor resolución.")
+    prepared_bytes, _prepared_name = _prepare_image_for_vision(image_bytes, filename)
+    catalog_hint = _catalog_hint(catalog_names)
 
-    catalog_hint = ""
-    if catalog_names:
-        catalog_hint = (
-            "\nNombres de vacunas conocidos en el catálogo (elige el más cercano si aplica):\n"
-            + ", ".join(catalog_names)
-        )
-
-    mime = _guess_mime(filename, image_bytes)
-    data_url = f"data:{mime};base64,{_image_to_b64(image_bytes)}"
+    data_url = f"data:image/jpeg;base64,{_image_to_b64(prepared_bytes)}"
     messages = [
         {
             "role": "user",
@@ -304,6 +367,10 @@ def extract_fields_groq_vision(
     content = _call_groq(messages, GROQ_VISION_MODEL, json_mode=False)
     parsed = _parse_json_from_text(content)
     vaccines = _fields_list_from_parsed(parsed, content)
+    if not vaccines:
+        raise ValueError(
+            "No se detectaron vacunas en la imagen. Probá con mejor luz, más cerca del texto, o JPG/PNG nítido."
+        )
     return _scan_result(vaccines, content, "groq")
 
 
@@ -378,12 +445,7 @@ def parse_vaccine_fields(
     prefer_groq: bool = True,
 ) -> dict[str, Any]:
     """Convierte texto OCR/visión en campos estructurados de vacuna."""
-    catalog_hint = ""
-    if catalog_names:
-        catalog_hint = (
-            "\nNombres de vacunas conocidos en el catálogo (elige el más cercano si aplica):\n"
-            + ", ".join(catalog_names)
-        )
+    catalog_hint = _catalog_hint(catalog_names)
 
     prompt = f"""
 Analiza el siguiente texto extraído de un certificado o libreta de vacunación veterinaria.
@@ -422,9 +484,11 @@ def _scan_pdf(
     raw_text = _extract_text_pdf(pdf_bytes)
     if not raw_text.strip():
         raise ValueError(
-            "El PDF no tiene texto legible. Subí una foto del certificado (JPG o PNG)."
+            "El PDF no tiene texto legible (escaneo sin OCR). Subí una foto JPG o PNG del certificado."
         )
     fields = parse_vaccine_fields(raw_text, catalog_names=catalog_names)
+    if not fields.get("vaccines"):
+        raise ValueError("No se detectaron vacunas en el PDF. Subí una foto del certificado.")
     fields["method"] = "pdf"
     return fields
 

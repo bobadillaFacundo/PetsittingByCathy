@@ -98,7 +98,11 @@ export default function LibretaTab({ animalId, token }) {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        alert(err.detail || 'Error al analizar la imagen');
+        const detail = err.detail;
+        const msg = Array.isArray(detail)
+          ? detail.map((d) => d.msg || JSON.stringify(d)).join(', ')
+          : (typeof detail === 'string' ? detail : 'Error al analizar la imagen');
+        alert(msg);
         return;
       }
       const data = await res.json();
