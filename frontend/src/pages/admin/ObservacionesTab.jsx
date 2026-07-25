@@ -1,12 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Trash2, Camera, Video, ImagePlus } from 'lucide-react';
-
-const API = '${API_BASE}';
-
-function mediaUrl(url) {
-  if (!url) return '';
-  return url.startsWith('http') ? url : `${API}${url}`;
-}
+import { API_BASE, mediaUrl } from '../../lib/api';
 
 function MediaPreview({ att }) {
   const src = mediaUrl(att.file_url);
@@ -40,7 +34,7 @@ export default function ObservacionesTab({ animalId, token }) {
 
   const fetchObservations = async () => {
     try {
-      const res = await fetch(`${API}/animals/${animalId}/observations`, {
+      const res = await fetch(`${API_BASE}/animals/${animalId}/observations`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) setObservations(await res.json());
@@ -76,7 +70,7 @@ export default function ObservacionesTab({ animalId, token }) {
 
     setUploading(true);
     try {
-      const res = await fetch(`${API}/animals/${animalId}/observations`, {
+      const res = await fetch(`${API_BASE}/animals/${animalId}/observations`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -94,7 +88,7 @@ export default function ObservacionesTab({ animalId, token }) {
         const formData = new FormData();
         pendingFiles.forEach((f) => formData.append('files', f));
         const mediaRes = await fetch(
-          `${API}/animals/${animalId}/observations/${created.id}/media`,
+          `${API_BASE}/animals/${animalId}/observations/${created.id}/media`,
           {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}` },
@@ -121,7 +115,7 @@ export default function ObservacionesTab({ animalId, token }) {
   const handleDelete = async (id) => {
     if (!window.confirm('¿Eliminar esta observación y sus archivos?')) return;
     try {
-      const res = await fetch(`${API}/animals/${animalId}/observations/${id}`, {
+      const res = await fetch(`${API_BASE}/animals/${animalId}/observations/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });

@@ -89,15 +89,15 @@ export default function AuditoriaPanel() {
     setIsLoading(true);
     try {
       const [reportsRes, animalsRes, rulesRes] = await Promise.all([
-        fetch('${API_BASE}/reports/all', {
+        fetch(`${API_BASE}/reports/all`, {
           headers: {
             "Authorization": `Bearer ${localStorage.getItem("token")}`
           }
         }),
-        fetch('${API_BASE}/animals/', {
+        fetch(`${API_BASE}/animals/`, {
           headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
         }),
-        fetch('${API_BASE}/catalogs/color-rules', {
+        fetch(`${API_BASE}/catalogs/color-rules`, {
           headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
         })
       ]);

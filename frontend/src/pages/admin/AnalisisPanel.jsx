@@ -26,7 +26,7 @@ export default function AnalisisPanel() {
   const fetchAnimals = async () => {
     try {
       setLoadingAnimals(true);
-      const res = await fetch('${API_BASE}/animals/', {
+      const res = await fetch(`${API_BASE}/animals/`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) throw new Error();

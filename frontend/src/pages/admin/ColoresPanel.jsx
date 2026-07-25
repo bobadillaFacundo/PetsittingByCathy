@@ -10,7 +10,7 @@ export default function ColoresPanel() {
   const fetchRules = async () => {
     setLoading(true);
     try {
-      const res = await fetch('${API_BASE}/catalogs/color-rules', {
+      const res = await fetch(`${API_BASE}/catalogs/color-rules`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       if (res.ok) {
@@ -44,7 +44,7 @@ export default function ColoresPanel() {
         
         // Recalcular alertas
         try {
-          await fetch('${API_BASE}/reports/recalculate-alerts', {
+          await fetch(`${API_BASE}/reports/recalculate-alerts`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
           });

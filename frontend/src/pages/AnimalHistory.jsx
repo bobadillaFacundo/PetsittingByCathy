@@ -59,7 +59,7 @@ export default function AnimalHistory({ animalId = 1 }) {
     setLoading(true);
     Promise.all([
       fetch(`${API_BASE}/animals/${animalId}/history`, { headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` } }),
-      fetch('${API_BASE}/catalogs/color-rules', { headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` } })
+      fetch(`${API_BASE}/catalogs/color-rules`, { headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` } })
     ])
     .then(async ([histRes, rulesRes]) => {
       if (histRes.ok) setData(await histRes.json());

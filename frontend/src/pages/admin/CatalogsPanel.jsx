@@ -8,7 +8,7 @@ export default function CatalogsPanel() {
 
   // Fetch species only for the breeds dropdown
   useEffect(() => {
-    fetch('${API_BASE}/catalogs/species', {
+    fetch(`${API_BASE}/catalogs/species`, {
       headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
     })
       .then(res => res.json())
@@ -48,7 +48,7 @@ export default function CatalogsPanel() {
         {activeCatalog === 'species' && (
           <CatalogCRUD
             title="Especies"
-            endpoint="${API_BASE}/catalogs/species"
+            endpoint={`${API_BASE}/catalogs/species`}
             columns={[{ key: 'name', label: 'Nombre' }]}
             formFields={[{ key: 'name', label: 'Nombre de Especie', required: true }]}
           />
@@ -57,7 +57,7 @@ export default function CatalogsPanel() {
         {activeCatalog === 'breeds' && (
           <CatalogCRUD
             title="Razas"
-            endpoint="${API_BASE}/catalogs/breeds"
+            endpoint={`${API_BASE}/catalogs/breeds`}
             columns={[
               { key: 'name', label: 'Nombre' },
               { key: 'species_id', label: 'Especie', render: (val) => {
@@ -75,7 +75,7 @@ export default function CatalogsPanel() {
         {activeCatalog === 'laboratories' && (
           <CatalogCRUD
             title="Catálogo de Laboratorios"
-            endpoint="${API_BASE}/catalogs/laboratories"
+            endpoint={`${API_BASE}/catalogs/laboratories`}
             columns={[{ key: 'name', label: 'Nombre' }]}
             formFields={[{ key: 'name', label: 'Nombre del Estudio', required: true }]}
           />
@@ -84,7 +84,7 @@ export default function CatalogsPanel() {
         {activeCatalog === 'vaccines' && (
           <CatalogCRUD
             title="Catálogo de Vacunas"
-            endpoint="${API_BASE}/catalogs/vaccines"
+            endpoint={`${API_BASE}/catalogs/vaccines`}
             columns={[{ key: 'name', label: 'Nombre' }]}
             formFields={[{ key: 'name', label: 'Nombre de Vacuna', required: true }]}
           />
@@ -93,7 +93,7 @@ export default function CatalogsPanel() {
         {activeCatalog === 'products' && (
           <CatalogCRUD
             title="Productos Veterinarios"
-            endpoint="${API_BASE}/catalogs/products"
+            endpoint={`${API_BASE}/catalogs/products`}
             columns={[
               { key: 'name', label: 'Nombre' },
               { key: 'type', label: 'Tipo' }
@@ -111,7 +111,7 @@ export default function CatalogsPanel() {
         {activeCatalog === 'veterinarians' && (
           <CatalogCRUD
             title="Veterinarios"
-            endpoint="${API_BASE}/catalogs/veterinarians"
+            endpoint={`${API_BASE}/catalogs/veterinarians`}
             columns={[
               { key: 'name', label: 'Nombre' },
               { key: 'phone', label: 'Teléfono' },
@@ -128,7 +128,7 @@ export default function CatalogsPanel() {
         {activeCatalog === 'tagsets' && (
           <CatalogCRUD
             title="Diccionarios IA (TagSets)"
-            endpoint="${API_BASE}/catalogs/tagsets"
+            endpoint={`${API_BASE}/catalogs/tagsets`}
             columns={[
               { key: 'name', label: 'Conjunto' },
               { key: 'variants_text', label: 'Variantes / Palabras clave' }

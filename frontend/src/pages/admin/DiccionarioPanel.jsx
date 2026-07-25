@@ -13,7 +13,7 @@ export default function DiccionarioPanel() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch('${API_BASE}/dashboard/dictionary', {
+      const res = await fetch(`${API_BASE}/dashboard/dictionary`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Error al cargar el diccionario');
