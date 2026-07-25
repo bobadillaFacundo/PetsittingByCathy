@@ -11,6 +11,7 @@ class AnimalBase(BaseModel):
     birth_date: Optional[date] = None
     sex: Optional[str] = None
     is_castrated: bool = False
+    weight_kg: Optional[float] = None
     photo_url: Optional[str] = None
     is_active: bool = True
     is_daycare: bool = True
@@ -52,6 +53,7 @@ class AnimalUpdate(BaseModel):
     birth_date: Optional[date] = None
     sex: Optional[str] = None
     is_castrated: Optional[bool] = None
+    weight_kg: Optional[float] = None
     photo_url: Optional[str] = None
     is_active: Optional[bool] = None
     is_daycare: Optional[bool] = None

@@ -32,6 +32,7 @@ const emptyForm = (daycareOnly, speciesId = '') => ({
   breed_id: '',
   sex: 'M',
   is_castrated: false,
+  weight_kg: '',
   is_active: true,
   is_daycare: daycareOnly,
   coat_color: '',
@@ -73,6 +74,27 @@ function CastrationBadge({ isCastrated }) {
   ) : (
     <span className="text-[10px] font-bold uppercase tracking-wide bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full border border-gray-200">
       No castrado
+    </span>
+  );
+}
+
+function WeightBadge({ weightKg }) {
+  if (weightKg == null || weightKg === '') return null;
+  const n = Number(weightKg);
+  if (Number.isNaN(n)) return null;
+  const label = Number.isInteger(n) ? `${n} kg` : `${n.toFixed(1)} kg`;
+  return (
+    <span className="text-[10px] font-bold uppercase tracking-wide bg-violet-100 text-violet-800 px-2 py-0.5 rounded-full border border-violet-200">
+      {label}
+    </span>
+  );
+}
+
+function CastrationWeightBadges({ isCastrated, weightKg }) {
+  return (
+    <span className="inline-flex items-center gap-1 flex-wrap">
+      <CastrationBadge isCastrated={isCastrated} />
+      <WeightBadge weightKg={weightKg} />
     </span>
   );
 }
@@ -186,6 +208,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
       breed_id: mascota.breed_id || '',
       sex: mascota.sex || '',
       is_castrated: mascota.is_castrated || false,
+      weight_kg: mascota.weight_kg ?? '',
       is_active: mascota.is_active,
       is_daycare: mascota.is_daycare ?? daycareOnly,
       coat_color: mascota.coat_color || '',
@@ -256,6 +279,8 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
       payload.age_estimate_min = null;
       payload.age_estimate_max = null;
     }
+
+    payload.weight_kg = toNumOrNull(payload.weight_kg);
 
     try {
       const res = await fetch(url, {
@@ -411,7 +436,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                       {m.is_rescue && (
                         <span className="text-[10px] font-bold uppercase tracking-wide bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">Rescate</span>
                       )}
-                      <CastrationBadge isCastrated={m.is_castrated} />
+                      <CastrationWeightBadges isCastrated={m.is_castrated} weightKg={m.weight_kg} />
                     </h3>
                     <span className="inline-block mt-1 px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700">
                       {getSpeciesName(m.species_id)}
@@ -495,7 +520,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                   <th className="px-6 py-4 font-medium">Edad</th>
                   <th className="px-6 py-4 font-medium">Pelaje</th>
                   <th className="px-6 py-4 font-medium">Sexo</th>
-                  <th className="px-6 py-4 font-medium">Castración</th>
+                  <th className="px-6 py-4 font-medium">Castración / Peso</th>
                   {!daycareOnly && <th className="px-6 py-4 font-medium">Residencia</th>}
                   <th className="px-6 py-4 font-medium">Estado</th>
                   <th className="px-6 py-4 font-medium text-right">Acciones</th>
@@ -516,7 +541,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                         {m.is_rescue && (
                           <span className="text-[10px] font-bold uppercase tracking-wide bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">Rescate</span>
                         )}
-                        {daycareOnly && <CastrationBadge isCastrated={m.is_castrated} />}
+                        {daycareOnly && <CastrationWeightBadges isCastrated={m.is_castrated} weightKg={m.weight_kg} />}
                       </div>
                       {traitLabels(m).length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1">
@@ -541,7 +566,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                       {sexLabel(m.sex)}
                     </td>
                     <td className="px-6 py-4">
-                      <CastrationBadge isCastrated={m.is_castrated} />
+                      <CastrationWeightBadges isCastrated={m.is_castrated} weightKg={m.weight_kg} />
                     </td>
                     {!daycareOnly && (
                       <td className="px-6 py-4 text-gray-600 text-sm font-medium">
@@ -860,17 +885,34 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="isCastrated"
-                      checked={formData.is_castrated}
-                      onChange={e => setFormData({...formData, is_castrated: e.target.checked})}
-                      className="w-5 h-5 text-indigo-600 rounded border-gray-300"
-                    />
-                    <label htmlFor="isCastrated" className="text-sm font-medium text-gray-700">
-                      Animal Castrado
-                    </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="isCastrated"
+                        checked={formData.is_castrated}
+                        onChange={e => setFormData({...formData, is_castrated: e.target.checked})}
+                        className="w-5 h-5 text-indigo-600 rounded border-gray-300"
+                      />
+                      <label htmlFor="isCastrated" className="text-sm font-medium text-gray-700">
+                        Animal castrado
+                      </label>
+                    </div>
+                    <div>
+                      <label htmlFor="weightKg" className="block text-sm font-medium text-gray-700 mb-1">
+                        Peso (kg)
+                      </label>
+                      <input
+                        id="weightKg"
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        placeholder="Ej. 12.5"
+                        value={formData.weight_kg}
+                        onChange={(e) => setFormData({ ...formData, weight_kg: e.target.value })}
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 text-base bg-white"
+                      />
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-2">

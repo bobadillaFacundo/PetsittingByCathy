@@ -130,6 +130,7 @@ class Animal(Base):
     birth_date = Column(Date, nullable=True)
     sex = Column(String(1), nullable=True)
     is_castrated = Column(Boolean, default=False)
+    weight_kg = Column(Float, nullable=True)
     photo_url = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     is_daycare = Column(Boolean, default=True, nullable=False)

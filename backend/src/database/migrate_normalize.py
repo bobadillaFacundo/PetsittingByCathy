@@ -320,6 +320,13 @@ def migrate():
         inspector = inspect(engine)
         _migrate_reservations_for_other_activities(db, inspector)
 
+        # --- Animales: peso en kg ---
+        inspector = inspect(engine)
+        if table_exists(inspector, "animals") and not column_exists(inspector, "animals", "weight_kg"):
+            print("Agregando animals.weight_kg...")
+            run_ddl("ALTER TABLE animals ADD COLUMN IF NOT EXISTS weight_kg DOUBLE PRECISION")
+            print("  OK animals.weight_kg")
+
         print("\nMigración completada. Reinicia el backend.")
     except Exception as e:
         db.rollback()
