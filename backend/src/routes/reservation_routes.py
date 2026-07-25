@@ -4,6 +4,7 @@ from src.database.session import get_db
 from src.models.models import Reservation, Animal
 from src.dtos.reservation_dto import ReservationCreate, ReservationUpdate, ReservationResponse
 from src.auth import get_current_user
+from src.timezone_ar import to_ar_naive
 from typing import List
 
 router = APIRouter(prefix="/reservations", tags=["Reservations"])
@@ -44,11 +45,20 @@ def _validate_reservation_animal(db: Session, animal_id: int, status: str):
     return animal
 
 
+def _normalize_reservation_payload(data: dict) -> dict:
+    if "start_date" in data and data["start_date"] is not None:
+        data["start_date"] = to_ar_naive(data["start_date"])
+    if "end_date" in data and data["end_date"] is not None:
+        data["end_date"] = to_ar_naive(data["end_date"])
+    return data
+
+
 @router.post("/", response_model=ReservationResponse)
 def create_reservation(reservation: ReservationCreate, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
     status_val = reservation.status or "Pendiente"
     _validate_reservation_animal(db, reservation.animal_id, status_val)
-    db_reservation = Reservation(**reservation.model_dump())
+    data = _normalize_reservation_payload(reservation.model_dump())
+    db_reservation = Reservation(**data)
     db.add(db_reservation)
     db.commit()
     db.refresh(db_reservation)
@@ -68,6 +78,7 @@ def update_reservation(reservation_id: int, reservation_update: ReservationUpdat
         raise HTTPException(status_code=404, detail="Reserva no encontrada")
 
     update_data = reservation_update.model_dump(exclude_unset=True)
+    update_data = _normalize_reservation_payload(update_data)
     animal_id = update_data.get("animal_id", db_reservation.animal_id)
     status_val = update_data.get("status", db_reservation.status) or "Pendiente"
     _validate_reservation_animal(db, animal_id, status_val)

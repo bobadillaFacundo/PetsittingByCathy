@@ -7,7 +7,7 @@ from src.models.models import (
     VaccineCatalog, AnimalMedication, MedicationCatalog, AnimalMedicationSchedule,
 )
 from src.auth import get_current_user
-from src.timezone_ar import today_ar
+from src.timezone_ar import today_ar, serialize_ar_datetime, serialize_ar_date
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import date, datetime, timedelta, time as dt_time
@@ -19,7 +19,7 @@ class CalendarAlertResponse(BaseModel):
     animal_name: str
     alert_type: str
     product_name: str
-    due_date: datetime
+    due_date: str
 
     class Config:
         from_attributes = True
@@ -76,7 +76,7 @@ def get_calendar_alerts(
                 "animal_name": d.animal.name,
                 "alert_type": alert_type,
                 "product_name": d.product.name,
-                "due_date": d.next_due_date
+                "due_date": serialize_ar_date(d.next_due_date),
             })
         
     # Vaccines — solo la última por animal+vacuna (evita duplicados)
@@ -100,7 +100,7 @@ def get_calendar_alerts(
                 "animal_name": v.health_record.animal.name,
                 "alert_type": "Vacunación",
                 "product_name": v.vaccine_catalog.name,
-                "due_date": v.next_due_date
+                "due_date": serialize_ar_date(v.next_due_date),
             })
 
     # Medicaciones activas — crónicas todos los días del rango; con duración, N días desde hoy
@@ -147,7 +147,7 @@ def get_calendar_alerts(
                     "animal_name": m.animal.name if m.animal else "?",
                     "alert_type": alert_type_str,
                     "product_name": product,
-                    "due_date": dt,
+                    "due_date": serialize_ar_datetime(dt),
                 })
             
     return alerts

@@ -1,7 +1,8 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
 from typing import Optional
 from datetime import datetime
 from src.dtos.animal_dto import AnimalResponse
+from src.timezone_ar import to_ar_naive, serialize_ar_datetime
 
 class ReservationBase(BaseModel):
     animal_id: int
@@ -10,6 +11,10 @@ class ReservationBase(BaseModel):
     status: Optional[str] = "Pendiente"
     notes: Optional[str] = None
     belongings_photos: Optional[str] = None
+
+    @field_serializer("start_date", "end_date")
+    def serialize_dates(self, v: datetime) -> str:
+        return serialize_ar_datetime(v)
 
 class ReservationCreate(ReservationBase):
     pass

@@ -4,6 +4,7 @@ import { format, parse, startOfWeek, getDay, startOfMonth, endOfMonth, addMonths
 import { es } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { Plus, X, Calendar as CalendarIcon, Save, Trash2 } from 'lucide-react';
+import { parseApiDateTime, toApiDateTime, formatForInput, isAllDayAlert } from '../../lib/datetimeAr';
 
 const locales = {
   'es': es,
@@ -94,8 +95,8 @@ export default function CalendarioPanel() {
         const resEvents = data.map(r => ({
           id: r.id,
           title: `${r.animal?.name || `Paciente #${r.animal_id}`} - ${r.status}`,
-          start: new Date(r.start_date),
-          end: new Date(r.end_date),
+          start: parseApiDateTime(r.start_date),
+          end: parseApiDateTime(r.end_date),
           resource: r,
           isAlert: false
         }));
@@ -105,15 +106,15 @@ export default function CalendarioPanel() {
       if (resAlerts.ok) {
         const data = await resAlerts.json();
         const alertEvents = data.map(a => {
-          const isAllDay = !a.due_date.includes('T') || a.due_date.endsWith('T00:00:00') || a.due_date.endsWith('T00:00:00.000Z') || a.due_date.endsWith('T00:00:00Z');
-          let startEv = new Date(a.due_date);
+          const isAllDay = isAllDayAlert(a.due_date);
+          let startEv = parseApiDateTime(a.due_date);
           let endEv = startEv;
           
           if (isAllDay) {
             startEv = new Date(startEv.getFullYear(), startEv.getMonth(), startEv.getDate(), 12, 0, 0);
             endEv = startEv;
           } else {
-            endEv = new Date(startEv.getTime() + 30 * 60000); // 30 minutes duration for visual purpose
+            endEv = new Date(startEv.getTime() + 30 * 60000);
           }
 
           return {
@@ -249,8 +250,8 @@ export default function CalendarioPanel() {
       for (const aId of animalIdsToSave) {
         const payload = {
           animal_id: aId,
-          start_date: new Date(formData.start_date).toISOString(),
-          end_date: new Date(formData.end_date).toISOString(),
+          start_date: toApiDateTime(formData.start_date),
+          end_date: toApiDateTime(formData.end_date),
           status: formData.status,
           notes: formData.notes
         };
@@ -316,12 +317,6 @@ export default function CalendarioPanel() {
     } catch (err) {
       console.error(err);
     }
-  };
-
-  const formatForInput = (d) => {
-    const dateObj = new Date(d);
-    const offset = dateObj.getTimezoneOffset() * 60000;
-    return new Date(dateObj.getTime() - offset).toISOString().slice(0, 16);
   };
 
   const eventStyleGetter = (event) => {

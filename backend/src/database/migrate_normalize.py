@@ -222,6 +222,32 @@ def migrate():
             db.commit()
             print("  OK attachments.observation_id")
 
+        # --- Reservas: corregir fechas guardadas como UTC naive (una sola vez) ---
+        inspector = inspect(engine)
+        if table_exists(inspector, "reservations"):
+            if not table_exists(inspector, "schema_migrations"):
+                db.execute(text(
+                    "CREATE TABLE IF NOT EXISTS schema_migrations ("
+                    "name VARCHAR(255) PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+                ))
+                db.commit()
+            already = db.execute(text(
+                "SELECT 1 FROM schema_migrations WHERE name = 'reservations_utc_to_ar'"
+            )).fetchone()
+            if not already:
+                print("Corrigiendo reservations: UTC naive -> hora Argentina...")
+                db.execute(text("""
+                    UPDATE reservations
+                    SET start_date = (start_date AT TIME ZONE 'UTC') AT TIME ZONE 'America/Argentina/Buenos_Aires',
+                        end_date = (end_date AT TIME ZONE 'UTC') AT TIME ZONE 'America/Argentina/Buenos_Aires'
+                    WHERE start_date IS NOT NULL AND end_date IS NOT NULL
+                """))
+                db.execute(text(
+                    "INSERT INTO schema_migrations (name) VALUES ('reservations_utc_to_ar')"
+                ))
+                db.commit()
+                print("  OK reservations timezone")
+
         print("\nMigración completada. Reinicia el backend.")
     except Exception as e:
         db.rollback()
