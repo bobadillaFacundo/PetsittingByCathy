@@ -128,6 +128,75 @@ class TestVaccinesFrontendPayload:
 
 
 @pytest.mark.api
+class TestVaccineDocument:
+    def test_add_vaccine_with_document(self, client, auth_headers, seed, db, monkeypatch):
+        from src.models.models import VaccineCatalog, Vaccine
+
+        vc = VaccineCatalog(name="Séxtuple Doc")
+        db.add(vc)
+        db.commit()
+
+        monkeypatch.setattr(
+            "src.services.storage_service.upload_bytes",
+            lambda *a, **k: "https://example.com/vaccines/test.jpg",
+        )
+
+        res = client.post(
+            f"/animals/{seed['animal'].id}/vaccines/with-document",
+            data={
+                "vaccine_id": str(vc.id),
+                "date_administered": "2025-03-01",
+                "lot_number": "LOT-99",
+            },
+            files={"file": ("cert.jpg", b"fake-image", "image/jpeg")},
+            headers=auth_headers,
+        )
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert body["document_url"] == "https://example.com/vaccines/test.jpg"
+        assert body["lot_number"] == "LOT-99"
+
+        saved = db.query(Vaccine).filter(Vaccine.vaccine_id == vc.id).first()
+        assert saved is not None
+        assert saved.document_url == "https://example.com/vaccines/test.jpg"
+
+    def test_scan_vaccine_certificate(self, client, auth_headers, seed, db, monkeypatch):
+        from src.models.models import VaccineCatalog
+
+        vc = VaccineCatalog(name="Antirrábica Scan")
+        db.add(vc)
+        db.commit()
+
+        monkeypatch.setattr(
+            "src.services.vision_service.scan_vaccine_image",
+            lambda *a, **k: {
+                "vaccine_name": "Antirrábica Scan",
+                "lot_number": "ABC-1",
+                "date_administered": "2025-01-10",
+                "next_due_date": "2026-01-10",
+                "veterinarian_name": "Dr. Test",
+                "raw_text": "Antirrábica Lote ABC-1",
+                "method": "groq",
+            },
+        )
+        monkeypatch.setattr(
+            "src.services.vision_service.match_vaccine_catalog_id",
+            lambda name, catalog: vc.id if name else None,
+        )
+
+        res = client.post(
+            f"/animals/{seed['animal'].id}/vaccines/scan",
+            files={"file": ("cert.jpg", b"fake-image", "image/jpeg")},
+            headers=auth_headers,
+        )
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert body["vaccine_id"] == vc.id
+        assert body["lot_number"] == "ABC-1"
+        assert body["method"] == "groq"
+
+
+@pytest.mark.api
 class TestLabResultsPersistence:
     def test_add_and_list_lab_result(self, client, auth_headers, seed, db):
         from src.models.models import LaboratoryCatalog, LabResult

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from src.database.session import get_db
 from src.models.models import Animal, Species
@@ -458,22 +458,35 @@ def get_vaccines(animal_id: int, db: Session = Depends(get_db)):
         "lot_number": v.lot_number,
         "veterinarian_id": v.veterinarian_id,
         "veterinarian_name": v.veterinarian.name if v.veterinarian else None,
+        "document_url": v.document_url,
         "vaccine_catalog": {"id": v.vaccine_catalog.id, "name": v.vaccine_catalog.name} if v.vaccine_catalog else None,
     } for v in items]
 
-@router.post("/{animal_id}/vaccines")
-def add_vaccine(animal_id: int, data: dict, db: Session = Depends(get_db)):
+def _serialize_vaccine(v: Vaccine) -> dict:
+    return {
+        "id": v.id,
+        "vaccine_id": v.vaccine_id,
+        "date_administered": v.date_administered.isoformat() if v.date_administered else None,
+        "next_due_date": v.next_due_date.isoformat() if v.next_due_date else None,
+        "lot_number": v.lot_number,
+        "veterinarian_id": v.veterinarian_id,
+        "veterinarian_name": v.veterinarian.name if v.veterinarian else None,
+        "document_url": v.document_url,
+        "vaccine_catalog": {"id": v.vaccine_catalog.id, "name": v.vaccine_catalog.name} if v.vaccine_catalog else None,
+    }
+
+
+def _get_or_create_health_record(animal_id: int, db: Session) -> HealthRecord:
     record = db.query(HealthRecord).filter(HealthRecord.animal_id == animal_id).first()
     if not record:
         record = HealthRecord(animal_id=animal_id, creation_date=today_ar())
         db.add(record)
         db.commit()
         db.refresh(record)
+    return record
 
-    vaccine_id = _parse_optional_int(data.get("vaccine_id"))
-    if not vaccine_id:
-        raise HTTPException(status_code=400, detail="vaccine_id es obligatorio")
 
+def _resolve_veterinarian_id(data: dict, db: Session) -> Optional[int]:
     vet_id = _parse_optional_int(data.get("veterinarian_id"))
     if not vet_id and data.get("veterinarian_name"):
         vet_name = str(data["veterinarian_name"]).strip()
@@ -484,6 +497,17 @@ def add_vaccine(animal_id: int, data: dict, db: Session = Depends(get_db)):
                 db.add(vet)
                 db.flush()
             vet_id = vet.id
+    return vet_id
+
+@router.post("/{animal_id}/vaccines")
+def add_vaccine(animal_id: int, data: dict, db: Session = Depends(get_db)):
+    record = _get_or_create_health_record(animal_id, db)
+
+    vaccine_id = _parse_optional_int(data.get("vaccine_id"))
+    if not vaccine_id:
+        raise HTTPException(status_code=400, detail="vaccine_id es obligatorio")
+
+    vet_id = _resolve_veterinarian_id(data, db)
 
     vaccine = Vaccine(
         health_record_id=record.id,
@@ -492,22 +516,132 @@ def add_vaccine(animal_id: int, data: dict, db: Session = Depends(get_db)):
         next_due_date=_parse_date(data.get("next_due_date"), None),
         lot_number=(data.get("lot_number") or None),
         veterinarian_id=vet_id,
+        document_url=(data.get("document_url") or None),
     )
     db.add(vaccine)
     db.commit()
     db.refresh(vaccine)
+    vaccine = db.query(Vaccine).options(
+        joinedload(Vaccine.vaccine_catalog),
+        joinedload(Vaccine.veterinarian),
+    ).filter(Vaccine.id == vaccine.id).first()
+    return _serialize_vaccine(vaccine)
 
-    # Devolver el mismo formato que el GET (persistido y legible)
-    return {
-        "id": vaccine.id,
-        "vaccine_id": vaccine.vaccine_id,
-        "date_administered": vaccine.date_administered.isoformat() if vaccine.date_administered else None,
-        "next_due_date": vaccine.next_due_date.isoformat() if vaccine.next_due_date else None,
-        "lot_number": vaccine.lot_number,
-        "veterinarian_id": vaccine.veterinarian_id,
-        "veterinarian_name": None,
-        "vaccine_catalog": None,
+
+@router.post("/{animal_id}/vaccines/scan")
+async def scan_vaccine_certificate(
+    animal_id: int,
+    file: UploadFile = File(...),
+    engine: str = "auto",
+    db: Session = Depends(get_db),
+):
+    """Escanea una imagen de vacuna y devuelve campos detectados (sin guardar)."""
+    from src.services.vision_service import scan_vaccine_image, match_vaccine_catalog_id
+
+    animal = db.query(Animal).filter(Animal.id == animal_id).first()
+    if not animal:
+        raise HTTPException(status_code=404, detail="Animal no encontrado")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="El archivo está vacío")
+
+    catalog = db.query(VaccineCatalog).all()
+    catalog_list = [{"id": c.id, "name": c.name} for c in catalog]
+    catalog_names = [c.name for c in catalog]
+
+    try:
+        result = scan_vaccine_image(
+            content,
+            filename=file.filename or "vaccine.jpg",
+            engine=engine,
+            catalog_names=catalog_names,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Error al analizar la imagen: {e}")
+
+    matched_id = match_vaccine_catalog_id(result.get("vaccine_name"), catalog_list)
+    result["vaccine_id"] = matched_id
+    return result
+
+
+@router.post("/{animal_id}/vaccines/with-document")
+async def add_vaccine_with_document(
+    animal_id: int,
+    file: UploadFile = File(...),
+    vaccine_id: int = Form(...),
+    date_administered: str = Form(None),
+    next_due_date: str = Form(None),
+    lot_number: str = Form(None),
+    veterinarian_id: str = Form(None),
+    veterinarian_name: str = Form(None),
+    db: Session = Depends(get_db),
+):
+    """Sube la foto del certificado a Storage y registra la vacuna con document_url."""
+    from src.services.storage_service import upload_bytes
+
+    if not vaccine_id:
+        raise HTTPException(status_code=400, detail="vaccine_id es obligatorio")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="El archivo está vacío")
+
+    document_url = upload_bytes(
+        content,
+        folder="vaccines",
+        original_filename=file.filename,
+        content_type=file.content_type,
+    )
+
+    record = _get_or_create_health_record(animal_id, db)
+    data = {
+        "veterinarian_id": veterinarian_id,
+        "veterinarian_name": veterinarian_name,
     }
+    vet_id = _resolve_veterinarian_id(data, db)
+
+    vaccine = Vaccine(
+        health_record_id=record.id,
+        vaccine_id=int(vaccine_id),
+        date_administered=_parse_date(date_administered, today_ar()),
+        next_due_date=_parse_date(next_due_date, None),
+        lot_number=(lot_number or None),
+        veterinarian_id=vet_id,
+        document_url=document_url,
+    )
+    db.add(vaccine)
+    db.commit()
+    db.refresh(vaccine)
+    vaccine = db.query(Vaccine).options(
+        joinedload(Vaccine.vaccine_catalog),
+        joinedload(Vaccine.veterinarian),
+    ).filter(Vaccine.id == vaccine.id).first()
+    return _serialize_vaccine(vaccine)
+
+
+@router.delete("/{animal_id}/vaccines/{vaccine_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_vaccine(animal_id: int, vaccine_id: int, db: Session = Depends(get_db), current_admin=Depends(get_current_user)):
+    record = db.query(HealthRecord).filter(HealthRecord.animal_id == animal_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Vacuna no encontrada")
+
+    vaccine = db.query(Vaccine).filter(
+        Vaccine.id == vaccine_id,
+        Vaccine.health_record_id == record.id,
+    ).first()
+    if not vaccine:
+        raise HTTPException(status_code=404, detail="Vacuna no encontrada")
+
+    if vaccine.document_url:
+        from src.services.storage_service import delete_by_url
+        delete_by_url(vaccine.document_url)
+
+    db.delete(vaccine)
+    db.commit()
+    return None
 
 def _serialize_deworming(item):
     return {
@@ -652,8 +786,6 @@ def delete_lab_result(animal_id: int, lab_id: int, db: Session = Depends(get_db)
     db.delete(db_lab)
     db.commit()
     return None
-
-from fastapi import UploadFile, File
 
 @router.post("/{animal_id}/lab_results/upload")
 async def upload_lab_result(

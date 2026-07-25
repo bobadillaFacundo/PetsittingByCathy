@@ -40,6 +40,16 @@ services:
         value: "1"            # en producción siempre Groq (no hay vLLM local)
       - key: GROQ_MODEL
         value: llama-3.1-8b-instant
+      - key: GROQ_VISION_MODEL
+        value: qwen/qwen3.6-27b
+
+      # ── Escaneo de vacunas (fallback Ollama/OCR opcional) ────────────────
+      - key: OLLAMA_BASE_URL
+        sync: false
+      - key: OLLAMA_VISION_MODEL
+        value: moondream
+      - key: OCR_SERVICE_URL
+        sync: false
 
       # ── Qdrant Cloud (vectores / RAG) ─────────────────────────────────────
       - key: QDRANT_URL

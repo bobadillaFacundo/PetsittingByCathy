@@ -228,6 +228,7 @@ class Vaccine(Base):
     next_due_date = Column(Date, nullable=True)
     lot_number = Column(String, nullable=True)
     veterinarian_id = Column(Integer, ForeignKey("veterinarians.id"), nullable=True)
+    document_url = Column(String, nullable=True)
 
     health_record = relationship("HealthRecord", back_populates="vaccines")
     vaccine_catalog = relationship("VaccineCatalog")

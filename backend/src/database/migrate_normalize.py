@@ -327,6 +327,13 @@ def migrate():
             run_ddl("ALTER TABLE animals ADD COLUMN IF NOT EXISTS weight_kg DOUBLE PRECISION")
             print("  OK animals.weight_kg")
 
+        # --- Vacunas: foto/certificado asociado ---
+        inspector = inspect(engine)
+        if table_exists(inspector, "vaccines") and not column_exists(inspector, "vaccines", "document_url"):
+            print("Agregando vaccines.document_url...")
+            run_ddl("ALTER TABLE vaccines ADD COLUMN IF NOT EXISTS document_url VARCHAR")
+            print("  OK vaccines.document_url")
+
         from src.services.tag_helpers import ensure_optional_tag_sets
         print("Verificando conjuntos opcionales (Peso)...")
         ensure_optional_tag_sets(db)
