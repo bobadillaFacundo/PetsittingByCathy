@@ -29,11 +29,15 @@
       "destination": "https://petsittingbycathy.onrender.com/:path*"
     },
     {
+      "source": "/health/:path*",
+      "destination": "https://petsittingbycathy.onrender.com/health/:path*"
+    },
+    {
       "source": "/uploads/:path*",
       "destination": "https://petsittingbycathy.onrender.com/uploads/:path*"
     },
     {
-      "source": "/((?!api|uploads|assets|.*\\..*).*)",
+      "source": "/((?!api|uploads|health|assets|.*\\..*).*)",
       "destination": "/index.html"
     }
   ]
