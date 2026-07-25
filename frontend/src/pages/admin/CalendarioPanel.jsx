@@ -582,74 +582,76 @@ export default function CalendarioPanel() {
                       </select>
                     </div>
 
-                    {!editingId ? (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Pacientes (opcional)</label>
-                        <div className="border border-gray-200 rounded-lg p-3 max-h-40 overflow-y-auto bg-gray-50">
-                          <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-200">
-                            <input
-                              type="checkbox"
-                              id="select-all-other"
-                              checked={
-                                selectableAnimals.filter(a => !selectedSpecies || String(a.species_id) === selectedSpecies).length > 0 &&
-                                selectedAnimalIds.length === selectableAnimals.filter(a => !selectedSpecies || String(a.species_id) === selectedSpecies).length
-                              }
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  const ids = selectableAnimals
-                                    .filter(a => !selectedSpecies || String(a.species_id) === selectedSpecies)
-                                    .map(a => a.id);
-                                  setSelectedAnimalIds(ids);
-                                } else {
-                                  setSelectedAnimalIds([]);
+                    {selectedSpecies && (
+                      !editingId ? (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Pacientes (opcional)</label>
+                          <div className="border border-gray-200 rounded-lg p-3 max-h-40 overflow-y-auto bg-gray-50">
+                            <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-200">
+                              <input
+                                type="checkbox"
+                                id="select-all-other"
+                                checked={
+                                  selectableAnimals.filter(a => String(a.species_id) === selectedSpecies).length > 0 &&
+                                  selectedAnimalIds.length === selectableAnimals.filter(a => String(a.species_id) === selectedSpecies).length
                                 }
-                              }}
-                            />
-                            <label htmlFor="select-all-other" className="text-sm font-bold text-gray-800">Seleccionar todos</label>
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    const ids = selectableAnimals
+                                      .filter(a => String(a.species_id) === selectedSpecies)
+                                      .map(a => a.id);
+                                    setSelectedAnimalIds(ids);
+                                  } else {
+                                    setSelectedAnimalIds([]);
+                                  }
+                                }}
+                              />
+                              <label htmlFor="select-all-other" className="text-sm font-bold text-gray-800">Seleccionar todos</label>
+                            </div>
+                            {selectableAnimals
+                              .filter(a => String(a.species_id) === selectedSpecies)
+                              .map(a => (
+                                <div key={a.id} className="flex items-center gap-2 mb-1.5 last:mb-0">
+                                  <input
+                                    type="checkbox"
+                                    id={`animal-other-${a.id}`}
+                                    checked={selectedAnimalIds.includes(a.id)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setSelectedAnimalIds(prev => [...prev, a.id]);
+                                      } else {
+                                        setSelectedAnimalIds(prev => prev.filter(id => id !== a.id));
+                                      }
+                                    }}
+                                  />
+                                  <label htmlFor={`animal-other-${a.id}`} className="text-sm text-gray-700">
+                                    {a.name}
+                                  </label>
+                                </div>
+                              ))}
+                            {selectableAnimals.filter(a => String(a.species_id) === selectedSpecies).length === 0 && (
+                              <p className="text-xs text-gray-500 italic">No hay pacientes para esta especie.</p>
+                            )}
                           </div>
-                          {selectableAnimals
-                            .filter(a => !selectedSpecies || String(a.species_id) === selectedSpecies)
-                            .map(a => (
-                              <div key={a.id} className="flex items-center gap-2 mb-1.5 last:mb-0">
-                                <input
-                                  type="checkbox"
-                                  id={`animal-other-${a.id}`}
-                                  checked={selectedAnimalIds.includes(a.id)}
-                                  onChange={(e) => {
-                                    if (e.target.checked) {
-                                      setSelectedAnimalIds(prev => [...prev, a.id]);
-                                    } else {
-                                      setSelectedAnimalIds(prev => prev.filter(id => id !== a.id));
-                                    }
-                                  }}
-                                />
-                                <label htmlFor={`animal-other-${a.id}`} className="text-sm text-gray-700">
-                                  {a.name}
-                                </label>
-                              </div>
-                            ))}
-                          {selectableAnimals.filter(a => !selectedSpecies || String(a.species_id) === selectedSpecies).length === 0 && (
-                            <p className="text-xs text-gray-500 italic">No hay pacientes para esta especie.</p>
-                          )}
                         </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Paciente (opcional)</label>
-                        <select
-                          className="w-full border border-gray-300 rounded-lg p-2 bg-gray-50 text-gray-800 disabled:opacity-70 disabled:bg-gray-100"
-                          value={formData.animal_id}
-                          onChange={(e) => setFormData({ ...formData, animal_id: e.target.value })}
-                          disabled={!isAdmin}
-                        >
-                          <option value="">Ningún paciente</option>
-                          {selectableAnimals
-                            .filter(a => !selectedSpecies || String(a.species_id) === selectedSpecies)
-                            .map(a => (
-                              <option key={a.id} value={a.id}>{a.name}</option>
-                            ))}
-                        </select>
-                      </div>
+                      ) : (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Paciente (opcional)</label>
+                          <select
+                            className="w-full border border-gray-300 rounded-lg p-2 bg-gray-50 text-gray-800 disabled:opacity-70 disabled:bg-gray-100"
+                            value={formData.animal_id}
+                            onChange={(e) => setFormData({ ...formData, animal_id: e.target.value })}
+                            disabled={!isAdmin}
+                          >
+                            <option value="">Ningún paciente</option>
+                            {selectableAnimals
+                              .filter(a => String(a.species_id) === selectedSpecies)
+                              .map(a => (
+                                <option key={a.id} value={a.id}>{a.name}</option>
+                              ))}
+                          </select>
+                        </div>
+                      )
                     )}
                   </div>
                 ) : !editingId && isServiceEvent(formData.status) ? (
