@@ -478,24 +478,49 @@ def extract_text_ocr(image_bytes: bytes, filename: str = "image.jpg", lang: str 
     return _ocr_text_from_response(resp.json())
 
 
-def extract_text_moondream(image_bytes: bytes, filename: str = "scan.jpg") -> str:
-    """Describe el contenido de la imagen con Moondream vía Ollama."""
-    prepared_bytes, _ = _prepare_image_for_vision(
-        image_bytes,
-        filename=filename,
-        max_side=OLLAMA_MAX_IMAGE_SIDE,
-    )
-    prompt = (
-        "Transcribí TODO el texto visible de etiquetas/stickers de vacunas veterinarias en la imagen. "
-        "Incluí especialmente recuadros con N. Lote, F. Elab, F. Cad, nombres comerciales (Vanguard, Nobivac, etc.) "
-        "y sellos SENASA o firmas de veterinario. Responde en español, línea por línea."
-    )
-    b64 = _image_to_b64(prepared_bytes)
-    timeout = (5, _effective_ollama_timeout())
-    options = {"num_predict": 600, "temperature": 0.1}
-    last_error = ""
+def _moondream_text_useful(text: str) -> bool:
+    """Filtra respuestas basura de Moondream (cajas, JSON vacío, solo números)."""
+    t = (text or "").strip()
+    if len(t) < 10:
+        return False
+    if re.match(r"^\[[\d.,\s]+\]$", t):
+        return False
+    if re.match(r"^[\d\.\[\],\s]+$", t):
+        return False
+    if not re.search(r"[A-Za-zÁÉÍÓÚáéíóú]{2,}", t):
+        return False
+    return True
 
+
+_MOONDREAM_OCR_PROMPTS = [
+    (
+        "What is ALL the text printed on the vaccine labels and stickers in this image? "
+        "Transcribe every word, number, lot code and date exactly as shown. "
+        "Reply in Spanish as plain text lines only. Do NOT return coordinates, JSON or bounding boxes."
+    ),
+    (
+        "Describe this image in detail. List every line of text visible on veterinary "
+        "vaccine stickers (lot numbers, expiry dates, product names like Vanguard or Nobivac)."
+    ),
+    (
+        "OCR: copy all visible text from the pharmaceutical labels in this photo, "
+        "including N. Lote, F. Cad, F. Elab and brand names. Spanish labels."
+    ),
+]
+
+
+def _ollama_vision_post(prompt: str, b64: str, timeout: tuple[int, int]) -> str:
+    options = {"num_predict": 800, "temperature": 0.1}
     attempts: list[tuple[str, dict]] = [
+        (
+            "chat",
+            {
+                "model": OLLAMA_VISION_MODEL,
+                "messages": [{"role": "user", "content": prompt, "images": [b64]}],
+                "stream": False,
+                "options": options,
+            },
+        ),
         (
             "generate",
             {
@@ -506,17 +531,8 @@ def extract_text_moondream(image_bytes: bytes, filename: str = "scan.jpg") -> st
                 "options": options,
             },
         ),
-        (
-            "chat",
-            {
-                "model": OLLAMA_VISION_MODEL,
-                "messages": [{"role": "user", "content": prompt, "images": [b64]}],
-                "stream": False,
-                "options": options,
-            },
-        ),
     ]
-
+    last_error = ""
     for endpoint, payload in attempts:
         try:
             resp = requests.post(
@@ -524,31 +540,44 @@ def extract_text_moondream(image_bytes: bytes, filename: str = "scan.jpg") -> st
                 json=payload,
                 timeout=timeout,
             )
-        except requests.Timeout as e:
-            last_error = f"Ollama tardó más de {_effective_ollama_timeout()}s"
-            logger.warning("Ollama %s timeout: %s", endpoint, e)
+        except requests.Timeout:
+            last_error = f"timeout {_effective_ollama_timeout()}s"
             continue
         except requests.RequestException as e:
             last_error = str(e)
-            logger.warning("Ollama %s red: %s", endpoint, e)
             continue
-
         if resp.status_code != 200:
-            last_error = f"HTTP {resp.status_code}: {resp.text[:300]}"
-            logger.warning("Ollama %s respondió %s", endpoint, last_error)
+            last_error = f"HTTP {resp.status_code}: {resp.text[:200]}"
             continue
-
         body = resp.json()
         if endpoint == "chat":
             text = (body.get("message") or {}).get("content") or ""
         else:
             text = body.get("response") or ""
         text = text.strip()
-        if text:
+        if _moondream_text_useful(text):
             return text
-        last_error = "respuesta vacía"
+        last_error = f"respuesta no útil: {text[:120]!r}"
+    raise RuntimeError(last_error or "Ollama no devolvió texto legible")
 
-    raise RuntimeError(last_error or "Ollama no devolvió texto")
+
+def extract_text_moondream(image_bytes: bytes, filename: str = "scan.jpg") -> str:
+    """Transcribe etiquetas con Moondream vía Ollama (varios prompts anti-coordenadas)."""
+    prepared_bytes, _ = _prepare_image_for_vision(
+        image_bytes,
+        filename=filename,
+        max_side=max(OLLAMA_MAX_IMAGE_SIDE, 1024),
+    )
+    b64 = _image_to_b64(prepared_bytes)
+    timeout = (5, _effective_ollama_timeout())
+    errors: list[str] = []
+    for prompt in _MOONDREAM_OCR_PROMPTS:
+        try:
+            return _ollama_vision_post(prompt, b64, timeout)
+        except RuntimeError as e:
+            errors.append(str(e))
+            logger.warning("Moondream prompt falló: %s", e)
+    raise RuntimeError(errors[-1] if errors else "Ollama no devolvió texto legible")
 
 
 def _call_groq(
@@ -996,7 +1025,7 @@ def _scan_with_auto_fallback(
                 if errors:
                     fields["fallback_from"] = errors
                 return fields
-            if raw_text.strip():
+            if raw_text.strip() and _moondream_text_useful(raw_text):
                 return _scan_result(
                     [],
                     raw_text,
