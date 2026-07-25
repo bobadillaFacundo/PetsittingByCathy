@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
+from pydantic import ValidationError
+import traceback
 from src.database.session import get_db
 from src.models.models import Reservation, Animal
 from src.dtos.reservation_dto import ReservationCreate, ReservationUpdate, ReservationResponse
@@ -50,11 +52,30 @@ def _validate_reservation_animal(db: Session, animal_id: int, status: str):
 
 
 def _get_reservation_query(db: Session):
-    from src.models.models import Species
     return db.query(Reservation).options(
-        joinedload(Reservation.animal),
-        joinedload(Reservation.species),
+        selectinload(Reservation.animal),
+        selectinload(Reservation.species),
     )
+
+
+def _reservation_to_response(db: Session, reservation_id: int) -> ReservationResponse:
+    row = _get_reservation_query(db).filter(Reservation.id == reservation_id).first()
+    if row is None:
+        raise HTTPException(status_code=500, detail="No se pudo leer la reserva guardada")
+    try:
+        return ReservationResponse.model_validate(row)
+    except ValidationError:
+        traceback.print_exc()
+        return ReservationResponse(
+            id=row.id,
+            animal_id=row.animal_id,
+            species_id=row.species_id,
+            start_date=row.start_date,
+            end_date=row.end_date,
+            status=row.status,
+            notes=row.notes,
+            belongings_photos=row.belongings_photos,
+        )
 
 
 def _validate_reservation_data(db: Session, data: dict, *, is_update: bool = False) -> None:
@@ -109,8 +130,11 @@ def create_reservation(reservation: ReservationCreate, db: Session = Depends(get
                 ),
             ) from exc
         raise HTTPException(status_code=400, detail="No se pudo guardar la reserva. Verificá los datos.") from exc
-    db.refresh(db_reservation)
-    return _get_reservation_query(db).filter(Reservation.id == db_reservation.id).first()
+    except Exception as exc:
+        db.rollback()
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Error interno al guardar la reserva") from exc
+    return _reservation_to_response(db, db_reservation.id)
 
 
 @router.get("/", response_model=List[ReservationResponse])
@@ -138,7 +162,7 @@ def update_reservation(reservation_id: int, reservation_update: ReservationUpdat
 
     db.commit()
     db.refresh(db_reservation)
-    return _get_reservation_query(db).filter(Reservation.id == reservation_id).first()
+    return _reservation_to_response(db, reservation_id)
 
 
 @router.delete("/{reservation_id}", status_code=status.HTTP_204_NO_CONTENT)

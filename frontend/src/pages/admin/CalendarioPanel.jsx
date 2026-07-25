@@ -308,8 +308,17 @@ export default function CalendarioPanel() {
           body: JSON.stringify(payload),
         });
         if (!res.ok) {
+          let errMsg = "Error al guardar reserva";
           const errText = await res.text();
-          alert(errText || "Error al guardar reserva");
+          try {
+            const errJson = JSON.parse(errText);
+            errMsg = errJson.detail
+              ? (typeof errJson.detail === "string" ? errJson.detail : JSON.stringify(errJson.detail))
+              : errMsg;
+          } catch {
+            if (errText && !errText.startsWith("<!")) errMsg = errText;
+          }
+          alert(errMsg);
           return null;
         }
         return res.json();

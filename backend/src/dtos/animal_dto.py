@@ -1,4 +1,4 @@
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, model_validator, field_validator
 from typing import Optional, List
 from datetime import date, datetime
 
@@ -74,6 +74,17 @@ class AnimalUpdate(BaseModel):
 
 class AnimalResponse(AnimalBase):
     id: int
+
+    _BOOL_FIELDS = (
+        "is_castrated", "is_rescue", "is_simil_breed", "is_blind", "is_deaf",
+        "no_smell", "has_neurological", "has_involuntary_movements",
+        "is_active", "is_daycare",
+    )
+
+    @field_validator(*_BOOL_FIELDS, mode="before")
+    @classmethod
+    def null_bool_to_false(cls, v):
+        return False if v is None else v
 
     class Config:
         from_attributes = True
