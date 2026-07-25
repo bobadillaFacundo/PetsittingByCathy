@@ -1,8 +1,10 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import os
+import traceback
 from src.timezone_ar import force_process_timezone
 from src.routes import animal_routes, report_routes, chat_routes, dashboard_routes, auth_routes, catalog_routes, user_routes, reservation_routes, calendar_routes
 
@@ -15,11 +17,21 @@ async def lifespan(app: FastAPI):
         from src.database.migrate_normalize import migrate
         migrate()
     except Exception as e:
-        print(f"Advertencia al migrar BD al iniciar: {e}")
+        traceback.print_exc()
+        print(f"ERROR al migrar BD al iniciar: {e}")
     yield
 
 
 app = FastAPI(title="Asistente Veterinario API", version="1.0.0", lifespan=lifespan)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    from fastapi import HTTPException as FastAPIHTTPException
+    if isinstance(exc, FastAPIHTTPException):
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    traceback.print_exc()
+    return JSONResponse(status_code=500, content={"detail": "Error interno del servidor"})
 
 app.add_middleware(
     CORSMiddleware,

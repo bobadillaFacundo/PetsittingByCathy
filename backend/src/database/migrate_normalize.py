@@ -11,6 +11,12 @@ from src.models import models
 from src.services.tag_helpers import parse_csv_values, set_tag_variants, set_color_keywords, set_dictionary_synonyms
 
 
+def run_ddl(sql: str) -> None:
+    """DDL con autocommit (necesario con pgBouncer / Supabase pooler)."""
+    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        conn.execute(text(sql))
+
+
 def column_exists(inspector, table: str, column: str) -> bool:
     if table not in inspector.get_table_names():
         return False
@@ -19,6 +25,63 @@ def column_exists(inspector, table: str, column: str) -> bool:
 
 def table_exists(inspector, table: str) -> bool:
     return table in inspector.get_table_names()
+
+
+def _ensure_schema_migrations_table(inspector) -> None:
+    if not table_exists(inspector, "schema_migrations"):
+        run_ddl(
+            "CREATE TABLE IF NOT EXISTS schema_migrations ("
+            "name VARCHAR(255) PRIMARY KEY, "
+            "applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+        )
+
+
+def _migration_applied(db, name: str) -> bool:
+    row = db.execute(
+        text("SELECT 1 FROM schema_migrations WHERE name = :name"),
+        {"name": name},
+    ).fetchone()
+    return row is not None
+
+
+def _mark_migration_applied(db, name: str) -> None:
+    db.execute(
+        text("INSERT INTO schema_migrations (name) VALUES (:name) ON CONFLICT (name) DO NOTHING"),
+        {"name": name},
+    )
+    db.commit()
+
+
+def _migrate_reservations_for_other_activities(db, inspector) -> None:
+    """species_id + animal_id nullable para Otras actividades sin paciente."""
+    if not table_exists(inspector, "reservations"):
+        return
+
+    _ensure_schema_migrations_table(inspector)
+    inspector = inspect(engine)
+
+    if not column_exists(inspector, "reservations", "species_id"):
+        print("Agregando reservations.species_id...")
+        run_ddl(
+            "ALTER TABLE reservations "
+            "ADD COLUMN IF NOT EXISTS species_id INTEGER REFERENCES species(id)"
+        )
+        print("  OK reservations.species_id")
+
+    inspector = inspect(engine)
+    nullable = False
+    for col in inspector.get_columns("reservations"):
+        if col["name"] == "animal_id":
+            nullable = col.get("nullable", False)
+            break
+
+    if not nullable and not _migration_applied(db, "reservations_nullable_animal"):
+        print("Permitiendo animal_id NULL en reservations...")
+        run_ddl("ALTER TABLE reservations ALTER COLUMN animal_id DROP NOT NULL")
+        _mark_migration_applied(db, "reservations_nullable_animal")
+        print("  OK reservations.animal_id nullable")
+    elif nullable and not _migration_applied(db, "reservations_nullable_animal"):
+        _mark_migration_applied(db, "reservations_nullable_animal")
 
 
 def migrate():
@@ -250,30 +313,7 @@ def migrate():
 
         # --- Reservas: species_id y animal_id opcional (Otras actividades) ---
         inspector = inspect(engine)
-        if table_exists(inspector, "reservations"):
-            if not column_exists(inspector, "reservations", "species_id"):
-                print("Agregando reservations.species_id...")
-                db.execute(text(
-                    "ALTER TABLE reservations ADD COLUMN species_id INTEGER REFERENCES species(id)"
-                ))
-                db.commit()
-                print("  OK reservations.species_id")
-            if not db.execute(text(
-                "SELECT 1 FROM schema_migrations WHERE name = 'reservations_nullable_animal'"
-            )).fetchone():
-                if not table_exists(inspector, "schema_migrations"):
-                    db.execute(text(
-                        "CREATE TABLE IF NOT EXISTS schema_migrations ("
-                        "name VARCHAR(255) PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
-                    ))
-                    db.commit()
-                print("Permitiendo animal_id NULL en reservations...")
-                db.execute(text("ALTER TABLE reservations ALTER COLUMN animal_id DROP NOT NULL"))
-                db.execute(text(
-                    "INSERT INTO schema_migrations (name) VALUES ('reservations_nullable_animal')"
-                ))
-                db.commit()
-                print("  OK reservations.animal_id nullable")
+        _migrate_reservations_for_other_activities(db, inspector)
 
         print("\nMigración completada. Reinicia el backend.")
     except Exception as e:

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.exc import IntegrityError
 from src.database.session import get_db
 from src.models.models import Reservation, Animal
 from src.dtos.reservation_dto import ReservationCreate, ReservationUpdate, ReservationResponse
@@ -83,12 +84,24 @@ def _normalize_reservation_payload(data: dict) -> dict:
 
 @router.post("/", response_model=ReservationResponse)
 def create_reservation(reservation: ReservationCreate, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
-    status_val = reservation.status or "Pendiente"
     data = _normalize_reservation_payload(reservation.model_dump())
     _validate_reservation_data(db, data)
     db_reservation = Reservation(**data)
     db.add(db_reservation)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        err = str(getattr(exc, "orig", exc)).lower()
+        if "animal_id" in err or "null value" in err or "not-null" in err:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "No se pudo guardar la actividad sin mascota. "
+                    "Reiniciá el backend en Render para aplicar la migración de base de datos."
+                ),
+            ) from exc
+        raise HTTPException(status_code=400, detail="No se pudo guardar la reserva. Verificá los datos.") from exc
     db.refresh(db_reservation)
     return _get_reservation_query(db).filter(Reservation.id == db_reservation.id).first()
 
