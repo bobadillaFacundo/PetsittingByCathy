@@ -241,13 +241,13 @@ export default function LibretaTab({ animalId, token }) {
 
           <div className="bg-white border border-dashed border-blue-200 rounded-lg p-3 space-y-2">
             <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
-              <Camera size={14} /> Foto de libreta / certificado (opcional)
+              <Camera size={14} /> Foto o PDF de libreta (se convierte automáticamente)
             </label>
             <div className="flex flex-col sm:flex-row gap-2">
               <input
                 type="file"
                 id="vaccineFileInput"
-                accept="image/jpeg,image/png,image/webp,.pdf"
+                accept="image/*,.pdf,.heic,.heif,application/pdf"
                 onChange={(e) => {
                   setSelectedFile(e.target.files?.[0] || null);
                   setScanPreview(null);
@@ -263,7 +263,12 @@ export default function LibretaTab({ animalId, token }) {
                 <ScanLine size={16} /> {scanning ? 'Analizando...' : 'Escanear'}
               </button>
             </div>
-            {selectedFile && <p className="text-xs text-gray-500">Archivo: {selectedFile.name}</p>}
+            {selectedFile && (
+              <p className="text-xs text-gray-500">
+                Archivo: {selectedFile.name}
+                {' '}(HEIC, PDF y otros formatos se convierten solos al escanear)
+              </p>
+            )}
             {scanPreview?.count > 1 && (
               <p className="text-xs text-indigo-700 font-medium">
                 {scanPreview.count} vacunas detectadas en la imagen

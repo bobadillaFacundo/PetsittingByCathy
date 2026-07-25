@@ -76,39 +76,8 @@ def _is_heic(image_bytes: bytes, filename: str = "") -> bool:
     return False
 
 
-def _prepare_image_for_vision(image_bytes: bytes, filename: str = "image.jpg") -> tuple[bytes, str]:
-    """
-    Normaliza la imagen a JPEG razonable para Groq (HEIC, PNG grande, etc.).
-  Devuelve (bytes, filename).
-    """
-    if _is_pdf(image_bytes, filename):
-        raise ValueError("Para PDF usá escaneo automático; si falla, subí una foto JPG del certificado.")
-
-    try:
-        from PIL import Image
-    except ImportError:
-        if _is_heic(image_bytes, filename):
-            raise ValueError(
-                "Formato HEIC no soportado en el servidor. Exportá la foto como JPG o PNG."
-            )
-        if len(image_bytes) > GROQ_MAX_IMAGE_BYTES:
-            raise ValueError("La imagen supera 18 MB. Usá una foto más liviana.")
-        return image_bytes, filename or "image.jpg"
-
-    try:
-        import pillow_heif
-        pillow_heif.register_heif_opener()
-    except ImportError:
-        pass
-
-    try:
-        img = Image.open(io.BytesIO(image_bytes))
-        img.load()
-    except Exception as e:
-        raise ValueError(
-            f"No se pudo leer la imagen ({filename or 'archivo'}). "
-            f"Usá JPG o PNG. Detalle: {e}"
-        ) from e
+def _pil_to_jpeg_bytes(img) -> bytes:
+    from PIL import Image
 
     if img.mode not in ("RGB", "L"):
         img = img.convert("RGB")
@@ -121,7 +90,6 @@ def _prepare_image_for_vision(image_bytes: bytes, filename: str = "image.jpg") -
         ratio = max_side / max(w, h)
         img = img.resize((int(w * ratio), int(h * ratio)), Image.Resampling.LANCZOS)
 
-    out = io.BytesIO()
     quality = 88
     while quality >= 55:
         out = io.BytesIO()
@@ -132,8 +100,82 @@ def _prepare_image_for_vision(image_bytes: bytes, filename: str = "image.jpg") -
 
     data = out.getvalue()
     if len(data) > GROQ_MAX_IMAGE_BYTES:
-        raise ValueError("La imagen es demasiado grande incluso comprimida. Probá con menor resolución.")
-    return data, "scan.jpg"
+        raise ValueError("La imagen es demasiado grande incluso comprimida.")
+    return data
+
+
+def _register_heif_opener() -> None:
+    try:
+        import pillow_heif
+        pillow_heif.register_heif_opener()
+    except ImportError:
+        pass
+
+
+def _pdf_pages_to_jpeg_list(pdf_bytes: bytes, max_pages: int = 8) -> list[bytes]:
+    """Convierte cada página del PDF a JPEG (para escaneos sin texto)."""
+    try:
+        import fitz
+    except ImportError as e:
+        raise ValueError("No se pudo procesar el PDF en el servidor.") from e
+
+    images: list[bytes] = []
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    try:
+        page_count = min(len(doc), max_pages)
+        for i in range(page_count):
+            page = doc[i]
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
+            images.append(pix.tobytes("jpeg"))
+    finally:
+        doc.close()
+
+    if not images:
+        raise ValueError("El PDF está vacío o no se pudo convertir.")
+    return images
+
+
+def _prepare_image_for_vision(image_bytes: bytes, filename: str = "image.jpg") -> tuple[bytes, str]:
+    """Convierte HEIC/PNG/WebP/etc. a JPEG optimizado para Groq."""
+    if _is_pdf(image_bytes, filename):
+        pages = _pdf_pages_to_jpeg_list(image_bytes, max_pages=1)
+        return pages[0], "scan.jpg"
+
+    try:
+        from PIL import Image
+    except ImportError:
+        if len(image_bytes) > GROQ_MAX_IMAGE_BYTES:
+            raise ValueError("La imagen supera 18 MB. Usá una foto más liviana.")
+        return image_bytes, filename or "image.jpg"
+
+    _register_heif_opener()
+
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+        img.load()
+    except Exception as e:
+        raise ValueError(
+            f"No se pudo leer el archivo ({filename or 'imagen'}). "
+            f"El servidor intentó convertirlo automáticamente. Detalle: {e}"
+        ) from e
+
+    return _pil_to_jpeg_bytes(img), "scan.jpg"
+
+
+def prepare_file_for_storage(
+    file_bytes: bytes,
+    filename: str = "cert.jpg",
+    content_type: Optional[str] = None,
+) -> tuple[bytes, str, str]:
+    """Convierte HEIC/PNG/etc. a JPEG para Storage; PDF se conserva."""
+    if _is_pdf(file_bytes, filename):
+        return file_bytes, filename or "certificado.pdf", content_type or "application/pdf"
+    try:
+        jpeg_bytes, _ = _prepare_image_for_vision(file_bytes, filename)
+        base = (filename or "cert").rsplit(".", 1)[0]
+        return jpeg_bytes, f"{base}.jpg", "image/jpeg"
+    except Exception:
+        return file_bytes, filename or "cert.jpg", content_type or "application/octet-stream"
 
 
 def _catalog_hint(catalog_names: Optional[list[str]], limit: int = 40) -> str:
@@ -349,9 +391,13 @@ def extract_fields_groq_vision(
     image_bytes: bytes,
     filename: str = "image.jpg",
     catalog_names: Optional[list[str]] = None,
+    already_prepared: bool = False,
 ) -> dict[str, Any]:
     """Analiza la imagen directamente con Groq Vision (qwen/qwen3.6-27b)."""
-    prepared_bytes, _prepared_name = _prepare_image_for_vision(image_bytes, filename)
+    if already_prepared:
+        prepared_bytes = image_bytes
+    else:
+        prepared_bytes, _ = _prepare_image_for_vision(image_bytes, filename)
     catalog_hint = _catalog_hint(catalog_names)
 
     data_url = f"data:image/jpeg;base64,{_image_to_b64(prepared_bytes)}"
@@ -369,7 +415,8 @@ def extract_fields_groq_vision(
     vaccines = _fields_list_from_parsed(parsed, content)
     if not vaccines:
         raise ValueError(
-            "No se detectaron vacunas en la imagen. Probá con mejor luz, más cerca del texto, o JPG/PNG nítido."
+            "No se detectaron vacunas en la imagen. El archivo fue convertido automáticamente; "
+            "probá con mejor luz o una foto más nítida."
         )
     return _scan_result(vaccines, content, "groq")
 
@@ -477,20 +524,61 @@ Texto extraído:
     return _scan_result(vaccines, raw_text, "text")
 
 
+def _merge_vaccine_lists(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Une vacunas de varias páginas evitando duplicados obvios."""
+    merged: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for result in results:
+        for item in result.get("vaccines") or []:
+            key = "|".join([
+                str(item.get("vaccine_name") or "").lower(),
+                str(item.get("lot_number") or "").lower(),
+                str(item.get("date_administered") or ""),
+            ])
+            if key in seen and key != "||":
+                continue
+            seen.add(key)
+            merged.append(item)
+    return merged
+
+
 def _scan_pdf(
     pdf_bytes: bytes,
     catalog_names: Optional[list[str]] = None,
 ) -> dict[str, Any]:
     raw_text = _extract_text_pdf(pdf_bytes)
-    if not raw_text.strip():
+    if raw_text.strip():
+        fields = parse_vaccine_fields(raw_text, catalog_names=catalog_names)
+        if fields.get("vaccines"):
+            fields["method"] = "pdf-text"
+            return fields
+
+    logger.info("PDF sin texto extraíble; convirtiendo páginas a imagen para visión...")
+    page_images = _pdf_pages_to_jpeg_list(pdf_bytes)
+    page_results: list[dict[str, Any]] = []
+    raw_parts: list[str] = []
+
+    for i, page_jpeg in enumerate(page_images):
+        try:
+            result = extract_fields_groq_vision(
+                page_jpeg,
+                filename=f"page-{i + 1}.jpg",
+                catalog_names=catalog_names,
+                already_prepared=True,
+            )
+            if result.get("vaccines"):
+                page_results.append(result)
+                raw_parts.append(result.get("raw_text") or "")
+        except ValueError:
+            continue
+
+    vaccines = _merge_vaccine_lists(page_results)
+    if not vaccines:
         raise ValueError(
-            "El PDF no tiene texto legible (escaneo sin OCR). Subí una foto JPG o PNG del certificado."
+            "No se detectaron vacunas en el PDF. El archivo fue convertido a imagen automáticamente."
         )
-    fields = parse_vaccine_fields(raw_text, catalog_names=catalog_names)
-    if not fields.get("vaccines"):
-        raise ValueError("No se detectaron vacunas en el PDF. Subí una foto del certificado.")
-    fields["method"] = "pdf"
-    return fields
+
+    return _scan_result(vaccines, "\n---\n".join(raw_parts), "pdf-vision")
 
 
 def _scan_with_auto_fallback(

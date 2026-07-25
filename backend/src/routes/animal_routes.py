@@ -672,11 +672,15 @@ async def add_vaccines_bulk_with_document(
     if not content:
         raise HTTPException(status_code=400, detail="El archivo está vacío")
 
+    from src.services.vision_service import prepare_file_for_storage
+    storage_bytes, storage_name, storage_type = prepare_file_for_storage(
+        content, file.filename or "cert.jpg", file.content_type
+    )
     document_url = upload_bytes(
-        content,
+        storage_bytes,
         folder="vaccines",
-        original_filename=file.filename,
-        content_type=file.content_type,
+        original_filename=storage_name,
+        content_type=storage_type,
     )
 
     record = _get_or_create_health_record(animal_id, db)
@@ -725,11 +729,15 @@ async def add_vaccine_with_document(
     if not content:
         raise HTTPException(status_code=400, detail="El archivo está vacío")
 
+    from src.services.vision_service import prepare_file_for_storage
+    storage_bytes, storage_name, storage_type = prepare_file_for_storage(
+        content, file.filename or "cert.jpg", file.content_type
+    )
     document_url = upload_bytes(
-        content,
+        storage_bytes,
         folder="vaccines",
-        original_filename=file.filename,
-        content_type=file.content_type,
+        original_filename=storage_name,
+        content_type=storage_type,
     )
 
     record = _get_or_create_health_record(animal_id, db)

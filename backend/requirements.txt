@@ -14,6 +14,7 @@ pypdf
 fpdf2
 Pillow
 pillow-heif
+pymupdf
 pytest
 pytest-cov
 httpx
