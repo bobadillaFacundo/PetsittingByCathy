@@ -105,6 +105,14 @@ function sexLabel(sex) {
   return 'No def.';
 }
 
+function modalTabButtonClass(active) {
+  return `flex-1 min-w-0 flex flex-col sm:flex-row items-center justify-center gap-1 px-1.5 sm:px-3 py-2.5 sm:py-3 font-bold text-[11px] sm:text-sm border-b-2 transition-colors whitespace-nowrap ${
+    active
+      ? 'border-indigo-600 text-indigo-600 bg-indigo-50/50'
+      : 'border-transparent text-gray-500 hover:text-gray-700'
+  }`;
+}
+
 export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
   const [mascotas, setMascotas] = useState([]);
   const [speciesList, setSpeciesList] = useState([]);
@@ -631,8 +639,8 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
           onClick={(e) => { if (e.target === e.currentTarget) setIsModalOpen(false); }}
         >
           <div className="modal-overlay-inner">
-            <div className="modal-sheet" onClick={(e) => e.stopPropagation()}>
-              <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 sticky top-0 z-10">
+            <div className="modal-sheet modal-sheet--pet" onClick={(e) => e.stopPropagation()}>
+              <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 sticky top-0 z-10 shrink-0">
                 <div>
                   <h3 className="text-lg font-bold text-gray-800">
                     {editingId ? 'Editar Mascota' : 'Nueva Mascota'}
@@ -654,7 +662,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
               </div>
 
               {editingId && daycareOnly && speciesPeers.length > 1 && (
-                <div className="px-4 py-3 border-b border-gray-100 bg-white overflow-x-auto scroll-touch">
+                <div className="px-4 py-3 border-b border-gray-100 bg-white overflow-x-auto scroll-touch shrink-0">
                   <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-2 px-1">
                     Misma especie
                   </p>
@@ -678,57 +686,56 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
               )}
 
               {editingId && (
-                <div
-                  className="flex border-b border-gray-100 px-2 overflow-x-auto scroll-touch"
-                  style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-                >
+                <div className="flex border-b border-gray-100 shrink-0 bg-white">
                   <button
                     type="button"
                     onClick={() => setModalTab('basic')}
-                    className={`flex items-center gap-2 px-4 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${modalTab === 'basic' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500'}`}
+                    className={modalTabButtonClass(modalTab === 'basic')}
                   >
-                    <UserCircle size={18} /> Básicos
+                    <UserCircle size={18} className="shrink-0" /> Básicos
                   </button>
                   <button
                     type="button"
                     onClick={() => setModalTab('libreta')}
-                    className={`flex items-center gap-2 px-4 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${modalTab === 'libreta' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500'}`}
+                    className={modalTabButtonClass(modalTab === 'libreta')}
                   >
-                    <BookHeart size={18} /> Libreta
+                    <BookHeart size={18} className="shrink-0" /> Libreta
                   </button>
                   <button
                     type="button"
                     onClick={() => setModalTab('deworming')}
-                    className={`flex items-center gap-2 px-4 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${modalTab === 'deworming' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500'}`}
+                    className={modalTabButtonClass(modalTab === 'deworming')}
                   >
-                    <Syringe size={18} /> Desparas.
+                    <Syringe size={18} className="shrink-0" /> Desparas.
                   </button>
                   <button
                     type="button"
                     onClick={() => setModalTab('labs')}
-                    className={`flex items-center gap-2 px-4 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${modalTab === 'labs' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500'}`}
+                    className={modalTabButtonClass(modalTab === 'labs')}
                   >
-                    <FileText size={18} /> Labs
+                    <FileText size={18} className="shrink-0" /> Labs
                   </button>
                   <button
                     type="button"
                     onClick={() => setModalTab('medicacion')}
-                    className={`flex items-center gap-2 px-4 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${modalTab === 'medicacion' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500'}`}
+                    className={modalTabButtonClass(modalTab === 'medicacion')}
                   >
-                    <Syringe size={18} /> Medicación
+                    <Syringe size={18} className="shrink-0" /> Medicación
                   </button>
                   <button
                     type="button"
                     onClick={() => setModalTab('observaciones')}
-                    className={`flex items-center gap-2 px-4 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${modalTab === 'observaciones' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500'}`}
+                    className={modalTabButtonClass(modalTab === 'observaciones')}
                   >
-                    <StickyNote size={18} /> Observaciones
+                    <StickyNote size={18} className="shrink-0" /> Observaciones
                   </button>
                 </div>
               )}
 
+              <div className="modal-sheet-body">
+                <div className="modal-tab-panel">
               {modalTab === 'basic' && (
-                <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                <form onSubmit={handleSubmit} className="space-y-4">
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1">Nombre</label>
                     <input
@@ -966,6 +973,8 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
               {modalTab === 'labs' && <LaboratoriosTab animalId={editingId} token={token} />}
               {modalTab === 'medicacion' && <MedicacionTab animalId={editingId} />}
               {modalTab === 'observaciones' && <ObservacionesTab animalId={editingId} token={token} />}
+                </div>
+              </div>
             </div>
           </div>
         </div>,

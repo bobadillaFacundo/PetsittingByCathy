@@ -126,10 +126,10 @@ export default function ObservacionesTab({ animalId, token }) {
     }
   };
 
-  if (loading) return <div className="p-8 text-center text-gray-500">Cargando...</div>;
+  if (loading) return <div className="modal-tab-loading">Cargando...</div>;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl space-y-3">
         <h4 className="font-bold text-amber-900 text-sm">Nueva observación u otro</h4>
         <textarea

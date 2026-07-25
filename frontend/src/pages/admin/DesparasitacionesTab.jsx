@@ -92,10 +92,10 @@ export default function DesparasitacionesTab({ animalId, token }) {
     }
   };
 
-  if (loading) return <div className="p-8 text-center text-gray-500">Cargando...</div>;
+  if (loading) return <div className="modal-tab-loading">Cargando...</div>;
 
   return (
-    <div className="p-6 space-y-8">
+    <div className="space-y-6">
       {/* Internas */}
       <div>
         <h4 className="font-bold text-gray-800 mb-4 flex items-center gap-2">

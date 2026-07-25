@@ -132,3 +132,44 @@ input[type="date"].audit-date-input::-webkit-datetime-edit-year-field {
     max-height: none;
   }
 }
+
+/* Modal de mascota: tamaño fijo y pestañas con misma altura */
+.modal-sheet--pet {
+  max-width: 42rem;
+  display: flex;
+  flex-direction: column;
+  height: min(90dvh, 52rem);
+  max-height: min(90dvh, 52rem);
+  overflow: hidden;
+}
+
+@media (max-width: 639px) {
+  .modal-sheet--pet {
+    height: min(94dvh, 100%);
+    max-height: 94dvh;
+  }
+}
+
+.modal-sheet--pet .modal-sheet-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.modal-sheet--pet .modal-tab-panel {
+  padding: 1.5rem;
+  min-height: 100%;
+  box-sizing: border-box;
+}
+
+.modal-sheet--pet .modal-tab-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 16rem;
+  color: #6b7280;
+  font-size: 0.875rem;
+}
