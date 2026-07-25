@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clearSession } from '../lib/auth';
-import { API_BASE, mediaUrl } from '../lib/api';
+import { apiFetch } from '../lib/api';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -25,7 +25,7 @@ export default function Login() {
       formData.append('username', username);
       formData.append('password', password);
 
-      const response = await fetch(`${API_BASE}/auth/login`, {
+      const response = await apiFetch('/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: formData
