@@ -39,8 +39,8 @@ export default function AdminDashboard() {
       { id: 'colores', label: 'Colores de Reporte', icon: Palette },
       { id: 'analisis', label: 'Análisis IA', icon: Activity },
     ] : []),
-    { id: 'guarderia', label: 'Guardería Externa', icon: PawPrint },
-    { id: 'pacientes', label: 'Internas', icon: HeartPulse },
+    { id: 'guarderia', label: 'Mascotas', icon: PawPrint },
+    { id: 'pacientes', label: 'Guardería', icon: HeartPulse },
     { id: 'catalogos', label: 'Gestión de Catálogos', icon: Settings },
     { id: 'exportar', label: 'Exportar Historias', icon: FileText },
     ...(isSuperAdmin ? [
@@ -174,7 +174,7 @@ export default function AdminDashboard() {
                   <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
                 </div>
                 <span className={`text-[9px] font-bold leading-tight text-center max-w-[4.5rem] truncate ${isActive ? 'opacity-100' : 'opacity-60'}`}>
-                  {item.label.split(' ')[0]}
+                  {item.shortLabel ?? item.label.split(' ')[0]}
                 </span>
               </button>
             );

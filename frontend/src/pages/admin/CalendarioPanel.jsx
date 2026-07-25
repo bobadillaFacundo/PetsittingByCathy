@@ -212,7 +212,7 @@ export default function CalendarioPanel() {
     if (isServiceEvent(formData.status)) {
       return animals.filter(a => a.is_daycare === true);
     }
-    // Nueva Reserva: solo internas
+    // Nueva Reserva: solo guardería (is_daycare=false)
     return animals.filter(a => a.is_daycare === false);
   }, [animals, formData.status]);
 
@@ -503,7 +503,7 @@ export default function CalendarioPanel() {
           </h2>
           <p className="text-gray-500 text-xs sm:text-sm mt-1">
             {isAdmin
-              ? "Nueva Reserva: internas. Vet/Baño/otras actividades: solo guardería externa."
+              ? "Nueva Reserva: guardería. Vet/Baño/otras actividades: solo guardería externa."
               : "Haz clic en un evento para ver los detalles."}
           </p>
         </div>
