@@ -22,9 +22,19 @@ const SERVICE_STATUSES = new Set([
   'Llevar Veterinaria',
   'Viene Veterinaria',
   'Llevar a Bañar',
+  'Otras actividades',
 ]);
 
 const isServiceEvent = (status) => SERVICE_STATUSES.has(status);
+const isOtherActivity = (status) => status === 'Otras actividades';
+
+const reservationTitle = (r) => {
+  const name = r.animal?.name || `Paciente #${r.animal_id}`;
+  if (r.status === 'Otras actividades' && r.notes?.trim()) {
+    return `${name} - ${r.notes.trim()}`;
+  }
+  return `${name} - ${r.status}`;
+};
 
 const SPECIES_INFO = {
   1: { name: "Perros", emoji: "🐶" },
@@ -94,7 +104,7 @@ export default function CalendarioPanel() {
         const data = await resRes.json();
         const resEvents = data.map(r => ({
           id: r.id,
-          title: `${r.animal?.name || `Paciente #${r.animal_id}`} - ${r.status}`,
+          title: reservationTitle(r),
           start: parseApiDateTime(r.start_date),
           end: parseApiDateTime(r.end_date),
           resource: r,
@@ -228,6 +238,10 @@ export default function CalendarioPanel() {
       alert("Por favor, completa las fechas.");
       return;
     }
+    if (isOtherActivity(formData.status) && !formData.notes?.trim()) {
+      alert("Por favor, ingresa una descripción para la actividad.");
+      return;
+    }
 
     const animalIdsToSave = isMultiple ? selectedAnimalIds : [parseInt(formData.animal_id)];
 
@@ -235,7 +249,7 @@ export default function CalendarioPanel() {
       const selected = animals.find(a => String(a.id) === String(aId));
       if (isServiceEvent(formData.status)) {
         if (!selected || selected.is_daycare !== true) {
-          alert("Vet / Baño solo se puede asignar a mascotas de guardería.");
+          alert("Vet / Baño / otras actividades solo se puede asignar a mascotas de guardería.");
           return;
         }
       } else if (!selected || selected.is_daycare !== false) {
@@ -326,6 +340,7 @@ export default function CalendarioPanel() {
     if (event.resource.status === 'Llevar Veterinaria') backgroundColor = '#f97316';
     if (event.resource.status === 'Viene Veterinaria') backgroundColor = '#eab308';
     if (event.resource.status === 'Llevar a Bañar') backgroundColor = '#06b6d4';
+    if (event.resource.status === 'Otras actividades') backgroundColor = '#64748b';
     if (event.resource.status === 'Cancelada') backgroundColor = '#ef4444';
     if (event.resource.status === 'Finalizada') backgroundColor = '#9ca3af';
     if (event.status === 'Alerta') {
@@ -381,7 +396,7 @@ export default function CalendarioPanel() {
           </h2>
           <p className="text-gray-500 text-xs sm:text-sm mt-1">
             {isAdmin
-              ? "Nueva Reserva: externas. Vet/Baño: solo guardería."
+              ? "Nueva Reserva: externas. Vet/Baño/otras actividades: solo guardería."
               : "Haz clic en un evento para ver los detalles."}
           </p>
         </div>
@@ -404,6 +419,12 @@ export default function CalendarioPanel() {
               className="bg-cyan-500 text-white px-3 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1 hover:bg-cyan-600 transition"
             >
               <Plus className="w-4 h-4" /> Bañar
+            </button>
+            <button 
+              onClick={() => openQuickService('Otras actividades')}
+              className="bg-slate-600 text-white px-3 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1 hover:bg-slate-700 transition"
+            >
+              <Plus className="w-4 h-4" /> Otras actividades
             </button>
             <button 
               onClick={() => {
@@ -460,7 +481,9 @@ export default function CalendarioPanel() {
           <div className="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-md p-5 sm:p-6 modal-sheet pb-[max(1.25rem,var(--safe-bottom))] sm:pb-6">
             <div className="flex justify-between items-center mb-4 sm:mb-6 border-b pb-3 sm:pb-4">
               <h3 className="text-lg font-bold text-gray-800">
-                {editingId ? "Editar Reserva" : "Nueva Reserva"}
+                {editingId
+                  ? (isOtherActivity(formData.status) ? "Editar actividad" : "Editar Reserva")
+                  : (isOtherActivity(formData.status) ? "Otras actividades" : "Nueva Reserva")}
               </h3>
               <button onClick={() => setIsModalOpen(false)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200">
                 <X className="w-4 h-4 text-gray-600" />
@@ -593,23 +616,30 @@ export default function CalendarioPanel() {
                   <option value="Llevar Veterinaria">Llevar Veterinaria (Naranja)</option>
                   <option value="Viene Veterinaria">Viene Veterinaria (Amarillo)</option>
                   <option value="Llevar a Bañar">Llevar a Bañar (Celeste)</option>
+                  <option value="Otras actividades">Otras actividades (Gris)</option>
                   <option value="Finalizada">Finalizada (Gris)</option>
                   <option value="Cancelada">Cancelada (Rojo)</option>
                 </select>
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notas (Opcional)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {isOtherActivity(formData.status) ? 'Descripción de la actividad *' : 'Notas (Opcional)'}
+                </label>
                 <textarea 
                   className="w-full border border-gray-300 rounded-lg p-2 bg-gray-50 text-gray-800 disabled:opacity-70 disabled:bg-gray-100"
                   rows="3"
                   value={formData.notes}
                   onChange={(e) => setFormData({...formData, notes: e.target.value})}
-                  placeholder="Ej. Viene con su propia comida..."
+                  placeholder={isOtherActivity(formData.status)
+                    ? "Ej. Paseo en el parque, entrenamiento, visita familiar..."
+                    : "Ej. Viene con su propia comida..."}
                   disabled={!isAdmin}
+                  required={isOtherActivity(formData.status)}
                 ></textarea>
               </div>
               
+              {!isServiceEvent(formData.status) && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Fotos de pertenencias (Opcional)</label>
                 <input 
@@ -647,6 +677,7 @@ export default function CalendarioPanel() {
                   }
                 })()}
               </div>
+              )}
               
               {isAdmin && (
                 <div className="flex gap-2 pt-4">

@@ -18,11 +18,12 @@ DAYCARE_RESERVATION_STATUSES = {
     "Cancelada",
 }
 
-# Vet / baño: solo mascotas de guardería
+# Vet / baño / otras actividades: solo mascotas de guardería
 SERVICE_STATUSES = {
     "Llevar Veterinaria",
     "Viene Veterinaria",
     "Llevar a Bañar",
+    "Otras actividades",
 }
 
 
@@ -40,7 +41,7 @@ def _validate_reservation_animal(db: Session, animal_id: int, status: str):
     if status in SERVICE_STATUSES and not animal.is_daycare:
         raise HTTPException(
             status_code=400,
-            detail="Vet / Baño solo se puede asignar a mascotas de guardería.",
+            detail="Vet / Baño / otras actividades solo se puede asignar a mascotas de guardería.",
         )
     return animal
 
