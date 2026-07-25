@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import io
 import json
 import logging
 import os
@@ -15,9 +16,12 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://100.82.178.56:11435").rstrip("/")
+OLLAMA_BASE_URL = (os.getenv("OLLAMA_BASE_URL") or "").strip().rstrip("/")
 OLLAMA_VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "moondream")
-OCR_SERVICE_URL = os.getenv("OCR_SERVICE_URL", "http://localhost:8703").rstrip("/")
+OCR_SERVICE_URL = (os.getenv("OCR_SERVICE_URL") or "").strip().rstrip("/")
+VISION_SKIP_LOCAL_FALLBACKS = os.getenv("VISION_SKIP_LOCAL_FALLBACKS", "").strip().lower() in (
+    "1", "true", "yes"
+)
 
 _VLLM_BASE = os.getenv("VLLM_BASE_URL", "").rstrip("/")
 VLLM_MODEL = os.getenv("VLLM_MODEL", "Qwen/Qwen2.5-7B-Instruct-AWQ")
@@ -27,6 +31,10 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "qwen/qwen3.6-27b")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
+OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "15"))
+OCR_TIMEOUT = int(os.getenv("OCR_TIMEOUT", "10"))
+GROQ_MAX_IMAGE_BYTES = 18 * 1024 * 1024  # margen bajo el límite de 20 MB de Groq
+
 _VACCINE_VISION_PROMPT = (
     "Esta imagen es un certificado, etiqueta o sticker de vacuna veterinaria. "
     "Extrae los datos en JSON con estas claves exactas:\n"
@@ -35,7 +43,7 @@ _VACCINE_VISION_PROMPT = (
     "- date_administered: string o null (fecha de aplicación en formato YYYY-MM-DD)\n"
     "- next_due_date: string o null (próxima dosis o vencimiento en YYYY-MM-DD)\n"
     "- veterinarian_name: string o null (veterinario o clínica)\n"
-    "Usa null si un dato no aparece. Responde SOLO con JSON válido."
+    "Usa null si un dato no aparece. Responde SOLO con JSON válido, sin markdown."
 )
 
 
@@ -47,19 +55,72 @@ def _image_to_b64(image_bytes: bytes) -> str:
     return base64.b64encode(image_bytes).decode("ascii")
 
 
+def _is_pdf(image_bytes: bytes, filename: str = "") -> bool:
+    if (filename or "").lower().endswith(".pdf"):
+        return True
+    return image_bytes[:4] == b"%PDF"
+
+
+def _is_heic(image_bytes: bytes, filename: str = "") -> bool:
+    lower = (filename or "").lower()
+    if lower.endswith((".heic", ".heif")):
+        return True
+    return len(image_bytes) > 12 and image_bytes[4:8] == b"ftyp"
+
+
 def _guess_mime(filename: str, image_bytes: bytes) -> str:
     lower = (filename or "").lower()
     if lower.endswith(".png") or image_bytes[:8] == b"\x89PNG\r\n\x1a\n":
         return "image/png"
-    if lower.endswith(".webp") or image_bytes[:4] == b"RIFF":
+    if lower.endswith(".webp") or (len(image_bytes) > 4 and image_bytes[:4] == b"RIFF"):
         return "image/webp"
     if lower.endswith(".gif") or image_bytes[:6] in (b"GIF87a", b"GIF89a"):
         return "image/gif"
     return "image/jpeg"
 
 
+def _is_local_service_url(url: str) -> bool:
+    if not url:
+        return True
+    lower = url.lower()
+    return any(
+        token in lower
+        for token in ("localhost", "127.0.0.1", "0.0.0.0", "100.82.178.56")
+    )
+
+
+def _local_fallbacks_enabled() -> bool:
+    if VISION_SKIP_LOCAL_FALLBACKS:
+        return False
+    return (bool(OLLAMA_BASE_URL) and not _is_local_service_url(OLLAMA_BASE_URL)) or (
+        bool(OCR_SERVICE_URL) and not _is_local_service_url(OCR_SERVICE_URL)
+    )
+
+
 def _is_groq_retryable(status_code: int) -> bool:
-    return status_code in (429, 500, 502, 503, 504)
+    return status_code in (400, 429, 500, 502, 503, 504)
+
+
+def _parse_json_from_text(content: str) -> dict:
+    text = (content or "").strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"\s*```$", "", text)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        match = re.search(r"\{.*\}", text, re.DOTALL)
+        if match:
+            return json.loads(match.group())
+        raise
+
+
+def _extract_text_pdf(pdf_bytes: bytes) -> str:
+    import pypdf
+
+    reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
+    pages = [page.extract_text() for page in reader.pages if page.extract_text()]
+    return "\n".join(pages).strip()
 
 
 def _ocr_text_from_response(body: Any) -> str:
@@ -101,7 +162,7 @@ def extract_text_ocr(image_bytes: bytes, filename: str = "image.jpg", lang: str 
     """Extrae texto plano con PaddleOCR (servicio HTTP local)."""
     files = {"file": (filename, image_bytes)}
     data = {"lang": lang}
-    resp = requests.post(f"{OCR_SERVICE_URL}/ocr", files=files, data=data, timeout=120)
+    resp = requests.post(f"{OCR_SERVICE_URL}/ocr", files=files, data=data, timeout=OCR_TIMEOUT)
     resp.raise_for_status()
     return _ocr_text_from_response(resp.json())
 
@@ -120,7 +181,11 @@ def extract_text_moondream(image_bytes: bytes) -> str:
         "images": [_image_to_b64(image_bytes)],
         "stream": False,
     }
-    resp = requests.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload, timeout=180)
+    resp = requests.post(
+        f"{OLLAMA_BASE_URL}/api/generate",
+        json=payload,
+        timeout=(5, OLLAMA_TIMEOUT),
+    )
     resp.raise_for_status()
     text = (resp.json().get("response") or "").strip()
     if not text:
@@ -128,7 +193,7 @@ def extract_text_moondream(image_bytes: bytes) -> str:
     return text
 
 
-def _call_groq_json(messages: list, model: str) -> dict:
+def _call_groq(messages: list, model: str, json_mode: bool = True) -> str:
     if not GROQ_API_KEY:
         raise GroqUnavailableError("GROQ_API_KEY no configurada")
 
@@ -136,23 +201,38 @@ def _call_groq_json(messages: list, model: str) -> dict:
         "Content-Type": "application/json",
         "Authorization": f"Bearer {GROQ_API_KEY}",
     }
-    payload = {
-        "model": model,
-        "messages": messages,
-        "temperature": 0.05,
-        "response_format": {"type": "json_object"},
-    }
-    try:
-        resp = requests.post(GROQ_URL, headers=headers, json=payload, timeout=90)
-    except requests.RequestException as e:
-        raise GroqUnavailableError(str(e)) from e
 
-    if _is_groq_retryable(resp.status_code):
-        raise GroqUnavailableError(f"Groq HTTP {resp.status_code}: {resp.text[:200]}")
-    resp.raise_for_status()
+    attempts: list[dict] = []
+    if json_mode:
+        attempts.append({"response_format": {"type": "json_object"}})
+    attempts.append({})
 
-    content = resp.json()["choices"][0]["message"]["content"]
-    return json.loads(content)
+    last_error = ""
+    for extra in attempts:
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": 0.05,
+            **extra,
+        }
+        try:
+            resp = requests.post(GROQ_URL, headers=headers, json=payload, timeout=90)
+        except requests.RequestException as e:
+            raise GroqUnavailableError(str(e)) from e
+
+        if resp.status_code == 200:
+            return resp.json()["choices"][0]["message"]["content"]
+
+        last_error = f"Groq HTTP {resp.status_code}: {resp.text[:300]}"
+        if not _is_groq_retryable(resp.status_code):
+            resp.raise_for_status()
+
+    raise GroqUnavailableError(last_error or "Groq no respondió")
+
+
+def _call_groq_json(messages: list, model: str) -> dict:
+    content = _call_groq(messages, model, json_mode=True)
+    return _parse_json_from_text(content)
 
 
 def _call_vllm_json(messages: list) -> dict:
@@ -169,7 +249,7 @@ def _call_vllm_json(messages: list) -> dict:
     resp = requests.post(VLLM_URL, headers=headers, json=payload, timeout=90)
     resp.raise_for_status()
     content = resp.json()["choices"][0]["message"]["content"]
-    return json.loads(content)
+    return _parse_json_from_text(content)
 
 
 def _call_llm_json(messages: list, prefer_groq: bool = True, groq_model: Optional[str] = None) -> dict:
@@ -191,6 +271,13 @@ def extract_fields_groq_vision(
     catalog_names: Optional[list[str]] = None,
 ) -> dict[str, Any]:
     """Analiza la imagen directamente con Groq Vision (qwen/qwen3.6-27b)."""
+    if _is_heic(image_bytes, filename):
+        raise ValueError(
+            "Formato HEIC no soportado. Configurá la cámara en JPG o exportá la foto como JPG/PNG."
+        )
+    if len(image_bytes) > GROQ_MAX_IMAGE_BYTES:
+        raise ValueError("La imagen supera 18 MB. Usá una foto más liviana o menor resolución.")
+
     catalog_hint = ""
     if catalog_names:
         catalog_hint = (
@@ -202,10 +289,6 @@ def extract_fields_groq_vision(
     data_url = f"data:{mime};base64,{_image_to_b64(image_bytes)}"
     messages = [
         {
-            "role": "system",
-            "content": "Eres un extractor de datos veterinarios. Responde SOLO con JSON válido.",
-        },
-        {
             "role": "user",
             "content": [
                 {"type": "text", "text": _VACCINE_VISION_PROMPT + catalog_hint},
@@ -213,8 +296,9 @@ def extract_fields_groq_vision(
             ],
         },
     ]
-    parsed = _call_groq_json(messages, GROQ_VISION_MODEL)
-    return _fields_from_parsed(parsed, raw_text=json.dumps(parsed, ensure_ascii=False))
+    content = _call_groq(messages, GROQ_VISION_MODEL, json_mode=False)
+    parsed = _parse_json_from_text(content)
+    return _fields_from_parsed(parsed, raw_text=content)
 
 
 def _normalize_date(value: Optional[str]) -> Optional[str]:
@@ -285,15 +369,31 @@ Texto extraído:
     return _fields_from_parsed(parsed, raw_text=raw_text)
 
 
+def _scan_pdf(
+    pdf_bytes: bytes,
+    catalog_names: Optional[list[str]] = None,
+) -> dict[str, Any]:
+    raw_text = _extract_text_pdf(pdf_bytes)
+    if not raw_text.strip():
+        raise ValueError(
+            "El PDF no tiene texto legible. Subí una foto del certificado (JPG o PNG)."
+        )
+    fields = parse_vaccine_fields(raw_text, catalog_names=catalog_names)
+    fields["method"] = "pdf"
+    return fields
+
+
 def _scan_with_auto_fallback(
     image_bytes: bytes,
     filename: str,
     catalog_names: Optional[list[str]] = None,
 ) -> dict[str, Any]:
     """
-    Cadena automática: Groq Vision → Ollama → OCR.
-    Si Groq falla por límite o error, no se reintenta en el paso de NLP.
+    Cadena automática: PDF → Groq Vision → Ollama → OCR (solo si están configurados).
     """
+    if _is_pdf(image_bytes, filename):
+        return _scan_pdf(image_bytes, catalog_names)
+
     errors: list[str] = []
     groq_available = bool(GROQ_API_KEY)
 
@@ -302,38 +402,53 @@ def _scan_with_auto_fallback(
             fields = extract_fields_groq_vision(image_bytes, filename=filename, catalog_names=catalog_names)
             fields["method"] = "groq"
             return fields
+        except ValueError:
+            raise
         except (GroqUnavailableError, json.JSONDecodeError, KeyError, requests.RequestException) as e:
             msg = f"Groq: {e}"
             logger.warning("Escaneo vacuna - %s", msg)
             errors.append(msg)
             groq_available = False
 
-    try:
-        raw_text = extract_text_moondream(image_bytes)
-        fields = parse_vaccine_fields(raw_text, catalog_names=catalog_names, prefer_groq=groq_available)
-        fields["method"] = "moondream"
+    if not _local_fallbacks_enabled():
         if errors:
-            fields["fallback_from"] = errors
-        return fields
-    except Exception as e:
-        msg = f"Ollama: {e}"
-        logger.warning("Escaneo vacuna - %s", msg)
-        errors.append(msg)
+            raise RuntimeError(
+                "No se pudo analizar la imagen con Groq. "
+                "Probá con una foto JPG/PNG nítida del certificado. "
+                f"Detalle: {errors[0]}"
+            )
+        raise RuntimeError("GROQ_API_KEY no configurada en el servidor.")
 
-    try:
-        raw_text = extract_text_ocr(image_bytes, filename=filename)
-        if not raw_text.strip():
-            raise RuntimeError("OCR no detectó texto")
-        fields = parse_vaccine_fields(raw_text, catalog_names=catalog_names, prefer_groq=groq_available)
-        fields["method"] = "ocr"
-        if errors:
-            fields["fallback_from"] = errors
-        return fields
-    except Exception as e:
-        errors.append(f"OCR: {e}")
-        raise RuntimeError(
-            "No se pudo analizar la imagen. Intentos: " + "; ".join(errors)
-        ) from e
+    if OLLAMA_BASE_URL and not _is_local_service_url(OLLAMA_BASE_URL):
+        try:
+            raw_text = extract_text_moondream(image_bytes)
+            fields = parse_vaccine_fields(raw_text, catalog_names=catalog_names, prefer_groq=groq_available)
+            fields["method"] = "moondream"
+            if errors:
+                fields["fallback_from"] = errors
+            return fields
+        except Exception as e:
+            msg = f"Ollama: {e}"
+            logger.warning("Escaneo vacuna - %s", msg)
+            errors.append(msg)
+
+    if OCR_SERVICE_URL and not _is_local_service_url(OCR_SERVICE_URL):
+        try:
+            raw_text = extract_text_ocr(image_bytes, filename=filename)
+            if not raw_text.strip():
+                raise RuntimeError("OCR no detectó texto")
+            fields = parse_vaccine_fields(raw_text, catalog_names=catalog_names, prefer_groq=groq_available)
+            fields["method"] = "ocr"
+            if errors:
+                fields["fallback_from"] = errors
+            return fields
+        except Exception as e:
+            errors.append(f"OCR: {e}")
+
+    raise RuntimeError(
+        "No se pudo analizar la imagen. Usá una foto JPG o PNG del certificado. "
+        + (f"Detalle: {errors[0]}" if errors else "")
+    )
 
 
 def scan_vaccine_image(
@@ -345,7 +460,7 @@ def scan_vaccine_image(
     """
     Escanea una imagen de vacuna.
     engine:
-      - 'auto' (default): Groq qwen/qwen3.6-27b → Ollama → OCR
+      - 'auto' (default): PDF → Groq Vision → Ollama → OCR
       - 'groq': solo Groq Vision
       - 'moondream' / 'ollama': solo Ollama
       - 'ocr': solo PaddleOCR
@@ -354,6 +469,9 @@ def scan_vaccine_image(
 
     if engine == "auto":
         return _scan_with_auto_fallback(image_bytes, filename, catalog_names)
+
+    if _is_pdf(image_bytes, filename):
+        return _scan_pdf(image_bytes, catalog_names)
 
     if engine == "groq":
         fields = extract_fields_groq_vision(image_bytes, filename=filename, catalog_names=catalog_names)

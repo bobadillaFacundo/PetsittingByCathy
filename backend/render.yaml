@@ -42,8 +42,10 @@ services:
         value: llama-3.1-8b-instant
       - key: GROQ_VISION_MODEL
         value: qwen/qwen3.6-27b
+      - key: VISION_SKIP_LOCAL_FALLBACKS
+        value: "1"
 
-      # ── Escaneo de vacunas (fallback Ollama/OCR opcional) ────────────────
+      # ── Escaneo de vacunas (fallback Ollama/OCR solo si URL pública accesible) ─
       - key: OLLAMA_BASE_URL
         sync: false
       - key: OLLAMA_VISION_MODEL

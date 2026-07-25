@@ -559,6 +559,8 @@ async def scan_vaccine_certificate(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Error al analizar la imagen: {e}")
 

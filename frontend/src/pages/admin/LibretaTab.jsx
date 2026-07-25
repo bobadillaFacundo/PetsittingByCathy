@@ -193,7 +193,7 @@ export default function LibretaTab({ animalId, token }) {
               <input
                 type="file"
                 id="vaccineFileInput"
-                accept="image/*,.pdf"
+                accept="image/jpeg,image/png,image/webp,.pdf"
                 onChange={(e) => {
                   const file = e.target.files?.[0] || null;
                   setSelectedFile(file);
