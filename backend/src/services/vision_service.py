@@ -42,25 +42,48 @@ GROQ_VISION_TIMEOUT = int(
 VISION_MAX_IMAGE_SIDE = int(
     os.getenv(
         "VISION_MAX_IMAGE_SIDE",
-        "1280" if VISION_SKIP_LOCAL_FALLBACKS else "2048",
+        "1536" if VISION_SKIP_LOCAL_FALLBACKS else "2048",
     )
 )
 GROQ_MAX_IMAGE_BYTES = 18 * 1024 * 1024  # margen bajo el límite de 20 MB de Groq
 
+# Reglas compartidas para visión y NLP (etiquetas argentinas: Zoetis, SENASA, etc.)
+_VACCINE_FIELD_RULES = """
+DÓNDE BUSCAR LOS DATOS (prioridad):
+1. Etiquetas/stickers adhesivos del laboratorio en la foto (Zoetis, MSD, Boehringer, Nobivac, Vanguard, etc.).
+2. Recuadros o franjas con texto: "N. Lote", "Lote", "Lot", "N° Lote" → lot_number (ej. 699509A, 662611).
+3. "F. Cad", "F. Venc", "Caducidad", "Vto", "Exp" → next_due_date (vencimiento del lote; NO es la fecha de aplicación).
+4. "F. Elab", "F. Fabric.", "Elaboración" → solo referencia; NO usar como date_administered.
+5. Nombre comercial grande en la etiqueta → vaccine_name (ej. "Vanguard Plus 5 L4", "Nobivac Rabia", "Séxtuple").
+6. Sellos SENASA / matrícula / firma del veterinario → veterinarian_name si es legible.
+7. Fecha de aplicación (date_administered): solo si hay registro manuscrito en libreta, sello con fecha de vacunación,
+   o texto explícito "fecha", "aplicada", "vacunado". Si solo hay F. Elab/F. Cad del frasco, date_administered = null.
+
+REGLAS:
+- Cada etiqueta/sticker visible = una entrada distinta en el array vaccines (aunque haya varias en la misma foto).
+- Leé texto en recuadros negros, letra chica y códigos alfanuméricos; no inventes datos.
+- Fechas a YYYY-MM-DD. Meses abreviados: ENE/JAN=01, FEB=02, MAR=03, ABR/APR=04, MAY=05, JUN=06, JUL=07,
+  AGO/AUG=08, SEP=09, OCT=10, NOV=11, DIC/DEC=12. Años de 2 dígitos: 23→2023, 24→2024, 25→2025.
+- Si un campo no aparece con claridad, usa null.
+
+EJEMPLO (dos etiquetas en una foto):
+{"vaccines": [
+  {"vaccine_name": "Vanguard Plus 5 L4", "lot_number": "699509A", "date_administered": null,
+   "next_due_date": "2025-05-27", "veterinarian_name": null},
+  {"vaccine_name": "Zoetis (etiqueta)", "lot_number": "662611", "date_administered": null,
+   "next_due_date": "2024-10-15", "veterinarian_name": null}
+]}
+"""
+
 _VACCINE_VISION_PROMPT = (
-    "Esta imagen puede ser una libreta de vacunación, certificado o etiqueta con UNA o VARIAS vacunas. "
-    "Identifica TODAS las vacunas visibles (cada fila, sello o aplicación cuenta como una entrada). "
-    "Devuelve JSON con esta estructura exacta:\n"
+    "Sos un lector de certificados y etiquetas de vacunación veterinaria (Argentina). "
+    "La imagen puede ser libreta, certificado del Colegio de Veterinarios, o foto de stickers del vial. "
+    "Enfocate en las ETIQUETAS ADHESIVAS: ahí están el lote y las fechas F. Elab / F. Cad.\n"
+    + _VACCINE_FIELD_RULES
+    + "\nDevuelve JSON con esta estructura exacta:\n"
     '{"vaccines": [{"vaccine_name": string|null, "lot_number": string|null, '
     '"date_administered": string|null, "next_due_date": string|null, "veterinarian_name": string|null}]}\n'
-    "Campos por vacuna:\n"
-    "- vaccine_name: nombre (ej. Séxtuple, Antirrábica, KC)\n"
-    "- lot_number: número de lote\n"
-    "- date_administered: fecha aplicación YYYY-MM-DD\n"
-    "- next_due_date: próxima dosis o vencimiento YYYY-MM-DD\n"
-    "- veterinarian_name: veterinario o clínica\n"
-    "Usa null si un dato no aparece. Si hay una sola vacuna, igual devuelve un array con un elemento. "
-    "Responde SOLO con JSON válido, sin markdown."
+    "Responde SOLO con JSON válido, sin markdown ni explicación."
 )
 
 
@@ -327,10 +350,9 @@ def extract_text_ocr(image_bytes: bytes, filename: str = "image.jpg", lang: str 
 def extract_text_moondream(image_bytes: bytes) -> str:
     """Describe el contenido de la imagen con Moondream vía Ollama."""
     prompt = (
-        "Esta imagen es un certificado, etiqueta o sticker de vacuna veterinaria. "
-        "Transcribe TODO el texto visible y describe los datos: nombre de la vacuna, "
-        "número de lote, fecha de aplicación, próxima dosis o vencimiento, "
-        "nombre del veterinario o clínica. Responde en español."
+        "Transcribí TODO el texto visible de etiquetas/stickers de vacunas veterinarias en la imagen. "
+        "Incluí especialmente recuadros con N. Lote, F. Elab, F. Cad, nombres comerciales (Vanguard, Nobivac, etc.) "
+        "y sellos SENASA o firmas de veterinario. Responde en español, línea por línea."
     )
     payload = {
         "model": OLLAMA_VISION_MODEL,
@@ -493,6 +515,33 @@ def _normalize_date(value: Optional[str]) -> Optional[str]:
     if m:
         d, mo, y = m.groups()
         return f"{y}-{int(mo):02d}-{int(d):02d}"
+    month_map = {
+        "ene": "01", "jan": "01",
+        "feb": "02",
+        "mar": "03",
+        "abr": "04", "apr": "04",
+        "may": "05",
+        "jun": "06",
+        "jul": "07",
+        "ago": "08", "aug": "08",
+        "sep": "09", "sept": "09",
+        "oct": "10",
+        "nov": "11",
+        "dic": "12", "dec": "12",
+    }
+    m = re.match(
+        r"^(\d{1,2})\s+([A-Za-zÁÉÍÓÚáéíóú]{3,5})\s+(\d{2,4})$",
+        s,
+        re.IGNORECASE,
+    )
+    if m:
+        day, mon_txt, year = m.groups()
+        mon = month_map.get(mon_txt.lower()[:4].replace(".", "")) or month_map.get(mon_txt.lower()[:3])
+        if mon:
+            y = int(year)
+            if y < 100:
+                y += 2000
+            return f"{y}-{mon}-{int(day):02d}"
     return None
 
 
@@ -585,14 +634,15 @@ def parse_vaccine_fields(
     catalog_hint = _catalog_hint(catalog_names)
 
     prompt = f"""
-Analiza el siguiente texto extraído de un certificado o libreta de vacunación veterinaria.
-Puede contener UNA o VARIAS vacunas. Identifica TODAS las aplicaciones visibles.
+Analiza el texto extraído de un certificado o foto de etiquetas de vacunación veterinaria (Argentina).
+Puede haber UNA o VARIAS etiquetas/stickers en el mismo texto.
+{_VACCINE_FIELD_RULES}
+{catalog_hint}
 Devuelve JSON con esta estructura exacta:
 {{"vaccines": [
   {{"vaccine_name": string|null, "lot_number": string|null,
     "date_administered": string|null, "next_due_date": string|null, "veterinarian_name": string|null}}
 ]}}
-{catalog_hint}
 
 Texto extraído:
 {raw_text}
