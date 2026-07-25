@@ -91,10 +91,17 @@ export default function MedicacionTab({ animalId }) {
     }
   };
 
-  if (isLoading) return <div className="modal-tab-loading">Cargando...</div>;
+  if (isLoading) {
+    return (
+      <div className="modal-tab-content">
+        <div className="modal-tab-loading">Cargando...</div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
+    <div className="modal-tab-content">
+    <div className="space-y-6 w-full">
       <form onSubmit={handleSave} className="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-4">
         <h4 className="font-bold text-gray-800 flex items-center gap-2">
           <Plus size={16} /> {isEditing ? 'Editar Medicación' : 'Añadir Medicación'}
@@ -284,6 +291,7 @@ export default function MedicacionTab({ animalId }) {
           ))
         )}
       </div>
+    </div>
     </div>
   );
 }

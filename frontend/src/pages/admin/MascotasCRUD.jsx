@@ -735,7 +735,8 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
               <div className="modal-sheet-body">
                 <div className="modal-tab-panel">
               {modalTab === 'basic' && (
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="modal-tab-content">
+                <form onSubmit={handleSubmit} className="space-y-4 w-full">
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1">Nombre</label>
                     <input
@@ -966,6 +967,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                     </button>
                   </div>
                 </form>
+                </div>
               )}
 
               {modalTab === 'libreta' && <LibretaTab animalId={editingId} token={token} />}

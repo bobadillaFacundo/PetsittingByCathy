@@ -70,10 +70,17 @@ export default function LibretaTab({ animalId, token }) {
     return new Date(dateString) < new Date();
   };
 
-  if (loading) return <div className="modal-tab-loading">Cargando libreta...</div>;
+  if (loading) {
+    return (
+      <div className="modal-tab-content">
+        <div className="modal-tab-loading">Cargando libreta...</div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
+    <div className="modal-tab-content">
+    <div className="space-y-6 w-full">
       <div className="bg-gray-50 p-4 rounded-xl space-y-3">
         <h4 className="font-bold text-gray-800 text-sm flex items-center gap-2">
           <Shield size={18} className="text-blue-600" /> Registrar Nueva Vacuna
@@ -153,6 +160,7 @@ export default function LibretaTab({ animalId, token }) {
           })}
         </ul>
       </div>
+    </div>
     </div>
   );
 }

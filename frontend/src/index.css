@@ -134,17 +134,20 @@ input[type="date"].audit-date-input::-webkit-datetime-edit-year-field {
 }
 
 /* Modal de mascota: tamaño fijo y pestañas con misma altura */
-.modal-sheet--pet {
+.modal-sheet.modal-sheet--pet {
+  width: 100%;
   max-width: 42rem;
   display: flex;
   flex-direction: column;
+  min-height: min(90dvh, 52rem);
   height: min(90dvh, 52rem);
   max-height: min(90dvh, 52rem);
   overflow: hidden;
 }
 
 @media (max-width: 639px) {
-  .modal-sheet--pet {
+  .modal-sheet.modal-sheet--pet {
+    min-height: min(94dvh, 100%);
     height: min(94dvh, 100%);
     max-height: 94dvh;
   }
@@ -152,24 +155,40 @@ input[type="date"].audit-date-input::-webkit-datetime-edit-year-field {
 
 .modal-sheet--pet .modal-sheet-body {
   flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
+  overflow: hidden;
+}
+
+.modal-sheet--pet .modal-tab-panel {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 1.5rem;
+  box-sizing: border-box;
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
 }
 
-.modal-sheet--pet .modal-tab-panel {
-  padding: 1.5rem;
+.modal-tab-content {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
   min-height: 100%;
-  box-sizing: border-box;
 }
 
 .modal-sheet--pet .modal-tab-loading {
+  flex: 1 1 auto;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 16rem;
+  width: 100%;
+  min-height: 100%;
   color: #6b7280;
   font-size: 0.875rem;
 }
