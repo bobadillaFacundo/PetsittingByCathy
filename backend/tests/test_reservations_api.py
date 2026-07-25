@@ -48,3 +48,26 @@ def test_other_activity_requires_notes(client, seed, auth_headers):
     }
     res = client.post("/reservations/", json=payload, headers=auth_headers)
     assert res.status_code == 400
+
+
+def test_cannot_change_service_event_type(client, seed, auth_headers):
+    create = client.post(
+        "/reservations/",
+        json={
+            "animal_id": seed["animal"].id,
+            "start_date": "2026-07-25T10:00:00-03:00",
+            "end_date": "2026-07-25T11:00:00-03:00",
+            "status": "Llevar a Bañar",
+            "notes": "",
+        },
+        headers=auth_headers,
+    )
+    assert create.status_code == 200
+    res_id = create.json()["id"]
+
+    bad = client.put(
+        f"/reservations/{res_id}",
+        json={"status": "Llevar Veterinaria"},
+        headers=auth_headers,
+    )
+    assert bad.status_code == 400

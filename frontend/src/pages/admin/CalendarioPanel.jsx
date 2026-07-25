@@ -26,8 +26,32 @@ const SERVICE_STATUSES = new Set([
   'Otras actividades',
 ]);
 
+const DAYCARE_RESERVATION_STATUSES = [
+  { value: 'Pendiente', label: 'Pendiente (Azul)' },
+  { value: 'Confirmada', label: 'Confirmada (Verde)' },
+  { value: 'Ingresada', label: 'Ingresada en Guardería (Violeta)' },
+  { value: 'Finalizada', label: 'Finalizada (Gris)' },
+  { value: 'Cancelada', label: 'Cancelada (Rojo)' },
+];
+
+const SERVICE_STATUS_LABELS = {
+  'Llevar Veterinaria': 'Llevar Veterinaria (Naranja)',
+  'Viene Veterinaria': 'Viene Veterinaria (Amarillo)',
+  'Llevar a Bañar': 'Llevar a Bañar (Celeste)',
+  'Otras actividades': 'Otras actividades (Gris)',
+};
+
 const isServiceEvent = (status) => SERVICE_STATUSES.has(status);
 const isOtherActivity = (status) => status === 'Otras actividades';
+
+/** 'reservation' = estadía con varios estados; otro valor = servicio fijo */
+const getStatusMode = (status) => (isServiceEvent(status) ? status : 'reservation');
+
+const getStatusOptions = (mode) => {
+  if (mode === 'reservation') return DAYCARE_RESERVATION_STATUSES;
+  const label = SERVICE_STATUS_LABELS[mode] || mode;
+  return [{ value: mode, label }];
+};
 
 const reservationTitle = (r) => {
   const desc = r.notes?.trim();
@@ -69,6 +93,8 @@ export default function CalendarioPanel() {
   
   // For photos upload
   const [photosToUpload, setPhotosToUpload] = useState([]);
+  /** Tipo de evento al abrir el modal: 'reservation' o un estado de servicio fijo */
+  const [statusMode, setStatusMode] = useState('reservation');
 
   const [formData, setFormData] = useState({
     animal_id: '',
@@ -192,6 +218,7 @@ export default function CalendarioPanel() {
   const openModal = (data, id = null) => {
     setFormData(data);
     setEditingId(id);
+    setStatusMode(getStatusMode(data.status));
     setSelectedSpecies('');
     setSelectedAnimalIds([]);
     setPhotosToUpload([]);
@@ -229,16 +256,18 @@ export default function CalendarioPanel() {
   };
 
   const handleStatusChange = (status) => {
+    const allowed = getStatusOptions(statusMode).map((o) => o.value);
+    if (!allowed.includes(status)) return;
     const next = { ...formData, status };
-    if (formData.animal_id) {
+    if (formData.animal_id && statusMode === 'reservation') {
       const selected = animals.find(a => String(a.id) === String(formData.animal_id));
-      const ok = isServiceEvent(status)
-        ? selected?.is_daycare === true
-        : selected?.is_daycare === false;
-      if (!ok) next.animal_id = '';
+      if (selected?.is_daycare !== false) next.animal_id = '';
     }
     setFormData(next);
   };
+
+  const statusOptions = useMemo(() => getStatusOptions(statusMode), [statusMode]);
+  const statusLocked = statusMode !== 'reservation';
 
   const saveReservation = async () => {
     if (!isAdmin) return;
@@ -775,23 +804,25 @@ export default function CalendarioPanel() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Estado / Tipo de Evento</label>
-                <select 
-                  className="w-full border border-gray-300 rounded-lg p-2 bg-gray-50 text-gray-800 disabled:opacity-70 disabled:bg-gray-100"
-                  value={formData.status}
-                  onChange={(e) => handleStatusChange(e.target.value)}
-                  disabled={!isAdmin}
-                >
-                  <option value="Pendiente">Pendiente (Azul)</option>
-                  <option value="Confirmada">Confirmada (Verde)</option>
-                  <option value="Ingresada">Ingresada en Guardería (Violeta)</option>
-                  <option value="Llevar Veterinaria">Llevar Veterinaria (Naranja)</option>
-                  <option value="Viene Veterinaria">Viene Veterinaria (Amarillo)</option>
-                  <option value="Llevar a Bañar">Llevar a Bañar (Celeste)</option>
-                  <option value="Otras actividades">Otras actividades (Gris)</option>
-                  <option value="Finalizada">Finalizada (Gris)</option>
-                  <option value="Cancelada">Cancelada (Rojo)</option>
-                </select>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {statusLocked ? 'Tipo de evento' : 'Estado de la reserva'}
+                </label>
+                {statusLocked ? (
+                  <div className="w-full border border-gray-200 rounded-lg p-2.5 bg-gray-100 text-gray-700 font-medium">
+                    {SERVICE_STATUS_LABELS[statusMode] || formData.status}
+                  </div>
+                ) : (
+                  <select
+                    className="w-full border border-gray-300 rounded-lg p-2 bg-gray-50 text-gray-800 disabled:opacity-70 disabled:bg-gray-100"
+                    value={formData.status}
+                    onChange={(e) => handleStatusChange(e.target.value)}
+                    disabled={!isAdmin}
+                  >
+                    {statusOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                )}
               </div>
               
               <div>

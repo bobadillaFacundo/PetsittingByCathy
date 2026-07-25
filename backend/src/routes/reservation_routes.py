@@ -61,8 +61,32 @@ def _get_reservation_query(db: Session):
     )
 
 
+def _validate_status_value(status_val: str) -> None:
+    if status_val not in DAYCARE_RESERVATION_STATUSES and status_val not in SERVICE_STATUSES:
+        raise HTTPException(status_code=400, detail="Estado de evento no válido")
+
+
+def _validate_status_transition(current_status: str, new_status: str | None) -> None:
+    if new_status is None:
+        return
+    _validate_status_value(new_status)
+    if current_status in SERVICE_STATUSES:
+        if new_status != current_status:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Este evento es «{current_status}» y no puede cambiarse a otro tipo.",
+            )
+        return
+    if new_status in SERVICE_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail="No se puede convertir una reserva de estadía en vet, baño u otra actividad.",
+        )
+
+
 def _validate_reservation_data(db: Session, data: dict, *, is_update: bool = False) -> None:
     status_val = data.get("status") or "Pendiente"
+    _validate_status_value(status_val)
     animal_id = data.get("animal_id")
     notes = (data.get("notes") or "").strip()
 
@@ -137,6 +161,8 @@ def update_reservation(
 
     update_data = reservation_update.model_dump(exclude_unset=True)
     update_data = _normalize_reservation_payload(update_data)
+    if "status" in update_data:
+        _validate_status_transition(db_reservation.status, update_data["status"])
     _validate_reservation_data(
         db,
         {
