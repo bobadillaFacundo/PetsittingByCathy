@@ -64,6 +64,24 @@ function traitLabels(m) {
   return TRAIT_OPTIONS.filter(t => m[t.key]).map(t => t.label);
 }
 
+function CastrationBadge({ isCastrated }) {
+  return isCastrated ? (
+    <span className="text-[10px] font-bold uppercase tracking-wide bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full border border-sky-200">
+      Castrado
+    </span>
+  ) : (
+    <span className="text-[10px] font-bold uppercase tracking-wide bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full border border-gray-200">
+      No castrado
+    </span>
+  );
+}
+
+function sexLabel(sex) {
+  if (sex === 'M') return 'Macho';
+  if (sex === 'F') return 'Hembra';
+  return 'No def.';
+}
+
 export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
   const [mascotas, setMascotas] = useState([]);
   const [speciesList, setSpeciesList] = useState([]);
@@ -150,34 +168,42 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
 
   const openModal = (mascota = null) => {
     if (mascota) {
-      setEditingId(mascota.id);
-      setFormData({
-        name: mascota.name,
-        species_id: mascota.species_id,
-        breed_id: mascota.breed_id || '',
-        sex: mascota.sex || '',
-        is_castrated: mascota.is_castrated || false,
-        is_active: mascota.is_active,
-        is_daycare: mascota.is_daycare ?? daycareOnly,
-        coat_color: mascota.coat_color || '',
-        is_rescue: Boolean(mascota.is_rescue),
-        age_years: mascota.age_years ?? '',
-        age_estimate_min: mascota.age_estimate_min ?? '',
-        age_estimate_max: mascota.age_estimate_max ?? '',
-        is_simil_breed: Boolean(mascota.is_simil_breed),
-        is_blind: Boolean(mascota.is_blind),
-        is_deaf: Boolean(mascota.is_deaf),
-        no_smell: Boolean(mascota.no_smell),
-        has_neurological: Boolean(mascota.has_neurological),
-        has_involuntary_movements: Boolean(mascota.has_involuntary_movements),
-        residence: mascota.residence || ''
-      });
+      loadAnimalIntoForm(mascota);
     } else {
       setEditingId(null);
       setFormData(emptyForm(daycareOnly, speciesList.length > 0 ? speciesList[0].id : ''));
     }
     setModalTab('basic');
     setIsModalOpen(true);
+  };
+
+  const loadAnimalIntoForm = (mascota) => {
+    setEditingId(mascota.id);
+    setFormData({
+      name: mascota.name,
+      species_id: mascota.species_id,
+      breed_id: mascota.breed_id || '',
+      sex: mascota.sex || '',
+      is_castrated: mascota.is_castrated || false,
+      is_active: mascota.is_active,
+      is_daycare: mascota.is_daycare ?? daycareOnly,
+      coat_color: mascota.coat_color || '',
+      is_rescue: Boolean(mascota.is_rescue),
+      age_years: mascota.age_years ?? '',
+      age_estimate_min: mascota.age_estimate_min ?? '',
+      age_estimate_max: mascota.age_estimate_max ?? '',
+      is_simil_breed: Boolean(mascota.is_simil_breed),
+      is_blind: Boolean(mascota.is_blind),
+      is_deaf: Boolean(mascota.is_deaf),
+      no_smell: Boolean(mascota.no_smell),
+      has_neurological: Boolean(mascota.has_neurological),
+      has_involuntary_movements: Boolean(mascota.has_involuntary_movements),
+      residence: mascota.residence || ''
+    });
+  };
+
+  const switchAnimalInModal = (mascota) => {
+    loadAnimalIntoForm(mascota);
   };
 
   useEffect(() => {
@@ -308,6 +334,10 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
 
   if (isLoading) return <div className="text-center p-8 text-gray-500">Cargando mascotas...</div>;
 
+  const speciesPeers = selectedSpeciesId
+    ? mascotas.filter((m) => m.species_id === selectedSpeciesId)
+    : [];
+
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-200">
       {/* Encabezado */}
@@ -375,11 +405,12 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
               >
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <h3 className="text-xl font-black text-gray-900 tracking-tight flex items-center gap-2">
+                    <h3 className="text-xl font-black text-gray-900 tracking-tight flex items-center gap-2 flex-wrap">
                       {m.name}
                       {m.is_rescue && (
                         <span className="text-[10px] font-bold uppercase tracking-wide bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">Rescate</span>
                       )}
+                      <CastrationBadge isCastrated={m.is_castrated} />
                     </h3>
                     <span className="inline-block mt-1 px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700">
                       {getSpeciesName(m.species_id)}
@@ -414,7 +445,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                 
                 <div className="flex justify-between items-center mt-2 pt-4 border-t border-gray-50">
                   <span className="text-sm font-bold text-gray-400 uppercase tracking-wider">
-                    {m.sex === 'M' ? 'Macho' : m.sex === 'F' ? 'Hembra' : 'No def.'}
+                    {sexLabel(m.sex)}
                   </span>
                   <div className="flex gap-2">
                     <button 
@@ -463,6 +494,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                   <th className="px-6 py-4 font-medium">Edad</th>
                   <th className="px-6 py-4 font-medium">Pelaje</th>
                   <th className="px-6 py-4 font-medium">Sexo</th>
+                  <th className="px-6 py-4 font-medium">Castración</th>
                   {!daycareOnly && <th className="px-6 py-4 font-medium">Residencia</th>}
                   <th className="px-6 py-4 font-medium">Estado</th>
                   <th className="px-6 py-4 font-medium text-right">Acciones</th>
@@ -483,6 +515,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                         {m.is_rescue && (
                           <span className="text-[10px] font-bold uppercase tracking-wide bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">Rescate</span>
                         )}
+                        {daycareOnly && <CastrationBadge isCastrated={m.is_castrated} />}
                       </div>
                       {traitLabels(m).length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1">
@@ -504,7 +537,10 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                       {m.coat_color || '—'}
                     </td>
                     <td className="px-6 py-4 text-gray-600 text-sm font-medium">
-                      {m.sex === 'M' ? 'Macho' : m.sex === 'F' ? 'Hembra' : 'No definido'}
+                      {sexLabel(m.sex)}
+                    </td>
+                    <td className="px-6 py-4">
+                      <CastrationBadge isCastrated={m.is_castrated} />
                     </td>
                     {!daycareOnly && (
                       <td className="px-6 py-4 text-gray-600 text-sm font-medium">
@@ -572,9 +608,18 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
           <div className="modal-overlay-inner">
             <div className="modal-sheet" onClick={(e) => e.stopPropagation()}>
               <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 sticky top-0 z-10">
-                <h3 className="text-lg font-bold text-gray-800">
-                  {editingId ? 'Editar Mascota' : 'Nueva Mascota'}
-                </h3>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-800">
+                    {editingId ? 'Editar Mascota' : 'Nueva Mascota'}
+                  </h3>
+                  {editingId && (
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      <span className="text-sm font-semibold text-gray-700">{formData.name}</span>
+                      <span className="text-xs text-gray-500">{sexLabel(formData.sex)}</span>
+                      <CastrationBadge isCastrated={formData.is_castrated} />
+                    </div>
+                  )}
+                </div>
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
@@ -583,6 +628,31 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                   <X size={20} />
                 </button>
               </div>
+
+              {editingId && daycareOnly && speciesPeers.length > 1 && (
+                <div className="px-4 py-3 border-b border-gray-100 bg-white overflow-x-auto scroll-touch">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-2 px-1">
+                    Misma especie — castración
+                  </p>
+                  <div className="flex gap-2 min-w-max pb-1">
+                    {speciesPeers.map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => switchAnimalInModal(m)}
+                        className={`flex flex-col items-start gap-1 px-3 py-2 rounded-xl border text-left transition-all shrink-0 ${
+                          m.id === editingId
+                            ? 'border-indigo-500 bg-indigo-50 shadow-sm'
+                            : 'border-gray-200 bg-gray-50 hover:border-indigo-300 hover:bg-indigo-50/50'
+                        }`}
+                      >
+                        <span className="text-sm font-bold text-gray-900 whitespace-nowrap">{m.name}</span>
+                        <CastrationBadge isCastrated={m.is_castrated} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {editingId && (
                 <div
