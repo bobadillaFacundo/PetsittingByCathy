@@ -59,14 +59,9 @@ export default defineConfig({
         skipWaiting: true,
         clientsClaim: true,
         navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/api/],
+        // /api y /uploads no pasan por el SW (evita no-response de Workbox si falla la red)
+        navigateFallbackDenylist: [/^\/api/, /^\/uploads/],
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        runtimeCaching: [
-          {
-            urlPattern: ({ url }) => url.origin === self.location.origin && url.pathname.startsWith('/api'),
-            handler: 'NetworkOnly',
-          },
-        ],
       },
     }),
   ],

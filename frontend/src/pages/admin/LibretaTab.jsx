@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Shield, ShieldAlert, CheckCircle, Camera, ScanLine, Link as LinkIcon, Trash2, ListPlus, Save } from 'lucide-react';
-import { API_BASE, mediaUrl } from '../../lib/api';
+import { API_BASE, apiUrl, mediaUrl } from '../../lib/api';
 
 async function prepareScanFile(file) {
   if (!file) return null;
@@ -117,24 +117,36 @@ export default function LibretaTab({ animalId, token }) {
     }));
   };
 
+  const postScan = async (uploadFile) => {
+    const formData = new FormData();
+    formData.append('file', uploadFile);
+    return fetch(apiUrl(`/animals/${animalId}/vaccines/scan`), {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+  };
+
   const handleScan = async () => {
     if (!selectedFile) return alert('Selecciona una imagen del certificado o libreta de vacunas.');
     const uploadFile = await prepareScanFile(selectedFile);
-    const formData = new FormData();
-    formData.append('file', uploadFile);
     setScanning(true);
     try {
-      const res = await fetch(`${API_BASE}/animals/${animalId}/vaccines/scan`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
+      let res = await postScan(uploadFile);
+      if (res.status === 502) {
+        await new Promise((r) => setTimeout(r, 3000));
+        res = await postScan(uploadFile);
+      }
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
         const detail = payload.detail;
         const msg = Array.isArray(detail)
           ? detail.map((d) => d.msg || JSON.stringify(d)).join(', ')
-          : (typeof detail === 'string' ? detail : 'Error al analizar la imagen');
+          : (typeof detail === 'string'
+            ? detail
+            : res.status === 502
+              ? 'El servidor tardó demasiado analizando la imagen. Esperá unos segundos y reintentá con buena conexión.'
+              : 'Error al analizar la imagen');
         alert(msg);
         return;
       }
@@ -163,7 +175,7 @@ export default function LibretaTab({ animalId, token }) {
       }
     } catch (err) {
       console.error(err);
-      alert('Error de conexión al escanear la imagen');
+      alert('Error de conexión al escanear. Revisá la red y recargá la página (Ctrl+Shift+R).');
     } finally {
       setScanning(false);
     }

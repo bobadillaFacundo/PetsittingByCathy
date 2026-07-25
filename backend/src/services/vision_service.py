@@ -36,7 +36,7 @@ OCR_TIMEOUT = int(os.getenv("OCR_TIMEOUT", "10"))
 GROQ_VISION_TIMEOUT = int(
     os.getenv(
         "GROQ_VISION_TIMEOUT",
-        "25" if VISION_SKIP_LOCAL_FALLBACKS else "90",
+        "28" if VISION_SKIP_LOCAL_FALLBACKS else "90",
     )
 )
 VISION_MAX_IMAGE_SIDE = int(
@@ -377,6 +377,7 @@ def _call_groq(
     model: str,
     json_mode: bool = True,
     timeout: Optional[int] = None,
+    max_tokens: Optional[int] = None,
 ) -> str:
     if not GROQ_API_KEY:
         raise GroqUnavailableError("GROQ_API_KEY no configurada")
@@ -401,6 +402,8 @@ def _call_groq(
             "temperature": 0.05,
             **extra,
         }
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
         try:
             resp = requests.post(
                 GROQ_URL,
@@ -484,18 +487,25 @@ def extract_fields_groq_vision(
         },
     ]
     content = ""
-    last_error: Optional[Exception] = None
-    for json_mode in (True, False):
-        try:
-            content = _call_groq(messages, GROQ_VISION_MODEL, json_mode=json_mode)
-            break
-        except (GroqUnavailableError, json.JSONDecodeError, KeyError) as e:
-            last_error = e
-            if isinstance(e, GroqUnavailableError):
-                raise
-            continue
+    try:
+        content = _call_groq(
+            messages,
+            GROQ_VISION_MODEL,
+            json_mode=True,
+            max_tokens=1200,
+        )
+    except GroqUnavailableError:
+        raise
+    except (json.JSONDecodeError, KeyError) as e:
+        logger.warning("Groq vision JSON inválido, reintento sin json_mode: %s", e)
+        content = _call_groq(
+            messages,
+            GROQ_VISION_MODEL,
+            json_mode=False,
+            max_tokens=1200,
+        )
     if not content:
-        raise GroqUnavailableError(str(last_error or "Groq no devolvió contenido"))
+        raise GroqUnavailableError("Groq no devolvió contenido")
 
     vaccines = _extract_vaccines_from_groq_content(content, catalog_names=catalog_names)
     if not vaccines:
