@@ -51,11 +51,13 @@ services:
       - key: GROQ_RATE_LIMIT_RETRIES
         value: "1"
 
-      # ── Escaneo de vacunas: en producción solo Groq (sin Ollama/OCR en LAN) ─
+      # ── Escaneo: Groq primero; Ollama si falla (URL pública, ej. Tailscale Funnel) ─
       - key: OLLAMA_BASE_URL
-        sync: false   # dejar vacío en Render
+        sync: false
       - key: OLLAMA_VISION_MODEL
         value: moondream
+      - key: OLLAMA_TIMEOUT
+        value: "14"
       - key: OCR_SERVICE_URL
         sync: false
 

@@ -36,12 +36,6 @@ GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "90"))
 OCR_TIMEOUT = int(os.getenv("OCR_TIMEOUT", "10"))
-GROQ_VISION_TIMEOUT = int(
-    os.getenv(
-        "GROQ_VISION_TIMEOUT",
-        "28" if VISION_SKIP_LOCAL_FALLBACKS else "90",
-    )
-)
 VISION_MAX_IMAGE_SIDE = int(
     os.getenv(
         "VISION_MAX_IMAGE_SIDE",
@@ -304,6 +298,29 @@ def _ollama_usable() -> bool:
     return bool(OLLAMA_BASE_URL) and _service_url_reachable_from_backend(OLLAMA_BASE_URL)
 
 
+def _ocr_usable() -> bool:
+    if VISION_SKIP_LOCAL_FALLBACKS:
+        return False
+    return bool(OCR_SERVICE_URL) and _service_url_reachable_from_backend(OCR_SERVICE_URL)
+
+
+def _effective_groq_vision_timeout() -> int:
+    explicit = (os.getenv("GROQ_VISION_TIMEOUT") or "").strip()
+    if explicit:
+        return int(explicit)
+    if _ollama_usable():
+        return 14
+    if VISION_SKIP_LOCAL_FALLBACKS:
+        return 20
+    return 90
+
+
+def _effective_ollama_timeout() -> int:
+    if _ollama_usable() and VISION_SKIP_LOCAL_FALLBACKS:
+        return min(OLLAMA_TIMEOUT, 14)
+    return OLLAMA_TIMEOUT
+
+
 def _groq_rate_limit_retries() -> int:
     """Menos reintentos en prod para no superar el timeout de Render (~30 s)."""
     explicit = (os.getenv("GROQ_RATE_LIMIT_RETRIES") or "").strip()
@@ -316,13 +333,9 @@ def _groq_rate_limit_retries() -> int:
     return 4
 
 
-def _local_fallbacks_enabled() -> bool:
-    """True en local (Groq → Ollama → OCR). False en Render/Vercel (solo Groq)."""
-    if VISION_SKIP_LOCAL_FALLBACKS:
-        return False
-    return _ollama_usable() or (
-        bool(OCR_SERVICE_URL) and _service_url_reachable_from_backend(OCR_SERVICE_URL)
-    )
+def _scan_all_engines_failed() -> RuntimeError:
+    """Error genérico para el cliente; detalles quedan en logs del servidor."""
+    return RuntimeError("scan_failed")
 
 
 def _is_groq_retryable(status_code: int) -> bool:
@@ -433,7 +446,7 @@ def extract_text_moondream(image_bytes: bytes) -> str:
     resp = requests.post(
         f"{OLLAMA_BASE_URL}/api/generate",
         json=payload,
-        timeout=(5, OLLAMA_TIMEOUT),
+        timeout=(5, _effective_ollama_timeout()),
     )
     resp.raise_for_status()
     text = (resp.json().get("response") or "").strip()
@@ -452,7 +465,7 @@ def _call_groq(
     if not GROQ_API_KEY:
         raise GroqUnavailableError("GROQ_API_KEY no configurada")
 
-    request_timeout = timeout if timeout is not None else GROQ_VISION_TIMEOUT
+    request_timeout = timeout if timeout is not None else _effective_groq_vision_timeout()
 
     headers = {
         "Content-Type": "application/json",
@@ -842,95 +855,87 @@ def _scan_with_auto_fallback(
     catalog_names: Optional[list[str]] = None,
 ) -> dict[str, Any]:
     """
-    Cadena automática:
-      - Producción (VISION_SKIP_LOCAL_FALLBACKS=1): solo Groq Vision.
-      - Local (VISION_SKIP_LOCAL_FALLBACKS=0): Groq → Ollama → OCR.
+    Groq → Ollama (si OLLAMA_BASE_URL alcanzable) → OCR (solo local) → error.
     """
     if _is_pdf(image_bytes, filename):
         return _scan_pdf(image_bytes, catalog_names)
 
     errors: list[str] = []
-    groq_available = bool(GROQ_API_KEY)
-    groq_rate_limited = False
+    groq_nlp_ok = bool(GROQ_API_KEY)
     no_vaccines_error: Optional[ScanNoVaccinesError] = None
 
-    if groq_available:
+    if GROQ_API_KEY:
         try:
-            return extract_fields_groq_vision(image_bytes, filename=filename, catalog_names=catalog_names)
+            return extract_fields_groq_vision(
+                image_bytes, filename=filename, catalog_names=catalog_names
+            )
         except ScanImageError:
             raise
         except ScanNoVaccinesError as e:
             no_vaccines_error = e
             errors.append("Groq: no se detectaron vacunas en la imagen")
-        except GroqRateLimitError as e:
-            groq_rate_limited = True
+            logger.warning("Escaneo vacuna - %s", errors[-1])
+        except (GroqRateLimitError, GroqUnavailableError, json.JSONDecodeError, KeyError, requests.RequestException) as e:
             msg = f"Groq: {e}"
             logger.warning("Escaneo vacuna - %s", msg)
             errors.append(msg)
-            groq_available = False
-        except (GroqUnavailableError, json.JSONDecodeError, KeyError, requests.RequestException) as e:
-            msg = f"Groq: {e}"
-            logger.warning("Escaneo vacuna - %s", msg)
-            errors.append(msg)
-            groq_available = False
-
-    if not _local_fallbacks_enabled():
-        logger.info("Escaneo: fallbacks locales deshabilitados (solo Groq en producción)")
-        if no_vaccines_error:
-            return _scan_result(
-                [],
-                no_vaccines_error.raw_text,
-                no_vaccines_error.method,
-                warning=(
-                    "No se detectaron vacunas automáticamente. "
-                    "Revisá el texto extraído abajo o cargá los datos a mano."
-                ),
-            )
-        if groq_rate_limited:
-            raise GroqRateLimitError(
-                errors[0].removeprefix("Groq: ")
-                if errors
-                else "Groq alcanzó el límite de consultas por minuto."
-            )
-        if errors:
-            raise RuntimeError(
-                "No se pudo analizar la imagen con Groq. "
-                "Probá con una foto JPG/PNG nítida del certificado. "
-                f"Detalle: {errors[0]}"
-            )
-        raise RuntimeError("GROQ_API_KEY no configurada en el servidor.")
+            groq_nlp_ok = False
 
     if _ollama_usable():
         logger.info("Escaneo: Groq no alcanzó; probando Ollama en %s", OLLAMA_BASE_URL)
         try:
             raw_text = extract_text_moondream(image_bytes)
-            fields = parse_vaccine_fields(raw_text, catalog_names=catalog_names, prefer_groq=groq_available)
-            fields["method"] = "moondream"
-            if errors:
-                fields["fallback_from"] = errors
-            return fields
+            fields = parse_vaccine_fields(
+                raw_text,
+                catalog_names=catalog_names,
+                prefer_groq=groq_nlp_ok,
+            )
+            if fields.get("vaccines"):
+                fields["method"] = "moondream"
+                if errors:
+                    fields["fallback_from"] = errors
+                return fields
+            errors.append("Ollama: no se detectaron vacunas en la imagen")
+            logger.warning("Escaneo vacuna - %s", errors[-1])
         except Exception as e:
             msg = f"Ollama: {e}"
             logger.warning("Escaneo vacuna - %s", msg)
             errors.append(msg)
+    elif errors:
+        logger.info("Escaneo: Ollama no configurado o no alcanzable desde el servidor")
 
-    if OCR_SERVICE_URL and _service_url_reachable_from_backend(OCR_SERVICE_URL):
+    if _ocr_usable():
         try:
             raw_text = extract_text_ocr(image_bytes, filename=filename)
             if not raw_text.strip():
                 raise RuntimeError("OCR no detectó texto")
-            fields = parse_vaccine_fields(raw_text, catalog_names=catalog_names, prefer_groq=groq_available)
-            fields["method"] = "ocr"
-            if errors:
-                fields["fallback_from"] = errors
-            return fields
+            fields = parse_vaccine_fields(
+                raw_text,
+                catalog_names=catalog_names,
+                prefer_groq=groq_nlp_ok,
+            )
+            if fields.get("vaccines"):
+                fields["method"] = "ocr"
+                if errors:
+                    fields["fallback_from"] = errors
+                return fields
+            errors.append("OCR: no se detectaron vacunas en la imagen")
         except Exception as e:
             errors.append(f"OCR: {e}")
 
-    raise RuntimeError(
-        "No se pudo analizar la imagen. Usá una foto JPG o PNG del certificado. "
-        + (f"Detalle: {errors[0]}" if errors else "")
-    )
+    if no_vaccines_error and not _ollama_usable() and not _ocr_usable():
+        return _scan_result(
+            [],
+            no_vaccines_error.raw_text,
+            no_vaccines_error.method,
+            warning=(
+                "No se detectaron vacunas automáticamente. "
+                "Revisá el texto extraído abajo o cargá los datos a mano."
+            ),
+        )
+
+    logger.error("Escaneo falló tras Groq/Ollama/OCR: %s", "; ".join(errors))
+    raise _scan_all_engines_failed()
 
 
 def scan_vaccine_image(

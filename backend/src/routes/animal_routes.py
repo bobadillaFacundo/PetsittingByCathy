@@ -617,15 +617,20 @@ async def scan_vaccine_certificate(
     except ScanImageError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except GroqRateLimitError as e:
-        raise HTTPException(status_code=429, detail=str(e))
+        logger.warning("Escaneo vacuna rate limit sin fallback: %s", e)
+        raise HTTPException(status_code=502, detail="scan_failed")
     except GroqUnavailableError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        logger.warning("Escaneo vacuna Groq no disponible: %s", e)
+        raise HTTPException(status_code=502, detail="scan_failed")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        if str(e) == "scan_failed":
+            raise HTTPException(status_code=502, detail="scan_failed")
+        raise HTTPException(status_code=502, detail="scan_failed")
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Error al analizar la imagen: {e}")
+        logger.exception("Escaneo vacuna error inesperado")
+        raise HTTPException(status_code=502, detail="scan_failed")
 
     return _enrich_scan_vaccines(result, catalog_list)
 
