@@ -9,7 +9,7 @@ import asyncio
 
 router = APIRouter(prefix="/animals", tags=["Animals"])
 
-@router.post("/", response_model=AnimalResponse)
+@router.post("", response_model=AnimalResponse)
 def create_animal(animal: AnimalCreate, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
     db_animal = Animal(**animal.model_dump())
     db.add(db_animal)
@@ -52,7 +52,7 @@ def get_veterinarians(db: Session = Depends(get_db)):
     return [{"id": v.id, "name": v.name} for v in vets]
 
 
-@router.get("/", response_model=List[AnimalResponse])
+@router.get("", response_model=List[AnimalResponse])
 def get_animals(
     skip: int = 0,
     limit: int = 1000,

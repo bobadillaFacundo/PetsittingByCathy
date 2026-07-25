@@ -28,11 +28,11 @@ class UserChangePassword(BaseModel):
 
 # --- ROUTES ---
 
-@router.get("/", response_model=List[UserResponse])
+@router.get("", response_model=List[UserResponse])
 def get_users(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     return db.query(User).all()
 
-@router.post("/", response_model=UserResponse)
+@router.post("", response_model=UserResponse)
 def create_user(user_in: UserCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     existing = db.query(User).filter(User.name == user_in.name).first()
     if existing:

@@ -35,7 +35,7 @@ class DashboardResponse(BaseModel):
     alerts: List[AlertDTO]
     critical_alerts: List[CriticalAlertDTO]
 
-@router.get("/", response_model=DashboardResponse)
+@router.get("", response_model=DashboardResponse)
 def get_dashboard(db: Session = Depends(get_db)):
     # 1. Animales Activos solamente (is_active=True)
     animals = db.query(Animal).filter(Animal.is_active == True).all()

@@ -23,7 +23,12 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Asistente Veterinario API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(
+    title="Asistente Veterinario API",
+    version="1.0.0",
+    lifespan=lifespan,
+    redirect_slashes=False,
+)
 
 
 def _cors_headers(request: Request) -> dict:

@@ -12,7 +12,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     response: str
 
-@router.post("/", response_model=ChatResponse)
+@router.post("", response_model=ChatResponse)
 def smart_chat(request: ChatRequest, db: Session = Depends(get_db)):
     # Pasamos el query y la conexión a BD al NLPService
     answer = NLPService.answer_query(request.query, db)

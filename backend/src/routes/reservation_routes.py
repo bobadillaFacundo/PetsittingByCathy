@@ -120,7 +120,7 @@ def _db_error_detail(exc: SQLAlchemyError) -> str:
     return "No se pudo guardar la reserva. Verificá los datos."
 
 
-@router.post("/", response_model=ReservationResponse)
+@router.post("", response_model=ReservationResponse)
 def create_reservation(
     reservation: ReservationCreate,
     db: Session = Depends(get_db),
@@ -142,7 +142,7 @@ def create_reservation(
     return reservation_to_response(db_reservation)
 
 
-@router.get("/", response_model=List[ReservationResponse])
+@router.get("", response_model=List[ReservationResponse])
 def get_reservations(db: Session = Depends(get_db), current_admin=Depends(get_current_user)):
     rows = _get_reservation_query(db).all()
     return [reservation_to_response(row) for row in rows]

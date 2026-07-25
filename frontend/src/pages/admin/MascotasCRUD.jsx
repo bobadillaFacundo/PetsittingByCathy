@@ -6,7 +6,7 @@ import LaboratoriosTab from './LaboratoriosTab';
 import LibretaTab from './LibretaTab';
 import MedicacionTab from './MedicacionTab';
 import ObservacionesTab from './ObservacionesTab';
-import { redirectToLogin } from '../../lib/auth';
+import { redirectToLogin, getToken } from '../../lib/auth';
 import { API_BASE, apiUrl, mediaUrl } from '../../lib/api';
 
 const SPECIES_INFO = {
@@ -126,7 +126,12 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
   
   const [formData, setFormData] = useState(() => emptyForm(daycareOnly));
 
-  const token = localStorage.getItem('token');
+  const token = getToken();
+
+  const authHeaders = () => ({
+    Authorization: `Bearer ${getToken()}`,
+  });
+
   const sectionTitle = title || (daycareOnly ? 'Mascotas' : 'Guardería');
   const sectionSubtitle = subtitle || (daycareOnly
     ? 'Pacientes con estadía'
@@ -145,7 +150,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
       const res = await fetch(
         apiUrl(`/animals?is_daycare=${daycareOnly}&include_inactive=true`),
         {
-          headers: { 'Authorization': `Bearer ${token}` }
+          headers: authHeaders(),
         }
       );
       if (!res.ok) {
@@ -167,7 +172,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
   const fetchSpecies = async () => {
     try {
       const res = await fetch(`${API_BASE}/animals/species`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: authHeaders(),
       });
       if (!res.ok) {
         if (res.status === 401) {
@@ -186,7 +191,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
   const fetchBreeds = async () => {
     try {
       const res = await fetch(`${API_BASE}/animals/breeds`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: authHeaders(),
       });
       if (res.ok) {
         const data = await res.json();
@@ -295,7 +300,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
         method,
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          ...authHeaders(),
         },
         body: JSON.stringify(payload)
       });
@@ -319,7 +324,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
         const res = await fetch(`${API_BASE}/animals/${id}`, {
           method: 'DELETE',
           headers: {
-            'Authorization': `Bearer ${token}`
+            ...authHeaders(),
           }
         });
         if (res.ok) {
@@ -339,8 +344,8 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
       const res = await fetch(`${API_BASE}/animals/${id}`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
+          ...authHeaders(),
         },
         body: JSON.stringify({ is_active: true }),
       });
