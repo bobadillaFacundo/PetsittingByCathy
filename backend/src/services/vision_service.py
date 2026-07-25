@@ -465,6 +465,7 @@ def _call_groq(
     attempts.append({})
 
     last_error = ""
+    rate_limit_retries = _groq_rate_limit_retries()
     for extra in attempts:
         payload = {
             "model": model,
@@ -475,7 +476,7 @@ def _call_groq(
         if max_tokens is not None:
             payload["max_tokens"] = max_tokens
 
-        for rate_attempt in range(_groq_rate_limit_retries()):
+        for rate_attempt in range(rate_limit_retries):
             try:
                 resp = requests.post(
                     GROQ_URL,
@@ -495,7 +496,7 @@ def _call_groq(
 
             if resp.status_code == 429:
                 last_error = _groq_error_message(429, resp.text)
-                if rate_attempt < GROQ_RATE_LIMIT_RETRIES - 1:
+                if rate_attempt < rate_limit_retries - 1:
                     time.sleep(_parse_groq_retry_seconds(resp.text))
                     continue
                 raise GroqRateLimitError(last_error)
