@@ -62,8 +62,8 @@ export default function ColoresPanel() {
   if (loading) return <div className="p-8 text-center text-gray-500 font-bold animate-pulse">Cargando configuración...</div>;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 animate-fade-in-up">
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+    <div className="max-w-4xl mx-auto pet-section animate-fade-in-up">
+      <div className="pet-panel p-6 flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-black text-gray-800 flex items-center gap-2">
             <Palette className="text-indigo-500" /> Configuración de Colores
@@ -126,7 +126,7 @@ function RuleCard({ rule, onSave, isSaving }) {
         <button
           onClick={() => onSave(value)}
           disabled={isSaving || value === rule.keywords}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-xl font-bold transition-all shadow-sm"
+          className="pet-btn pet-btn--primary px-4 py-2 disabled:bg-gray-400"
         >
           {isSaving ? <RefreshCw size={18} className="animate-spin" /> : <Save size={18} />}
           {isSaving ? 'Guardando...' : 'Guardar'}

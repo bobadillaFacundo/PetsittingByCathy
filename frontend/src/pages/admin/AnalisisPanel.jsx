@@ -81,8 +81,8 @@ export default function AnalisisPanel() {
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-      <div className="flex justify-between items-center mb-6">
+    <div className="pet-panel p-6">
+      <div className="flex justify-between items-center mb-6 gap-4">
         <div>
           <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
             <Activity className="text-indigo-600" /> Análisis de Evolución IA
@@ -92,12 +92,13 @@ export default function AnalisisPanel() {
           </p>
         </div>
         <button
+          type="button"
           onClick={() => {
             const list = selectedSpeciesId ? animals.filter(a => a.species_id === selectedSpeciesId) : animals;
             generateAll(list);
           }}
           disabled={isGeneratingAll || loadingAnimals || animals.length === 0 || (selectedSpeciesId && animals.filter(a => a.species_id === selectedSpeciesId).length === 0)}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50"
+          className="pet-btn pet-btn--primary px-4 py-2 text-sm shrink-0"
         >
           {isGeneratingAll ? (
             <><RefreshCw size={16} className="animate-spin" /> Procesando IA...</>
@@ -118,15 +119,16 @@ export default function AnalisisPanel() {
       ) : !selectedSpeciesId ? (
         <div className="p-4 md:p-6 animate-fade-in-up">
           <h2 className="text-xl font-bold text-gray-800 mb-6 text-center">Selecciona la especie para analizar</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 max-w-3xl mx-auto">
+          <div className="pet-species-grid max-w-3xl mx-auto">
             {Object.entries(SPECIES_INFO).map(([id, info]) => {
               const numId = parseInt(id);
               const count = animals.filter(a => a.species_id === numId).length;
               return (
                 <button
                   key={id}
+                  type="button"
                   onClick={() => setSelectedSpeciesId(numId)}
-                  className="p-5 bg-white rounded-2xl shadow-sm border border-gray-100 hover:border-indigo-400 hover:shadow-md transition-all flex flex-col items-center gap-3"
+                  className="pet-species-tile"
                 >
                   <span className="text-4xl">{info.emoji}</span>
                   <span className="text-lg font-bold text-gray-800">{info.name}</span>
@@ -140,8 +142,9 @@ export default function AnalisisPanel() {
         <div className="animate-fade-in-up">
           <div className="flex items-center gap-4 mb-6 bg-gray-50/50 p-4 rounded-xl border border-gray-100">
              <button 
+               type="button"
                onClick={() => setSelectedSpeciesId(null)}
-               className="p-2 bg-white text-gray-600 rounded-full hover:bg-gray-100 border border-gray-200 transition shadow-sm"
+               className="pet-icon-btn pet-icon-btn--ghost p-2 rounded-full"
                title="Volver"
              >
                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
@@ -159,7 +162,7 @@ export default function AnalisisPanel() {
               const state = analyses[animal.id] || { loading: false, data: null, error: null };
               
               return (
-                <div key={animal.id} className="border border-gray-200 rounded-xl p-5 hover:border-indigo-200 transition-colors bg-white shadow-sm">
+                <div key={animal.id} className="pet-card pet-card--interactive p-5">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-700 font-bold text-lg shrink-0 border border-indigo-100">
@@ -173,8 +176,9 @@ export default function AnalisisPanel() {
                     
                     {!state.data && !state.loading && (
                       <button
+                        type="button"
                         onClick={() => generateAnalysis(animal.id)}
-                        className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 hover:text-indigo-600 transition-colors"
+                        className="pet-btn pet-btn--ghost px-3 py-1.5 text-sm"
                       >
                         Analizar
                       </button>

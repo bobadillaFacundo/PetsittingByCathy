@@ -298,7 +298,7 @@ export default function LibretaTab({ animalId, token }) {
                 type="button"
                 onClick={handleScan}
                 disabled={!selectedFile || scanning}
-                className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center justify-center gap-1 shrink-0 disabled:opacity-60 w-full sm:w-auto"
+                className="pet-btn pet-btn--primary px-3 py-1.5 text-sm shrink-0 disabled:opacity-60 w-full sm:w-auto"
               >
                 <ScanLine size={16} /> {scanning ? 'Analizando...' : 'Escanear'}
               </button>
@@ -518,7 +518,7 @@ export default function LibretaTab({ animalId, token }) {
                     <button
                       type="button"
                       onClick={() => handleDelete(v.id)}
-                      className="text-red-600 bg-red-50 hover:bg-red-100 p-2 rounded-lg"
+                      className="pet-icon-btn pet-icon-btn--red p-2"
                     >
                       <Trash2 size={16} />
                     </button>

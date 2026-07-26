@@ -70,15 +70,16 @@ export default function AdminDashboard() {
             return (
               <button
                 key={item.id}
+                type="button"
                 onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                className={`pet-sidebar-nav-item ${
                   isActive 
-                    ? 'bg-indigo-600 text-white shadow-md' 
-                    : 'text-indigo-200 hover:bg-indigo-800 hover:text-white'
+                    ? 'pet-sidebar-nav-item--active' 
+                    : 'pet-sidebar-nav-item--inactive'
                 }`}
               >
                 <Icon size={20} className="shrink-0" />
-                <span className={`font-medium ${!isSidebarOpen && 'hidden'}`}>{item.label}</span>
+                <span className={!isSidebarOpen ? 'hidden' : undefined}>{item.label}</span>
               </button>
             );
           })}
@@ -88,7 +89,7 @@ export default function AdminDashboard() {
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 h-screen h-dvh overflow-hidden relative pb-[calc(4.5rem+var(--safe-bottom))] md:pb-0">
         {/* Topbar */}
-        <header className="bg-white/80 backdrop-blur-md border-b border-gray-200 px-3 sm:px-4 md:px-6 py-3 sm:py-4 flex items-center justify-between sticky top-0 z-10 pt-[max(0.75rem,var(--safe-top))] md:pt-4">
+        <header className="pet-nav-bar px-3 sm:px-4 md:px-6 py-3 sm:py-4 flex items-center justify-between sticky top-0 z-10 pt-[max(0.75rem,var(--safe-top))] md:pt-4">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <img src="/logo.png" alt="Logo" className="w-8 h-8 rounded-xl object-contain md:hidden shrink-0" />
             <h2 className="text-lg sm:text-xl md:text-2xl font-black text-gray-800 tracking-tight truncate">
@@ -96,16 +97,17 @@ export default function AdminDashboard() {
             </h2>
           </div>
           
-          <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <button 
+              type="button"
               onClick={() => navigate('/')}
-              className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors bg-gray-100 px-3 sm:px-4 py-2 rounded-xl"
+              className="pet-btn pet-btn--ghost flex items-center gap-2 text-sm px-3 sm:px-4 py-2"
               title="Ir a la App"
             >
               <Home size={16} />
               <span className="hidden sm:inline">Ir a la App</span>
             </button>
-            <button onClick={handleLogout} className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors">
+            <button type="button" onClick={handleLogout} className="pet-btn pet-btn--danger p-2.5 rounded-xl">
               <LogOut size={20} />
             </button>
           </div>
@@ -113,7 +115,7 @@ export default function AdminDashboard() {
 
         {/* Content Area */}
         <div className="flex-1 overflow-y-auto scroll-touch p-3 sm:p-4 md:p-8">
-          <div className="max-w-6xl mx-auto space-y-6 sm:space-y-8">
+          <div className="max-w-6xl mx-auto pet-section">
             {activeTab === 'diccionario' && (
               <DiccionarioPanel />
             )}

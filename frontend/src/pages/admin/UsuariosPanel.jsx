@@ -137,16 +137,17 @@ export default function UsuariosPanel() {
   if (isLoading) return <div className="text-center p-8 text-gray-500">Cargando usuarios...</div>;
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-200">
+    <div className="pet-panel">
       {/* Encabezado */}
-      <div className="p-4 sm:p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 rounded-t-2xl gap-2">
+      <div className="pet-panel-header">
         <div>
           <h2 className="text-lg sm:text-xl font-bold text-gray-800">Gestión de Usuarios</h2>
           <p className="text-xs sm:text-sm text-gray-500 mt-0.5 sm:mt-1">Alta, baja y cambio de contraseña de cuidadores</p>
         </div>
         <button 
+          type="button"
           onClick={openCreateModal}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white p-2.5 sm:px-4 sm:py-2 rounded-xl font-medium flex items-center gap-2 transition-colors shadow-sm shrink-0 active:scale-95"
+          className="pet-btn pet-btn--primary p-2.5 sm:px-4 sm:py-2 shrink-0"
         >
           <UserPlus size={20} /> <span className="hidden sm:inline">Nuevo Usuario</span>
         </button>
@@ -182,18 +183,20 @@ export default function UsuariosPanel() {
                   </td>
                   <td className="px-6 py-4 flex justify-end gap-2">
                     <button 
+                      type="button"
                       onClick={() => openPasswordModal(user)}
-                      className="p-2 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl transition-colors active:scale-95 flex items-center gap-1"
+                      className="pet-icon-btn pet-icon-btn--indigo p-2"
                       title="Cambiar Contraseña"
                     >
                       <Lock size={18} />
                     </button>
                     <button 
+                      type="button"
                       onClick={() => handleToggleStatus(user)}
-                      className={`p-2 rounded-xl transition-colors active:scale-95 flex items-center gap-1 ${
+                      className={`pet-icon-btn p-2 ${
                         user.is_active 
-                          ? 'text-red-500 hover:text-red-700 hover:bg-red-50' 
-                          : 'text-green-500 hover:text-green-700 hover:bg-green-50'
+                          ? 'pet-icon-btn--red' 
+                          : 'pet-icon-btn--green'
                       }`}
                       title={user.is_active ? "Dar de baja" : "Reactivar"}
                       disabled={user.name === 'cathy'}
@@ -210,15 +213,16 @@ export default function UsuariosPanel() {
 
       {/* Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+        <div className="modal-overlay flex items-center justify-center p-4" onClick={(e) => { if (e.target === e.currentTarget) setIsModalOpen(false); }}>
+          <div className="modal-sheet max-w-md overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="pet-modal-header">
               <h3 className="text-lg font-bold text-gray-800">
                 {modalMode === 'create' ? 'Crear Nuevo Usuario' : `Cambiar Contraseña: ${editingUser?.name}`}
               </h3>
               <button 
+                type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600 hover:bg-gray-200 p-1 rounded-lg transition-colors"
+                className="pet-modal-close"
               >
                 <X size={20} />
               </button>
@@ -235,7 +239,7 @@ export default function UsuariosPanel() {
                       required
                       value={formData.name}
                       onChange={(e) => setFormData({...formData, name: e.target.value.toLowerCase()})}
-                      className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900"
+                      className="pet-input"
                       placeholder="Ej: juan"
                     />
                   </div>
@@ -246,7 +250,7 @@ export default function UsuariosPanel() {
                       required
                       value={formData.password}
                       onChange={(e) => setFormData({...formData, password: e.target.value})}
-                      className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900"
+                      className="pet-input"
                       placeholder="Contraseña"
                     />
                   </div>
@@ -261,7 +265,7 @@ export default function UsuariosPanel() {
                     required
                     value={passwordData.new_password}
                     onChange={(e) => setPasswordData({new_password: e.target.value})}
-                    className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900"
+                    className="pet-input"
                     placeholder="Escriba la nueva contraseña"
                   />
                 </div>
@@ -271,13 +275,13 @@ export default function UsuariosPanel() {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl font-medium transition-colors"
+                  className="pet-btn pet-btn--ghost px-4 py-2 font-medium"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium flex items-center gap-2 shadow-sm transition-colors"
+                  className="pet-btn pet-btn--primary px-4 py-2 font-medium"
                 >
                   <Save size={18} /> {modalMode === 'create' ? 'Crear' : 'Actualizar'}
                 </button>

@@ -229,7 +229,7 @@ export default function MedicacionTab({ animalId }) {
         </div>
 
         <div className="flex gap-2 pt-2">
-          <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2">
+          <button type="submit" className="pet-btn pet-btn--primary px-4 py-2 text-sm">
             <Check size={16} /> Guardar
           </button>
           {isEditing && (
@@ -282,7 +282,7 @@ export default function MedicacionTab({ animalId }) {
                 </button>
                 <button 
                   onClick={() => handleDelete(m.id)}
-                  className="p-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                  className="pet-icon-btn pet-icon-btn--red p-2"
                 >
                   <Trash2 size={16} />
                 </button>

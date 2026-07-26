@@ -185,7 +185,7 @@ export default function LaboratoriosTab({ animalId, token }) {
                   <button
                     type="button"
                     onClick={() => handleDelete(lab.id)}
-                    className="text-red-600 bg-red-50 hover:bg-red-100 p-2 rounded-lg flex items-center transition-colors"
+                    className="pet-icon-btn pet-icon-btn--red p-2"
                     title="Eliminar estudio"
                   >
                     <Trash2 size={16} />

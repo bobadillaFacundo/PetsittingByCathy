@@ -27,16 +27,17 @@ export default function CatalogsPanel() {
   ];
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 flex gap-2 overflow-x-auto">
+    <div className="pet-section">
+      <div className="pet-panel p-4 flex gap-2 overflow-x-auto scroll-touch">
         {catalogs.map(c => (
           <button
             key={c.id}
+            type="button"
             onClick={() => setActiveCatalog(c.id)}
-            className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-colors ${
+            className={`pet-tab-pill text-sm ${
               activeCatalog === c.id 
-                ? 'bg-indigo-600 text-white' 
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                ? 'pet-tab-pill--active' 
+                : 'pet-tab-pill--inactive'
             }`}
           >
             {c.label}

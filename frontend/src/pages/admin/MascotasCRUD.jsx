@@ -106,11 +106,7 @@ function sexLabel(sex) {
 }
 
 function modalTabButtonClass(active) {
-  return `flex-1 min-w-0 flex flex-col sm:flex-row items-center justify-center gap-1 px-1.5 sm:px-3 py-2.5 sm:py-3 font-bold text-[11px] sm:text-sm border-b-2 transition-colors whitespace-nowrap ${
-    active
-      ? 'border-indigo-600 text-indigo-600 bg-indigo-50/50'
-      : 'border-transparent text-gray-500 hover:text-gray-700'
-  }`;
+  return `pet-modal-tab ${active ? 'pet-modal-tab--active' : ''}`;
 }
 
 export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
@@ -378,16 +374,17 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
     : [];
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-200">
+    <div className="pet-panel">
       {/* Encabezado */}
-      <div className="p-4 sm:p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 rounded-t-2xl gap-2">
+      <div className="pet-panel-header">
         <div>
           <h2 className="text-lg sm:text-xl font-bold text-gray-800">{sectionTitle}</h2>
           <p className="text-xs sm:text-sm text-gray-500 mt-0.5 sm:mt-1">{sectionSubtitle}</p>
         </div>
         <button 
+          type="button"
           onClick={() => openModal()}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white p-2.5 sm:px-4 sm:py-2 rounded-xl font-medium flex items-center gap-2 transition-colors shadow-sm shrink-0 active:scale-95"
+          className="pet-btn pet-btn--primary p-2.5 sm:px-4 sm:py-2 shrink-0"
         >
           <Plus size={20} /> <span className="hidden sm:inline">Nueva Mascota</span>
         </button>
@@ -396,15 +393,16 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
       {!selectedSpeciesId ? (
         <div className="p-6 md:p-10">
           <h2 className="text-2xl font-bold text-gray-800 mb-8 text-center">Selecciona la especie para gestionar</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-w-4xl mx-auto">
+          <div className="pet-species-grid max-w-4xl mx-auto">
             {speciesList.map((s) => {
               const count = mascotas.filter(m => m.species_id === s.id).length;
               const emoji = SPECIES_INFO[s.id]?.emoji || "🐾";
               return (
                 <button
                   key={s.id}
+                  type="button"
                   onClick={() => setSelectedSpeciesId(s.id)}
-                  className="p-6 bg-white rounded-2xl shadow-sm border border-gray-100 hover:border-indigo-400 hover:shadow-md transition-all flex flex-col items-center gap-3"
+                  className="pet-species-tile"
                 >
                   <span className="text-5xl">{emoji}</span>
                   <span className="text-xl font-bold text-gray-800">{s.name}</span>
@@ -418,8 +416,9 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
         <div className="animate-fade-in-up">
           <div className="p-4 border-b border-gray-100 bg-gray-50/30 flex items-center gap-4">
             <button 
+              type="button"
               onClick={() => setSelectedSpeciesId(null)}
-              className="p-2 bg-white border border-gray-200 text-gray-600 rounded-full hover:bg-gray-100 transition shadow-sm"
+              className="pet-icon-btn pet-icon-btn--ghost p-2 rounded-full"
               title="Volver"
             >
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
@@ -437,9 +436,12 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
             {mascotas.filter(m => m.species_id === selectedSpeciesId).map((m) => (
               <div
                 key={m.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => openModal(m)}
-                className={`bg-white rounded-3xl shadow-sm border p-5 flex flex-col justify-between hover:shadow-md transition-shadow cursor-pointer ${
-                  m.is_active ? 'border-gray-100' : 'border-red-100 bg-red-50/30 opacity-90'
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') openModal(m); }}
+                className={`pet-mascota-card ${
+                  m.is_active ? '' : 'border-red-100 bg-red-50/30 opacity-90'
                 }`}
               >
                 <div className="flex justify-between items-start mb-4">
@@ -488,24 +490,27 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                   </span>
                   <div className="flex gap-2">
                     <button 
+                      type="button"
                       onClick={(e) => { e.stopPropagation(); openModal(m); }}
-                      className="p-3 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-all active:scale-95 shadow-sm"
+                      className="pet-icon-btn pet-icon-btn--indigo p-3"
                       title="Editar / historial"
                     >
                       <Pencil size={18} />
                     </button>
                     {m.is_active ? (
                       <button 
+                        type="button"
                         onClick={(e) => { e.stopPropagation(); handleDelete(m.id, m.name); }}
-                        className="p-3 text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-all active:scale-95 shadow-sm"
+                        className="pet-icon-btn pet-icon-btn--red p-3"
                         title="Dar de baja"
                       >
                         <Trash2 size={18} />
                       </button>
                     ) : (
                       <button 
+                        type="button"
                         onClick={(e) => { e.stopPropagation(); handleReactivate(m.id, m.name); }}
-                        className="p-3 text-green-700 bg-green-50 hover:bg-green-100 rounded-xl transition-all active:scale-95 shadow-sm"
+                        className="pet-icon-btn pet-icon-btn--green p-3"
                         title="Dar de alta"
                       >
                         <RotateCcw size={18} />
@@ -598,24 +603,27 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                     </td>
                     <td className="px-6 py-4 flex justify-end gap-2">
                       <button 
+                        type="button"
                         onClick={(e) => { e.stopPropagation(); openModal(m); }}
-                        className="p-2 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl transition-colors active:scale-95"
+                        className="pet-icon-btn pet-icon-btn--indigo p-2"
                         title="Editar / historial"
                       >
                         <Pencil size={18} />
                       </button>
                       {m.is_active ? (
                         <button 
+                          type="button"
                           onClick={(e) => { e.stopPropagation(); handleDelete(m.id, m.name); }}
-                          className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-xl transition-colors active:scale-95"
+                          className="pet-icon-btn pet-icon-btn--red p-2"
                           title="Dar de baja"
                         >
                           <Trash2 size={18} />
                         </button>
                       ) : (
                         <button 
+                          type="button"
                           onClick={(e) => { e.stopPropagation(); handleReactivate(m.id, m.name); }}
-                          className="p-2 text-green-600 hover:text-green-800 hover:bg-green-50 rounded-xl transition-colors active:scale-95"
+                          className="pet-icon-btn pet-icon-btn--green p-2"
                           title="Dar de alta"
                         >
                           <RotateCcw size={18} />
@@ -645,7 +653,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
         >
           <div className="modal-overlay-inner">
             <div className="modal-sheet modal-sheet--pet" onClick={(e) => e.stopPropagation()}>
-              <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 sticky top-0 z-10 shrink-0">
+              <div className="pet-modal-header">
                 <div>
                   <h3 className="text-lg font-bold text-gray-800">
                     {editingId ? 'Editar Mascota' : 'Nueva Mascota'}
@@ -660,7 +668,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="text-gray-400 hover:text-gray-600 hover:bg-gray-200 p-2 rounded-lg transition-colors"
+                  className="pet-modal-close"
                 >
                   <X size={20} />
                 </button>
@@ -677,10 +685,8 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                         key={m.id}
                         type="button"
                         onClick={() => switchAnimalInModal(m)}
-                        className={`flex flex-col items-start gap-1 px-3 py-2 rounded-xl border text-left transition-all shrink-0 ${
-                          m.id === editingId
-                            ? 'border-indigo-500 bg-indigo-50 shadow-sm'
-                            : 'border-gray-200 bg-gray-50 hover:border-indigo-300 hover:bg-indigo-50/50'
+                        className={`pet-modal-peer ${
+                          m.id === editingId ? 'pet-modal-peer--active' : ''
                         }`}
                       >
                         <span className="text-sm font-bold text-gray-900 whitespace-nowrap">{m.name}</span>
@@ -749,7 +755,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                       required
                       value={formData.name}
                       onChange={(e) => setFormData({...formData, name: e.target.value})}
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 text-base"
+                      className="pet-input text-base"
                       placeholder="Nombre de la mascota"
                     />
                   </div>
@@ -760,7 +766,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                       required
                       value={formData.species_id}
                       onChange={(e) => setFormData({...formData, species_id: parseInt(e.target.value), breed_id: ''})}
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 text-base bg-white"
+                      className="pet-select text-base"
                     >
                       <option value="">Seleccione una especie</option>
                       {speciesList.map(s => (
@@ -790,7 +796,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                     <select
                       value={formData.breed_id}
                       onChange={(e) => setFormData({...formData, breed_id: e.target.value ? parseInt(e.target.value) : null})}
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 text-base bg-white"
+                      className="pet-select text-base"
                     >
                       <option value="">Desconocida / Sin raza</option>
                       {breedsList
@@ -816,7 +822,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                       type="text"
                       value={formData.coat_color}
                       onChange={(e) => setFormData({ ...formData, coat_color: e.target.value })}
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 text-base"
+                      className="pet-input text-base"
                       placeholder="Ej. negro y blanco, atigrado…"
                     />
                   </div>
@@ -832,7 +838,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                           inputMode="decimal"
                           value={formData.age_estimate_min}
                           onChange={(e) => setFormData({ ...formData, age_estimate_min: e.target.value })}
-                          className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 text-base"
+                          className="pet-input text-base"
                           placeholder="Desde"
                         />
                         <span className="text-gray-500 font-bold shrink-0">a</span>
@@ -843,7 +849,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                           inputMode="decimal"
                           value={formData.age_estimate_max}
                           onChange={(e) => setFormData({ ...formData, age_estimate_max: e.target.value })}
-                          className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 text-base"
+                          className="pet-input text-base"
                           placeholder="Hasta"
                         />
                       </div>
@@ -858,7 +864,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                         inputMode="decimal"
                         value={formData.age_years}
                         onChange={(e) => setFormData({ ...formData, age_years: e.target.value })}
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 text-base"
+                        className="pet-input text-base"
                         placeholder="Ej. 3 o 1.5"
                       />
                     </div>
@@ -869,7 +875,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                     <select
                       value={formData.sex}
                       onChange={(e) => setFormData({...formData, sex: e.target.value})}
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 text-base bg-white"
+                      className="pet-select text-base"
                     >
                       <option value="">No definido</option>
                       <option value="M">Macho</option>
@@ -922,7 +928,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                         placeholder="Ej. 12.5"
                         value={formData.weight_kg}
                         onChange={(e) => setFormData({ ...formData, weight_kg: e.target.value })}
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 text-base bg-white"
+                        className="pet-select text-base"
                       />
                     </div>
                   </div>
@@ -946,7 +952,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                       <select
                         value={formData.residence}
                         onChange={(e) => setFormData({...formData, residence: e.target.value})}
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 text-base bg-white"
+                        className="pet-select text-base"
                       >
                         <option value="">No definida</option>
                         <option value="BOUQUET">BOUQUET</option>
@@ -960,13 +966,13 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                     <button
                       type="button"
                       onClick={() => setIsModalOpen(false)}
-                      className="flex-1 px-4 py-3 text-gray-600 bg-gray-100 rounded-xl font-bold"
+                      className="pet-btn pet-btn--ghost flex-1 px-4 py-3 font-bold"
                     >
                       Cancelar
                     </button>
                     <button
                       type="submit"
-                      className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl font-bold flex items-center justify-center gap-2"
+                      className="pet-btn pet-btn--primary flex-1 px-4 py-3 font-bold"
                     >
                       <Save size={18} /> {editingId ? 'Guardar' : 'Crear'}
                     </button>

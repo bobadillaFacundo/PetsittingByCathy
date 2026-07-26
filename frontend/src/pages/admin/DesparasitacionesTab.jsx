@@ -337,7 +337,7 @@ export default function DesparasitacionesTab({ animalId, token }) {
               type="button"
               onClick={handleScan}
               disabled={!selectedFile || scanning}
-              className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center justify-center gap-1 shrink-0 disabled:opacity-60 w-full sm:w-auto"
+              className="pet-btn pet-btn--primary px-3 py-1.5 text-sm shrink-0 disabled:opacity-60 w-full sm:w-auto"
             >
               <ScanLine size={16} /> {scanning ? 'Analizando...' : 'Escanear'}
             </button>
@@ -387,7 +387,7 @@ export default function DesparasitacionesTab({ animalId, token }) {
                   <option value="">Seleccione un producto...</option>
                   {catalogs.internal.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
-                <button onClick={() => handleAdd('interna', newInterna, setNewInterna)} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1">
+                <button onClick={() => handleAdd('interna', newInterna, setNewInterna)} className="pet-btn pet-btn--primary px-3 py-1.5 text-sm">
                   <Plus size={16} /> Añadir
                 </button>
               </div>
@@ -411,7 +411,7 @@ export default function DesparasitacionesTab({ animalId, token }) {
                   <button
                     type="button"
                     onClick={() => handleDelete('interna', item.id, item.product?.name || 'esta desparasitación')}
-                    className="text-red-600 bg-red-50 hover:bg-red-100 p-2 rounded-lg transition-colors"
+                    className="pet-icon-btn pet-icon-btn--red p-2"
                     title="Eliminar"
                   >
                     <Trash2 size={16} />
@@ -447,7 +447,7 @@ export default function DesparasitacionesTab({ animalId, token }) {
                   <option value="">Seleccione un producto...</option>
                   {catalogs.external.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
-                <button onClick={() => handleAdd('externa', newExterna, setNewExterna)} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1">
+                <button onClick={() => handleAdd('externa', newExterna, setNewExterna)} className="pet-btn pet-btn--primary px-3 py-1.5 text-sm bg-emerald-600 hover:bg-emerald-700">
                   <Plus size={16} /> Añadir
                 </button>
               </div>
@@ -471,7 +471,7 @@ export default function DesparasitacionesTab({ animalId, token }) {
                   <button
                     type="button"
                     onClick={() => handleDelete('externa', item.id, item.product?.name || 'esta desparasitación')}
-                    className="text-red-600 bg-red-50 hover:bg-red-100 p-2 rounded-lg transition-colors"
+                    className="pet-icon-btn pet-icon-btn--red p-2"
                     title="Eliminar"
                   >
                     <Trash2 size={16} />

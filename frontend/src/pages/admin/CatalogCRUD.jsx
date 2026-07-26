@@ -111,11 +111,11 @@ export default function CatalogCRUD({ title, endpoint, columns, formFields, hide
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+    <div className="pet-panel p-6">
       <div className="flex justify-between items-center mb-6">
         <h3 className="text-xl font-bold text-gray-900">{title}</h3>
         {!hideCreate && (
-          <button onClick={() => openModal()} className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-indigo-700">
+          <button type="button" onClick={() => openModal()} className="pet-btn pet-btn--primary px-4 py-2 text-sm">
             <Plus size={16} /> Nuevo
           </button>
         )}
@@ -150,11 +150,11 @@ export default function CatalogCRUD({ title, endpoint, columns, formFields, hide
                         Obligatorio
                       </span>
                     )}
-                    <button onClick={() => openModal(item)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">
+                    <button type="button" onClick={() => openModal(item)} className="pet-icon-btn pet-icon-btn--indigo p-2">
                       <Edit2 size={16} />
                     </button>
                     {isDeletable(item) && (
-                      <button onClick={() => handleDelete(item.id, item.name)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg">
+                      <button type="button" onClick={() => handleDelete(item.id, item.name)} className="pet-icon-btn pet-icon-btn--red p-2">
                         <Trash2 size={16} />
                       </button>
                     )}
@@ -178,9 +178,9 @@ export default function CatalogCRUD({ title, endpoint, columns, formFields, hide
         >
           <div className="modal-overlay-inner">
             <div className="modal-sheet" onClick={(e) => e.stopPropagation()}>
-              <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 sticky top-0">
+              <div className="pet-modal-header">
                 <h3 className="font-bold text-lg text-gray-800">{editingId ? 'Editar' : 'Nuevo'} Registro</h3>
-                <button type="button" onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600 p-2">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="pet-modal-close">
                   <X size={20} />
                 </button>
               </div>
@@ -194,7 +194,7 @@ export default function CatalogCRUD({ title, endpoint, columns, formFields, hide
                       <select
                         value={formData[f.key] || ''}
                         onChange={e => setFormData({...formData, [f.key]: e.target.value})}
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 text-gray-900 bg-white text-base"
+                        className="pet-select text-base"
                         required={f.required}
                         disabled={lockName}
                       >
@@ -208,7 +208,7 @@ export default function CatalogCRUD({ title, endpoint, columns, formFields, hide
                         type={f.type || 'text'}
                         value={formData[f.key] || ''}
                         onChange={e => setFormData({...formData, [f.key]: e.target.value})}
-                        className={`w-full px-4 py-3 rounded-xl border border-gray-200 text-gray-900 text-base ${lockName ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                        className={`pet-input text-base ${lockName ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                         required={f.required}
                         readOnly={lockName}
                       />
@@ -220,10 +220,10 @@ export default function CatalogCRUD({ title, endpoint, columns, formFields, hide
                   );
                 })}
                 <div className="pt-2 flex gap-3">
-                  <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 px-4 py-3 bg-gray-100 text-gray-600 font-bold rounded-xl">
+                  <button type="button" onClick={() => setIsModalOpen(false)} className="pet-btn pet-btn--ghost flex-1 px-4 py-3 font-bold">
                     Cancelar
                   </button>
-                  <button type="submit" className="flex-1 px-4 py-3 bg-indigo-600 text-white font-bold rounded-xl">
+                  <button type="submit" className="pet-btn pet-btn--primary flex-1 px-4 py-3 font-bold">
                     Guardar
                   </button>
                 </div>

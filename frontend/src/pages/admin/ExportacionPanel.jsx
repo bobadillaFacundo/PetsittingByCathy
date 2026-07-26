@@ -28,7 +28,7 @@ export default function ExportacionPanel() {
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 animate-fade-in-up">
+    <div className="pet-panel p-6 animate-fade-in-up">
       <div className="mb-6">
         <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
           📄 Exportación de Historias Clínicas (IA)
@@ -41,7 +41,7 @@ export default function ExportacionPanel() {
       <div className="mb-8">
         <label className="block text-sm font-bold text-gray-700 mb-2">Seleccionar Paciente</label>
         <select 
-          className="w-full md:w-1/2 border border-gray-300 rounded-xl p-3 bg-gray-50 text-gray-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+          className="pet-select w-full md:w-1/2 text-base"
           value={selectedAnimalId}
           onChange={(e) => setSelectedAnimalId(e.target.value)}
           disabled={loading}

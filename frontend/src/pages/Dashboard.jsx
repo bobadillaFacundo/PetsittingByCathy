@@ -93,17 +93,17 @@ export default function Dashboard() {
   const health_yellow_alerts = (data.alerts || []).filter(a => a.severity !== 'high');
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8">
+    <div className="max-w-5xl mx-auto pet-section">
 
       {/* ALERTAS ROJAS (palabras clave rojas) — fijadas hasta resolver */}
       {red_alerts.length > 0 && (
-        <div className="bg-red-600 border-2 border-red-700 p-6 rounded-2xl shadow-lg animate-fade-in-up">
+        <div className="pet-alert-panel bg-red-600 border-2 border-red-700 animate-fade-in-up">
           <h2 className="text-xl font-black text-white flex items-center gap-2 mb-4">
             🚨 Alertas Rojas — Atención Inmediata
           </h2>
           <div className="space-y-3">
             {red_alerts.map((alert) => (
-              <div key={alert.id} className="bg-white/95 p-4 rounded-xl flex items-start justify-between gap-4 border border-red-200">
+              <div key={alert.id} className="pet-alert-item flex items-start justify-between gap-4 border border-red-200">
                 <div className="flex items-start gap-3">
                   <span className="text-2xl">🔴</span>
                   <div>
@@ -117,13 +117,13 @@ export default function Dashboard() {
                 <div className="flex flex-col gap-2 shrink-0">
                   <button
                     onClick={() => setSelectedAnimal(alert.animal_id)}
-                    className="px-3 py-1.5 bg-red-100 text-red-700 text-xs font-bold rounded-lg border border-red-300 hover:bg-red-200 transition"
+                    className="pet-btn pet-btn--ghost px-3 py-1.5 text-xs text-red-700 border-red-300 bg-red-50 hover:bg-red-100"
                   >
                     Ver Ficha
                   </button>
                   <button
                     onClick={() => resolveCriticalAlert(alert.id)}
-                    className="px-3 py-1.5 bg-green-600 text-white text-xs font-bold rounded-lg hover:bg-green-700 transition"
+                    className="pet-btn pet-btn--primary px-3 py-1.5 text-xs bg-green-600 hover:bg-green-700"
                   >
                     ✓ Marcar Resuelta
                   </button>
@@ -136,13 +136,13 @@ export default function Dashboard() {
 
       {/* ALERTAS AMARILLAS (palabras clave amarillas) — fijadas hasta resolver */}
       {yellow_alerts.length > 0 && (
-        <div className="bg-amber-500 border-2 border-amber-600 p-6 rounded-2xl shadow-lg animate-fade-in-up">
+        <div className="pet-alert-panel bg-amber-500 border-2 border-amber-600 animate-fade-in-up">
           <h2 className="text-xl font-black text-white flex items-center gap-2 mb-4">
             🟡 Alertas Amarillas — Observación
           </h2>
           <div className="space-y-3">
             {yellow_alerts.map((alert) => (
-              <div key={alert.id} className="bg-white/95 p-4 rounded-xl flex items-start justify-between gap-4 border border-amber-200">
+              <div key={alert.id} className="pet-alert-item flex items-start justify-between gap-4 border border-amber-200">
                 <div className="flex items-start gap-3">
                   <span className="text-2xl">⚠️</span>
                   <div>
@@ -156,13 +156,13 @@ export default function Dashboard() {
                 <div className="flex flex-col gap-2 shrink-0">
                   <button
                     onClick={() => setSelectedAnimal(alert.animal_id)}
-                    className="px-3 py-1.5 bg-amber-100 text-amber-700 text-xs font-bold rounded-lg border border-amber-300 hover:bg-amber-200 transition"
+                    className="pet-btn pet-btn--ghost px-3 py-1.5 text-xs text-amber-700 border-amber-300 bg-amber-50 hover:bg-amber-100"
                   >
                     Ver Ficha
                   </button>
                   <button
                     onClick={() => resolveCriticalAlert(alert.id)}
-                    className="px-3 py-1.5 bg-green-600 text-white text-xs font-bold rounded-lg hover:bg-green-700 transition"
+                    className="pet-btn pet-btn--primary px-3 py-1.5 text-xs bg-green-600 hover:bg-green-700"
                   >
                     ✓ Marcar Resuelta
                   </button>
@@ -175,13 +175,13 @@ export default function Dashboard() {
       
       {/* ALERTAS DE SALUD (Vacunas y Desparasitación) */}
       {health_red_alerts.length > 0 && (
-        <div className="bg-red-50 border border-red-200 p-6 rounded-2xl shadow-sm animate-fade-in-up">
+        <div className="pet-card bg-red-50 border-red-200 animate-fade-in-up">
           <h2 className="text-xl font-bold text-red-800 flex items-center gap-2 mb-4">
             🚨 Alertas de Salud Urgentes
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="pet-animal-grid md:grid-cols-2 lg:grid-cols-3">
             {health_red_alerts.map((alert, idx) => (
-              <div key={idx} className="p-4 rounded-xl border flex items-start gap-3 bg-white border-red-200 text-red-900">
+              <div key={idx} className="pet-alert-item p-4 border flex items-start gap-3 border-red-200 text-red-900">
                 <div className="text-2xl mt-0.5">🚨</div>
                 <div>
                   <div className="font-bold leading-tight">{alert.animal_name}</div>
@@ -194,13 +194,13 @@ export default function Dashboard() {
       )}
 
       {health_yellow_alerts.length > 0 && (
-        <div className="bg-yellow-50 border border-yellow-200 p-6 rounded-2xl shadow-sm animate-fade-in-up">
+        <div className="pet-card bg-yellow-50 border-yellow-200 animate-fade-in-up">
           <h2 className="text-xl font-bold text-yellow-800 flex items-center gap-2 mb-4">
             ⚠️ Alertas de Salud y Vacunación
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="pet-animal-grid md:grid-cols-2 lg:grid-cols-3">
             {health_yellow_alerts.map((alert, idx) => (
-              <div key={idx} className="p-4 rounded-xl border flex items-start gap-3 bg-white border-yellow-200 text-yellow-900">
+              <div key={idx} className="pet-alert-item p-4 border flex items-start gap-3 border-yellow-200 text-yellow-900">
                 <div className="text-2xl mt-0.5">💉</div>
                 <div>
                   <div className="font-bold leading-tight">{alert.animal_name}</div>
@@ -213,15 +213,15 @@ export default function Dashboard() {
       )}
 
       {/* EL CLIMA GLOBAL */}
-      <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100 p-6 rounded-2xl shadow-sm">
-        <div className="flex justify-between items-start mb-4">
+      <div className="pet-card bg-gradient-to-r from-indigo-50 to-blue-50 border-indigo-100">
+        <div className="flex justify-between items-start gap-4 mb-4">
           <h2 className="text-xl font-bold text-indigo-900 flex items-center gap-2">
             🌤️ El Clima de Hoy
           </h2>
           <button 
             onClick={fetchWeather}
             disabled={loadingWeather}
-            className="px-4 py-2 bg-indigo-600 text-white font-semibold text-sm rounded-xl hover:bg-indigo-700 transition disabled:opacity-50 flex items-center gap-2"
+            className="pet-btn pet-btn--primary px-4 py-2 text-sm shrink-0"
           >
             {loadingWeather ? "Analizando reportes..." : "Analizar Clima"}
           </button>
@@ -248,7 +248,7 @@ export default function Dashboard() {
                     {alert.animal_id && (
                       <button 
                         onClick={() => setSelectedAnimal(alert.animal_id)}
-                        className="px-3 py-1.5 bg-white text-red-600 text-xs font-bold rounded-lg border border-red-200 hover:bg-red-50 transition"
+                        className="pet-btn pet-btn--ghost px-3 py-1.5 text-xs text-red-600 border-red-200 hover:bg-red-50 shrink-0"
                       >
                         Ficha
                       </button>
@@ -272,7 +272,7 @@ export default function Dashboard() {
           <h1 className="text-2xl font-black text-gray-900 tracking-tight flex items-center gap-2 mb-6">
             <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain" /> Selecciona una Especie
           </h1>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="pet-species-grid">
             {Object.entries(SPECIES_INFO).map(([id, info]) => {
                const numId = parseInt(id);
                const count = data.observation_animals.filter(a => a.species_id === numId).length + 
@@ -281,8 +281,9 @@ export default function Dashboard() {
                return (
                  <button
                    key={id}
+                   type="button"
                    onClick={() => setSelectedSpeciesId(numId)}
-                   className="p-6 bg-white rounded-2xl shadow-sm border border-gray-100 hover:border-indigo-400 hover:shadow-md transition-all flex flex-col items-center gap-3"
+                   className="pet-species-tile"
                  >
                    <span className="text-5xl">{info.emoji}</span>
                    <span className="text-xl font-bold text-gray-800">{info.name}</span>
@@ -297,11 +298,12 @@ export default function Dashboard() {
         <div className="animate-fade-in-up">
           <div className="flex items-center gap-4 mb-8">
             <button 
+              type="button"
               onClick={() => {
                 setSelectedSpeciesId(null);
                 setSelectedAnimal(null);
               }}
-              className="p-2 bg-gray-100 text-gray-600 rounded-full hover:bg-gray-200 transition flex items-center justify-center"
+              className="pet-btn pet-btn--ghost p-2.5 rounded-full"
               title="Volver a especies"
             >
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
@@ -319,11 +321,11 @@ export default function Dashboard() {
             <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
               👀 En Observación
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="pet-animal-grid">
               {obsAnimals.map(animal => (
                 <AnimalCard key={animal.id} animal={animal} onSelect={setSelectedAnimal} type="obs" />
               ))}
-              {obsAnimals.length === 0 && <p className="text-gray-500 italic bg-gray-50 p-4 rounded-xl border border-dashed border-gray-200">No hay animales en observación.</p>}
+              {obsAnimals.length === 0 && <p className="text-gray-500 italic bg-gray-50 p-4 rounded-xl border border-dashed border-gray-200 col-span-full">No hay animales en observación.</p>}
             </div>
           </div>
 
@@ -332,11 +334,11 @@ export default function Dashboard() {
             <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
               🐾 Animales Activos
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="pet-animal-grid">
               {normalAnimals.map(animal => (
                 <AnimalCard key={animal.id} animal={animal} onSelect={setSelectedAnimal} type="normal" />
               ))}
-              {normalAnimals.length === 0 && <p className="text-gray-500 italic bg-gray-50 p-4 rounded-xl border border-dashed border-gray-200">No hay animales activos de esta especie.</p>}
+              {normalAnimals.length === 0 && <p className="text-gray-500 italic bg-gray-50 p-4 rounded-xl border border-dashed border-gray-200 col-span-full">No hay animales activos de esta especie.</p>}
             </div>
           </div>
         </div>
@@ -347,7 +349,7 @@ export default function Dashboard() {
         <div className="mt-12 pt-8 border-t-2 border-gray-100 animate-fade-in-up">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-xl font-bold text-gray-800">Ficha del Paciente</h3>
-            <button onClick={() => setSelectedAnimal(null)} className="text-gray-600 hover:text-gray-900 font-bold bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-lg transition-colors">
+            <button type="button" onClick={() => setSelectedAnimal(null)} className="pet-btn pet-btn--ghost px-4 py-2">
               Cerrar ✕
             </button>
           </div>
@@ -361,10 +363,11 @@ export default function Dashboard() {
 function AnimalCard({ animal, onSelect, type }) {
   const isObs = type === "obs";
   return (
-    <div 
+    <button
+      type="button"
       onClick={() => onSelect(animal.id)}
-      className={`p-5 rounded-2xl cursor-pointer transition-all border shadow-sm hover:shadow-md ${
-        isObs ? "bg-yellow-100 border-yellow-300 hover:bg-yellow-200" : "bg-white border-gray-100 hover:border-indigo-100 hover:-translate-y-1"
+      className={`pet-card pet-card--interactive p-5 text-left w-full ${
+        isObs ? "bg-yellow-100 border-yellow-300 hover:bg-yellow-50" : ""
       }`}
     >
       <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
@@ -376,6 +379,6 @@ function AnimalCard({ animal, onSelect, type }) {
       }`}>
         {isObs ? "En Observación" : "Normal"}
       </span>
-    </div>
+    </button>
   );
 }

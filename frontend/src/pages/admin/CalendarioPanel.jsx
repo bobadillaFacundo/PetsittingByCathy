@@ -494,7 +494,7 @@ export default function CalendarioPanel() {
     : 'Paciente interno';
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 sm:p-6">
+    <div className="pet-panel p-3 sm:p-6">
       <div className="flex flex-col gap-4 mb-4 sm:mb-6">
         <div>
           <h2 className="text-lg sm:text-xl font-bold text-gray-800 flex items-center gap-2">
@@ -539,7 +539,7 @@ export default function CalendarioPanel() {
                 const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
                 handleSelectSlot({ start: now, end: tomorrow });
               }}
-              className="bg-indigo-600 text-white px-3 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 hover:bg-indigo-700 transition"
+              className="pet-btn pet-btn--primary px-3 sm:px-4 py-2.5 text-xs sm:text-sm"
             >
               <Plus className="w-4 h-4" /> Nueva Reserva
             </button>
@@ -893,14 +893,14 @@ export default function CalendarioPanel() {
                 <div className="flex gap-2 pt-4">
                   <button 
                     onClick={saveReservation}
-                    className="flex-1 bg-indigo-600 text-white py-2 rounded-xl font-medium hover:bg-indigo-700 flex justify-center items-center gap-2"
+                    className="pet-btn pet-btn--primary flex-1 py-2 font-medium"
                   >
                     <Save className="w-4 h-4" /> Guardar
                   </button>
                   {editingId && (
                     <button 
                       onClick={deleteReservation}
-                      className="bg-red-50 text-red-600 px-4 rounded-xl font-medium hover:bg-red-100"
+                      className="pet-btn pet-btn--danger px-4 rounded-xl font-medium"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>

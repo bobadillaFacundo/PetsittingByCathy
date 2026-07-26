@@ -256,7 +256,7 @@ export default function ObservacionesTab({ animalId, token }) {
               <button
                 type="button"
                 onClick={() => handleDelete(obs.id)}
-                className="text-red-600 bg-red-50 hover:bg-red-100 p-2 rounded-lg shrink-0"
+                className="pet-icon-btn pet-icon-btn--red p-2 shrink-0"
                 title="Eliminar"
               >
                 <Trash2 size={16} />

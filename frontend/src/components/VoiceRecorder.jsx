@@ -442,10 +442,11 @@ export default function VoiceRecorder({ onSave }) {
 
           <p className="text-center text-gray-600 font-medium mb-4">Paso 2: Toca para grabar, toca para detener</p>
           <button 
+            type="button"
             onClick={isRecording ? stopRecording : startRecording}
-            className={`w-32 h-32 rounded-full flex flex-col items-center justify-center transition-all duration-300 shadow-lg ${
+            className={`pet-record-btn ${
               isRecording 
-                ? 'bg-red-500 hover:bg-red-600 scale-110 shadow-red-200 animate-pulse' 
+                ? 'bg-red-500 hover:bg-red-600 shadow-red-200 pet-record-btn--recording' 
                 : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200'
             }`}
           >
@@ -485,7 +486,7 @@ export default function VoiceRecorder({ onSave }) {
               <button
                 type="button"
                 onClick={() => cameraPhotoRef.current?.click()}
-                className="w-full py-3 px-4 bg-white border-2 border-dashed border-gray-300 rounded-xl hover:border-indigo-400 hover:bg-indigo-50 transition-all flex items-center justify-center gap-2 text-gray-700 font-medium"
+                className="pet-btn pet-btn--ghost w-full py-3 px-4 border-2 border-dashed border-gray-300 hover:border-indigo-400 hover:bg-indigo-50 font-medium"
               >
                 <span className="text-2xl">📸</span>
                 Tomar foto
@@ -493,7 +494,7 @@ export default function VoiceRecorder({ onSave }) {
               <button
                 type="button"
                 onClick={() => cameraVideoRef.current?.click()}
-                className="w-full py-3 px-4 bg-white border-2 border-dashed border-gray-300 rounded-xl hover:border-indigo-400 hover:bg-indigo-50 transition-all flex items-center justify-center gap-2 text-gray-700 font-medium"
+                className="pet-btn pet-btn--ghost w-full py-3 px-4 border-2 border-dashed border-gray-300 hover:border-indigo-400 hover:bg-indigo-50 font-medium"
               >
                 <span className="text-2xl">🎥</span>
                 Grabar video
@@ -501,7 +502,7 @@ export default function VoiceRecorder({ onSave }) {
               <button
                 type="button"
                 onClick={() => galleryInputRef.current?.click()}
-                className="w-full py-3 px-4 bg-white border-2 border-dashed border-gray-300 rounded-xl hover:border-indigo-400 hover:bg-indigo-50 transition-all flex items-center justify-center gap-2 text-gray-700 font-medium"
+                className="pet-btn pet-btn--ghost w-full py-3 px-4 border-2 border-dashed border-gray-300 hover:border-indigo-400 hover:bg-indigo-50 font-medium"
               >
                 <span className="text-2xl">🖼️</span>
                 Subir desde galería (varios)

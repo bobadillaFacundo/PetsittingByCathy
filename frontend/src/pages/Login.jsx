@@ -54,7 +54,7 @@ export default function Login() {
 
   return (
     <div className="min-h-screen min-h-dvh flex items-center justify-center bg-gray-50 p-4 pt-safe pb-safe">
-      <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-xl w-full max-w-md border border-gray-100">
+      <div className="pet-card w-full max-w-md p-6 sm:p-8 shadow-xl animate-fade-in-up">
         <div className="text-center mb-8">
           <img src="/logo.png" alt="Logo" className="w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-4 object-contain" />
           <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600 tracking-tight">
@@ -64,14 +64,14 @@ export default function Login() {
         </div>
 
         {error && (
-          <div className="mb-6 p-3 bg-red-50 text-red-700 rounded-lg text-sm font-medium border border-red-100 text-center">
+          <div className="mb-6 p-3 bg-red-50 text-red-700 rounded-xl text-sm font-medium border border-red-100 text-center animate-fade-in-up">
             {error}
           </div>
         )}
 
         <form onSubmit={handleLogin} className="space-y-5">
           <div>
-            <label className="block text-sm font-bold text-gray-700 mb-1">Usuario</label>
+            <label className="block text-sm font-bold text-gray-700 mb-1.5">Usuario</label>
             <input
               type="text"
               value={username}
@@ -79,18 +79,18 @@ export default function Login() {
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
-              className="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all bg-gray-50 focus:bg-white text-gray-800 text-base"
+              className="pet-input text-base"
               placeholder="ej. admin o user"
               required
             />
           </div>
           <div>
-            <label className="block text-sm font-bold text-gray-700 mb-1">Contraseña</label>
+            <label className="block text-sm font-bold text-gray-700 mb-1.5">Contraseña</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all bg-gray-50 focus:bg-white text-gray-800 text-base"
+              className="pet-input text-base"
               placeholder="••••••••"
               required
             />
@@ -98,7 +98,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-3.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md hover:shadow-lg transition-all flex justify-center items-center gap-2 mt-4 active:scale-[0.99]"
+            className="pet-btn pet-btn--primary w-full py-3.5 px-4 text-base mt-4"
           >
             {isLoading ? "Ingresando..." : "Iniciar Sesión"}
           </button>
