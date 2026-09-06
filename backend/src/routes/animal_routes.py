@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from src.database.session import get_db
 from src.models.models import Animal, Species
 from src.dtos.animal_dto import AnimalCreate, AnimalResponse, AnimalUpdate
@@ -13,6 +13,10 @@ router = APIRouter(prefix="/animals", tags=["Animals"])
 def create_animal(animal: AnimalCreate, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
     db_animal = Animal(**animal.model_dump())
     db.add(db_animal)
+    db.flush()
+    if db_animal.weight_kg:
+        from src.services.weight_helpers import record_weight
+        record_weight(db, db_animal.id, db_animal.weight_kg, source="ficha")
     db.commit()
     db.refresh(db_animal)
     return db_animal
@@ -68,7 +72,8 @@ def get_animals(
     if is_daycare is not None:
         query = query.filter(Animal.is_daycare == is_daycare)
     animals = (
-        query.order_by(Animal.is_active.desc(), Animal.name.asc())
+        query.options(joinedload(Animal.species), joinedload(Animal.breed))
+        .order_by(Animal.is_active.desc(), Animal.name.asc())
         .offset(skip)
         .limit(limit)
         .all()
@@ -77,7 +82,12 @@ def get_animals(
 
 @router.get("/{animal_id}", response_model=AnimalResponse)
 def get_animal(animal_id: int, db: Session = Depends(get_db)):
-    animal = db.query(Animal).filter(Animal.id == animal_id).first()
+    animal = (
+        db.query(Animal)
+        .options(joinedload(Animal.species), joinedload(Animal.breed))
+        .filter(Animal.id == animal_id)
+        .first()
+    )
     if not animal:
         raise HTTPException(status_code=404, detail="Animal no encontrado")
     return animal
@@ -89,9 +99,12 @@ def update_animal(animal_id: int, animal_update: AnimalUpdate, db: Session = Dep
         raise HTTPException(status_code=404, detail="Animal no encontrado")
     
     update_data = animal_update.model_dump(exclude_unset=True)
+    new_weight = update_data.get("weight_kg", ...)
     for key, value in update_data.items():
         setattr(db_animal, key, value)
-        
+    if new_weight is not ... and new_weight is not None:
+        from src.services.weight_helpers import record_weight
+        record_weight(db, db_animal.id, new_weight, source="ficha")
     db.commit()
     db.refresh(db_animal)
     return db_animal
@@ -275,7 +288,12 @@ from sqlalchemy.orm import joinedload
 @router.get("/{animal_id}/history", response_model=AnimalHistoryResponse)
 def get_animal_history(animal_id: int, db: Session = Depends(get_db)):
     from src.models.models import Report, ReportEvent, EventType, User, Attachment, AnimalObservation
-    animal = db.query(Animal).filter(Animal.id == animal_id).first()
+    animal = (
+        db.query(Animal)
+        .options(joinedload(Animal.species), joinedload(Animal.breed))
+        .filter(Animal.id == animal_id)
+        .first()
+    )
     if not animal:
         raise HTTPException(status_code=404, detail="Animal no encontrado")
         
@@ -353,7 +371,26 @@ def get_animal_history(animal_id: int, db: Session = Depends(get_db)):
         for m in active_meds
     ]
         
-    return AnimalHistoryResponse(animal=animal, reports=history, observations=observation_dtos, active_medications=med_dtos)
+    from src.dtos.animal_dto import WeightHistoryDTO
+    from src.services.weight_helpers import list_weight_history
+    weight_history = [WeightHistoryDTO(**item) for item in list_weight_history(db, animal_id)]
+
+    return AnimalHistoryResponse(
+        animal=animal,
+        reports=history,
+        observations=observation_dtos,
+        active_medications=med_dtos,
+        weight_history=weight_history,
+    )
+
+
+@router.get("/{animal_id}/weights")
+def get_animal_weights(animal_id: int, db: Session = Depends(get_db)):
+    animal = db.query(Animal).filter(Animal.id == animal_id).first()
+    if not animal:
+        raise HTTPException(status_code=404, detail="Animal no encontrado")
+    from src.services.weight_helpers import list_weight_history
+    return list_weight_history(db, animal_id)
 
 from pydantic import BaseModel
 class EvolutionAnalysisResponse(BaseModel):

@@ -44,6 +44,68 @@ class TestDashboard:
         res = client.patch("/dashboard/critical-alerts/99999/resolve")
         assert res.status_code == 404
 
+    def test_new_vaccine_replaces_expired_alert(self, client, seed, db):
+        from datetime import timedelta
+        from src.models.models import Vaccine, VaccineCatalog, HealthRecord
+        from src.timezone_ar import today_ar
+
+        today = today_ar()
+        catalog = VaccineCatalog(name="Antirrábica Alerta")
+        db.add(catalog)
+        db.flush()
+        health = db.query(HealthRecord).filter(HealthRecord.animal_id == seed["animal"].id).first()
+        db.add(Vaccine(
+            health_record_id=health.id,
+            vaccine_id=catalog.id,
+            date_administered=today - timedelta(days=400),
+            next_due_date=today - timedelta(days=30),
+        ))
+        db.commit()
+
+        expired = client.get("/dashboard/").json()["alerts"]
+        assert any("VENCIDA" in a["message"] for a in expired)
+
+        db.add(Vaccine(
+            health_record_id=health.id,
+            vaccine_id=catalog.id,
+            date_administered=today,
+            next_due_date=today + timedelta(days=365),
+        ))
+        db.commit()
+
+        after = client.get("/dashboard/").json()["alerts"]
+        assert not any("VENCIDA" in a["message"] for a in after)
+        assert not any("Vacuna" in a["message"] for a in after)
+
+    def test_new_deworming_replaces_expired_alert(self, client, seed, db):
+        from datetime import timedelta
+        from src.models.models import Deworming
+        from src.timezone_ar import today_ar
+
+        today = today_ar()
+        db.add(Deworming(
+            animal_id=seed["animal"].id,
+            product_id=seed["product_internal"].id,
+            date=today - timedelta(days=120),
+            next_due_date=today - timedelta(days=20),
+        ))
+        db.commit()
+
+        expired = client.get("/dashboard/").json()["alerts"]
+        assert any("VENCIDA" in a["message"] for a in expired)
+
+        db.add(Deworming(
+            animal_id=seed["animal"].id,
+            product_id=seed["product_internal"].id,
+            date=today,
+            next_due_date=today + timedelta(days=90),
+        ))
+        db.commit()
+
+        after = client.get("/dashboard/").json()["alerts"]
+        assert not any("VENCIDA" in a["message"] for a in after)
+        assert not any("Desparasitación" in a["message"] for a in after)
+
 
 @pytest.mark.api
 class TestDictionary:

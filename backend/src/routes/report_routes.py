@@ -193,6 +193,16 @@ def confirm_report(
                 event_type = _get_or_create_event_type(db, event_type_name)
                 event_values.append(str(val))
                 _upsert_report_event(db, report.id, event_type.id, val)
+                if (event_type_name or "").strip().lower() == "peso":
+                    from src.services.weight_helpers import record_weight
+                    record_weight(
+                        db,
+                        animal.id,
+                        val,
+                        source="reporte",
+                        report_id=report.id,
+                        recorded_at=report.created_at,
+                    )
                 
             elif table_name == "AnimalDiagnosis":
                 diag_name = fields.get("diagnosis_name")
@@ -325,6 +335,16 @@ def _apply_inserts_to_report(db, report, animal, inserts):
             if val:
                 event_values.append(str(val))
             _upsert_report_event(db, report.id, event_type.id, val)
+            if val and (event_type_name or "").strip().lower() == "peso":
+                from src.services.weight_helpers import record_weight
+                record_weight(
+                    db,
+                    animal.id,
+                    val,
+                    source="reporte",
+                    report_id=report.id,
+                    recorded_at=report.created_at,
+                )
         elif table_name == "AnimalDiagnosis":
             diag_name = fields.get("diagnosis_name")
             if not diag_name:

@@ -6,8 +6,20 @@ import LaboratoriosTab from './LaboratoriosTab';
 import LibretaTab from './LibretaTab';
 import MedicacionTab from './MedicacionTab';
 import ObservacionesTab from './ObservacionesTab';
+import WeightHistoryList from '../../components/WeightHistoryList';
 import { redirectToLogin, getToken } from '../../lib/auth';
 import { API_BASE, apiUrl, mediaUrl } from '../../lib/api';
+import {
+  CARE_OPTIONS,
+  DOG_SOCIABILITY_OPTIONS,
+  FAMILIAR_ANIMAL_OPTIONS,
+  HOUSING_OPTIONS,
+  INTAKE_BOOL_DEFAULTS,
+  TRAIT_OPTIONS,
+  careLabels,
+  joinFamiliarList,
+  parseFamiliarList,
+} from '../../lib/animalProfile';
 
 const SPECIES_INFO = {
   1: { name: "Perros", emoji: "🐶" },
@@ -17,14 +29,6 @@ const SPECIES_INFO = {
   5: { name: "Tortugas", emoji: "🐢" },
   6: { name: "Erizos", emoji: "🦔" }
 };
-
-const TRAIT_OPTIONS = [
-  { key: 'is_blind', label: 'Ciego' },
-  { key: 'is_deaf', label: 'Sordo' },
-  { key: 'no_smell', label: 'Sin olfato' },
-  { key: 'has_neurological', label: 'Temas neurológicos' },
-  { key: 'has_involuntary_movements', label: 'Movimientos involuntarios' },
-];
 
 const emptyForm = (daycareOnly, speciesId = '') => ({
   name: '',
@@ -46,6 +50,33 @@ const emptyForm = (daycareOnly, speciesId = '') => ({
   no_smell: false,
   has_neurological: false,
   has_involuntary_movements: false,
+  is_escapist: false,
+  has_attachment_issues: false,
+  dog_sociability: '',
+  needs_medication: false,
+  needs_diapers: false,
+  needs_isolation: false,
+  needs_muzzle: false,
+  has_special_diet: false,
+  care_notes: '',
+  housing_type: '',
+  ...INTAKE_BOOL_DEFAULTS,
+  lives_with_dogs_count: '',
+  familiar_with_animals: [],
+  fears: '',
+  destroys_what: '',
+  food_brand: '',
+  food_amount: '',
+  food_times_per_day: '',
+  special_diet_details: '',
+  intake_vaccines: '',
+  intake_medication: '',
+  allergies: '',
+  health_issues: '',
+  contact_name: '',
+  contact_phone: '',
+  contact_email: '',
+  contact_notes: '',
   residence: ''
 });
 
@@ -63,7 +94,10 @@ function formatAge(m) {
 }
 
 function traitLabels(m) {
-  return TRAIT_OPTIONS.filter(t => m[t.key]).map(t => t.label);
+  return [
+    ...TRAIT_OPTIONS.filter((t) => m[t.key]).map((t) => t.label),
+    ...careLabels(m),
+  ];
 }
 
 function CastrationBadge({ isCastrated }) {
@@ -119,6 +153,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
   const [editingId, setEditingId] = useState(null);
   const [modalTab, setModalTab] = useState('basic');
   const [selectedSpeciesId, setSelectedSpeciesId] = useState(null);
+  const [weightHistory, setWeightHistory] = useState([]);
   
   const [formData, setFormData] = useState(() => emptyForm(daycareOnly));
 
@@ -140,6 +175,17 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
     fetchSpecies();
     fetchBreeds();
   }, [daycareOnly]);
+
+  useEffect(() => {
+    if (!editingId || !isModalOpen) {
+      setWeightHistory([]);
+      return;
+    }
+    fetch(`${API_BASE}/animals/${editingId}/weights`, { headers: authHeaders() })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((rows) => setWeightHistory(Array.isArray(rows) ? rows : []))
+      .catch(() => setWeightHistory([]));
+  }, [editingId, isModalOpen]);
 
   const fetchMascotas = async () => {
     try {
@@ -231,6 +277,45 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
       no_smell: Boolean(mascota.no_smell),
       has_neurological: Boolean(mascota.has_neurological),
       has_involuntary_movements: Boolean(mascota.has_involuntary_movements),
+      is_escapist: Boolean(mascota.is_escapist),
+      has_attachment_issues: Boolean(mascota.has_attachment_issues),
+      dog_sociability: mascota.dog_sociability || '',
+      needs_medication: Boolean(mascota.needs_medication),
+      needs_diapers: Boolean(mascota.needs_diapers),
+      needs_isolation: Boolean(mascota.needs_isolation),
+      needs_muzzle: Boolean(mascota.needs_muzzle),
+      has_special_diet: Boolean(mascota.has_special_diet),
+      care_notes: mascota.care_notes || '',
+      housing_type: mascota.housing_type || '',
+      aversive_to_people: Boolean(mascota.aversive_to_people),
+      aversive_to_dogs: Boolean(mascota.aversive_to_dogs),
+      has_bitten_people: Boolean(mascota.has_bitten_people),
+      has_bitten_dogs: Boolean(mascota.has_bitten_dogs),
+      bites_often: Boolean(mascota.bites_often),
+      lives_with_dogs: Boolean(mascota.lives_with_dogs),
+      lives_with_dogs_count: mascota.lives_with_dogs_count ?? '',
+      plays_with_dogs: Boolean(mascota.plays_with_dogs),
+      familiar_with_animals: parseFamiliarList(mascota.familiar_with_animals),
+      fears: mascota.fears || '',
+      destroys_things: Boolean(mascota.destroys_things),
+      destroys_what: mascota.destroys_what || '',
+      likes_water: Boolean(mascota.likes_water),
+      likes_pool: Boolean(mascota.likes_pool),
+      food_brand: mascota.food_brand || '',
+      food_amount: mascota.food_amount || '',
+      food_times_per_day: mascota.food_times_per_day || '',
+      special_diet_details: mascota.special_diet_details || '',
+      intake_vaccines: mascota.intake_vaccines || '',
+      intake_dewormed_internal: Boolean(mascota.intake_dewormed_internal),
+      intake_dewormed_external: Boolean(mascota.intake_dewormed_external),
+      intake_medication: mascota.intake_medication || '',
+      allergies: mascota.allergies || '',
+      health_issues: mascota.health_issues || '',
+      walks_outside_neighborhood: Boolean(mascota.walks_outside_neighborhood),
+      contact_name: mascota.contact_name || '',
+      contact_phone: mascota.contact_phone || '',
+      contact_email: mascota.contact_email || '',
+      contact_notes: mascota.contact_notes || '',
       residence: mascota.residence || ''
     });
   };
@@ -268,8 +353,20 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
     const payload = { ...formData };
     if (payload.breed_id === '') payload.breed_id = null;
     if (payload.coat_color === '') payload.coat_color = null;
+    if (payload.dog_sociability === '') payload.dog_sociability = null;
+    if (payload.care_notes === '') payload.care_notes = null;
+    if (payload.housing_type === '') payload.housing_type = null;
+    payload.familiar_with_animals = joinFamiliarList(payload.familiar_with_animals) || null;
+    [
+      'fears', 'destroys_what', 'food_brand', 'food_amount', 'food_times_per_day',
+      'special_diet_details', 'intake_vaccines', 'intake_medication', 'allergies',
+      'health_issues', 'contact_name', 'contact_phone', 'contact_email', 'contact_notes',
+    ].forEach((key) => {
+      if (payload[key] === '') payload[key] = null;
+    });
 
     const toNumOrNull = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
+    payload.lives_with_dogs_count = toNumOrNull(payload.lives_with_dogs_count);
 
     if (payload.is_rescue) {
       payload.age_years = null;
@@ -903,6 +1000,211 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                     </div>
                   </div>
 
+                  <div className="p-3 rounded-xl bg-amber-50/70 border border-amber-100 space-y-4">
+                    <div>
+                      <p className="block text-sm font-bold text-amber-900 mb-1">Formulario de ingreso</p>
+                      <p className="text-xs text-amber-800 mb-2">
+                        Datos que mandan los clientes. Los chicos los ven en la ficha.
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {CARE_OPTIONS.map((t) => (
+                          <label
+                            key={t.key}
+                            className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-amber-200 bg-white text-sm text-gray-800"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={Boolean(formData[t.key])}
+                              onChange={(e) => setFormData({ ...formData, [t.key]: e.target.checked })}
+                              className="w-4 h-4 text-amber-600 rounded border-gray-300"
+                            />
+                            {t.label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-bold text-amber-900 mb-1">Vive en</label>
+                        <select
+                          value={formData.housing_type}
+                          onChange={(e) => setFormData({ ...formData, housing_type: e.target.value })}
+                          className="pet-select text-base bg-white"
+                        >
+                          {HOUSING_OPTIONS.map((opt) => (
+                            <option key={opt.value || 'none'} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-bold text-amber-900 mb-1">Cómo se lleva con otros perros</label>
+                        <select
+                          value={formData.dog_sociability}
+                          onChange={(e) => setFormData({ ...formData, dog_sociability: e.target.value })}
+                          className="pet-select text-base bg-white"
+                        >
+                          {DOG_SOCIABILITY_OPTIONS.map((opt) => (
+                            <option key={opt.value || 'none'} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <label className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-amber-200 bg-white text-sm">
+                        <input
+                          type="checkbox"
+                          checked={formData.lives_with_dogs}
+                          onChange={(e) => setFormData({ ...formData, lives_with_dogs: e.target.checked })}
+                          className="w-4 h-4 text-amber-600 rounded border-gray-300"
+                        />
+                        Convive con perros
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="¿Cuántos?"
+                        value={formData.lives_with_dogs_count}
+                        onChange={(e) => setFormData({ ...formData, lives_with_dogs_count: e.target.value })}
+                        className="pet-input text-base bg-white"
+                        disabled={!formData.lives_with_dogs}
+                      />
+                      <label className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-amber-200 bg-white text-sm sm:col-span-2">
+                        <input
+                          type="checkbox"
+                          checked={formData.plays_with_dogs}
+                          onChange={(e) => setFormData({ ...formData, plays_with_dogs: e.target.checked })}
+                          className="w-4 h-4 text-amber-600 rounded border-gray-300"
+                        />
+                        Juega con otros perros
+                      </label>
+                    </div>
+
+                    <div>
+                      <p className="block text-sm font-bold text-amber-900 mb-1">Familiarizado con otros animales</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {FAMILIAR_ANIMAL_OPTIONS.map((opt) => {
+                          const checked = (formData.familiar_with_animals || []).includes(opt.key);
+                          return (
+                            <label key={opt.key} className="flex items-center gap-2 px-3 py-2 rounded-xl border border-amber-200 bg-white text-sm">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(e) => {
+                                  const current = formData.familiar_with_animals || [];
+                                  setFormData({
+                                    ...formData,
+                                    familiar_with_animals: e.target.checked
+                                      ? [...current, opt.key]
+                                      : current.filter((k) => k !== opt.key),
+                                  });
+                                }}
+                                className="w-4 h-4 text-amber-600 rounded border-gray-300"
+                              />
+                              {opt.label}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <label className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-amber-200 bg-white text-sm">
+                        <input type="checkbox" checked={formData.likes_water} onChange={(e) => setFormData({ ...formData, likes_water: e.target.checked })} className="w-4 h-4 text-amber-600 rounded border-gray-300" />
+                        Le gusta el agua
+                      </label>
+                      <label className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-amber-200 bg-white text-sm">
+                        <input type="checkbox" checked={formData.likes_pool} onChange={(e) => setFormData({ ...formData, likes_pool: e.target.checked })} className="w-4 h-4 text-amber-600 rounded border-gray-300" />
+                        Se mete a la pileta
+                      </label>
+                      <label className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-amber-200 bg-white text-sm sm:col-span-2">
+                        <input type="checkbox" checked={formData.walks_outside_neighborhood} onChange={(e) => setFormData({ ...formData, walks_outside_neighborhood: e.target.checked })} className="w-4 h-4 text-amber-600 rounded border-gray-300" />
+                        Autoriza pasear por los alrededores (además del barrio cerrado)
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-bold text-amber-900 mb-1">Miedos</label>
+                        <input value={formData.fears} onChange={(e) => setFormData({ ...formData, fears: e.target.value })} className="pet-input text-base bg-white w-full" placeholder="Truenos, hombres, motos…" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-bold text-amber-900 mb-1">Si rompe cosas, ¿cuáles?</label>
+                        <input value={formData.destroys_what} onChange={(e) => setFormData({ ...formData, destroys_what: e.target.value })} className="pet-input text-base bg-white w-full" placeholder="Almohadones, zapatos…" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-bold text-amber-900 mb-1">Alimento (marca)</label>
+                        <input value={formData.food_brand} onChange={(e) => setFormData({ ...formData, food_brand: e.target.value })} className="pet-input text-base bg-white w-full" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-bold text-amber-900 mb-1">Cantidad y veces/día</label>
+                        <div className="flex gap-2">
+                          <input value={formData.food_amount} onChange={(e) => setFormData({ ...formData, food_amount: e.target.value })} className="pet-input text-base bg-white w-full" placeholder="Ej. 150 g" />
+                          <input value={formData.food_times_per_day} onChange={(e) => setFormData({ ...formData, food_times_per_day: e.target.value })} className="pet-input text-base bg-white w-24" placeholder="Veces" />
+                        </div>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-sm font-bold text-amber-900 mb-1">Dieta especial (detalle)</label>
+                        <input value={formData.special_diet_details} onChange={(e) => setFormData({ ...formData, special_diet_details: e.target.value })} className="pet-input text-base bg-white w-full" placeholder="Sin pollo, hipoalergénico…" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-bold text-amber-900 mb-1">Vacunas que tiene</label>
+                        <input value={formData.intake_vaccines} onChange={(e) => setFormData({ ...formData, intake_vaccines: e.target.value })} className="pet-input text-base bg-white w-full" placeholder="Antirrábica, séxtuple…" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-bold text-amber-900 mb-1">Remedio que toma</label>
+                        <input value={formData.intake_medication} onChange={(e) => setFormData({ ...formData, intake_medication: e.target.value })} className="pet-input text-base bg-white w-full" />
+                      </div>
+                      <label className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-amber-200 bg-white text-sm">
+                        <input type="checkbox" checked={formData.intake_dewormed_internal} onChange={(e) => setFormData({ ...formData, intake_dewormed_internal: e.target.checked })} className="w-4 h-4 text-amber-600 rounded border-gray-300" />
+                        Desparasitado interno
+                      </label>
+                      <label className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-amber-200 bg-white text-sm">
+                        <input type="checkbox" checked={formData.intake_dewormed_external} onChange={(e) => setFormData({ ...formData, intake_dewormed_external: e.target.checked })} className="w-4 h-4 text-amber-600 rounded border-gray-300" />
+                        Desparasitación externa
+                      </label>
+                      <div>
+                        <label className="block text-sm font-bold text-amber-900 mb-1">Alergias</label>
+                        <input value={formData.allergies} onChange={(e) => setFormData({ ...formData, allergies: e.target.value })} className="pet-input text-base bg-white w-full" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-bold text-amber-900 mb-1">Problema de salud</label>
+                        <input value={formData.health_issues} onChange={(e) => setFormData({ ...formData, health_issues: e.target.value })} className="pet-input text-base bg-white w-full" />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-bold text-amber-900 mb-1">Contacto (nombre)</label>
+                        <input value={formData.contact_name} onChange={(e) => setFormData({ ...formData, contact_name: e.target.value })} className="pet-input text-base bg-white w-full" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-bold text-amber-900 mb-1">Teléfono</label>
+                        <input value={formData.contact_phone} onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })} className="pet-input text-base bg-white w-full" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-bold text-amber-900 mb-1">Email</label>
+                        <input value={formData.contact_email} onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })} className="pet-input text-base bg-white w-full" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-bold text-amber-900 mb-1">Notas de contacto</label>
+                        <input value={formData.contact_notes} onChange={(e) => setFormData({ ...formData, contact_notes: e.target.value })} className="pet-input text-base bg-white w-full" placeholder="Horario, familiar, etc." />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-bold text-amber-900 mb-1">Otras notas de cuidado</label>
+                      <textarea
+                        value={formData.care_notes}
+                        onChange={(e) => setFormData({ ...formData, care_notes: e.target.value })}
+                        rows={3}
+                        className="pet-input text-base bg-white w-full"
+                        placeholder="Cualquier otro dato del formulario…"
+                      />
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="flex items-center gap-2">
                       <input
@@ -930,6 +1232,14 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                         onChange={(e) => setFormData({ ...formData, weight_kg: e.target.value })}
                         className="pet-select text-base"
                       />
+                      {editingId && (
+                        <div className="mt-3">
+                          <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">
+                            Historial de peso
+                          </p>
+                          <WeightHistoryList items={weightHistory} compact />
+                        </div>
+                      )}
                     </div>
                   </div>
 

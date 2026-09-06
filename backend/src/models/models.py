@@ -152,6 +152,48 @@ class Animal(Base):
     has_neurological = Column(Boolean, default=False, nullable=False)
     has_involuntary_movements = Column(Boolean, default=False, nullable=False)
 
+    # Datos de cuidado (formulario de ingreso / Drive)
+    is_escapist = Column(Boolean, default=False, nullable=False)
+    has_attachment_issues = Column(Boolean, default=False, nullable=False)
+    dog_sociability = Column(String, nullable=True)
+    needs_medication = Column(Boolean, default=False, nullable=False)
+    needs_diapers = Column(Boolean, default=False, nullable=False)
+    needs_isolation = Column(Boolean, default=False, nullable=False)
+    needs_muzzle = Column(Boolean, default=False, nullable=False)
+    has_special_diet = Column(Boolean, default=False, nullable=False)
+    care_notes = Column(Text, nullable=True)
+
+    housing_type = Column(String, nullable=True)
+    aversive_to_people = Column(Boolean, default=False, nullable=False)
+    aversive_to_dogs = Column(Boolean, default=False, nullable=False)
+    has_bitten_people = Column(Boolean, default=False, nullable=False)
+    has_bitten_dogs = Column(Boolean, default=False, nullable=False)
+    bites_often = Column(Boolean, default=False, nullable=False)
+    lives_with_dogs = Column(Boolean, default=False, nullable=False)
+    lives_with_dogs_count = Column(Integer, nullable=True)
+    plays_with_dogs = Column(Boolean, default=False, nullable=False)
+    familiar_with_animals = Column(String, nullable=True)
+    fears = Column(Text, nullable=True)
+    destroys_things = Column(Boolean, default=False, nullable=False)
+    destroys_what = Column(String, nullable=True)
+    likes_water = Column(Boolean, default=False, nullable=False)
+    likes_pool = Column(Boolean, default=False, nullable=False)
+    food_brand = Column(String, nullable=True)
+    food_amount = Column(String, nullable=True)
+    food_times_per_day = Column(String, nullable=True)
+    special_diet_details = Column(Text, nullable=True)
+    intake_vaccines = Column(Text, nullable=True)
+    intake_dewormed_internal = Column(Boolean, default=False, nullable=False)
+    intake_dewormed_external = Column(Boolean, default=False, nullable=False)
+    intake_medication = Column(Text, nullable=True)
+    allergies = Column(Text, nullable=True)
+    health_issues = Column(Text, nullable=True)
+    walks_outside_neighborhood = Column(Boolean, default=False, nullable=False)
+    contact_name = Column(String, nullable=True)
+    contact_phone = Column(String, nullable=True)
+    contact_email = Column(String, nullable=True)
+    contact_notes = Column(Text, nullable=True)
+
     species = relationship("Species", back_populates="animals")
     breed = relationship("Breed", back_populates="animals")
     veterinarian = relationship("Veterinarian", back_populates="animals")
@@ -164,6 +206,21 @@ class Animal(Base):
     dewormings = relationship("Deworming", back_populates="animal", cascade="all, delete-orphan")
     health_record = relationship("HealthRecord", uselist=False, back_populates="animal", cascade="all, delete-orphan")
     reservations = relationship("Reservation", back_populates="animal", cascade="all, delete-orphan")
+    weight_records = relationship("WeightRecord", back_populates="animal", cascade="all, delete-orphan")
+
+
+class WeightRecord(Base):
+    """Historial de peso con fecha (ficha o reporte diario)."""
+    __tablename__ = "weight_records"
+    id = Column(Integer, primary_key=True, index=True)
+    animal_id = Column(Integer, ForeignKey("animals.id"), nullable=False, index=True)
+    kg = Column(Float, nullable=False)
+    recorded_at = Column(DateTime, default=now_ar, nullable=False)
+    source = Column(String, default="ficha", nullable=False)
+    report_id = Column(Integer, ForeignKey("reports.id"), nullable=True)
+
+    animal = relationship("Animal", back_populates="weight_records")
+    report = relationship("Report")
 
 # ----------------- GESTIÓN DE RESERVAS ----------------- #
 
@@ -177,6 +234,9 @@ class Reservation(Base):
     status = Column(String, default="Pendiente")
     notes = Column(Text, nullable=True)
     belongings_photos = Column(Text, nullable=True)
+    recurrence = Column(String, default="none", nullable=False)
+    recurrence_until = Column(Date, nullable=True)
+    series_id = Column(String, nullable=True, index=True)
 
     animal = relationship("Animal", back_populates="reservations")
     species = relationship("Species")

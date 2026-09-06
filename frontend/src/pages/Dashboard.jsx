@@ -1,15 +1,8 @@
 import { useEffect, useState } from "react";
 import AnimalHistory from "./AnimalHistory";
+import AnimalProfileFacts from "../components/AnimalProfileFacts";
+import { SPECIES_INFO } from "../lib/animalProfile";
 import { API_BASE, apiUrl, mediaUrl } from '../lib/api';
-
-const SPECIES_INFO = {
-  1: { name: "Perros", emoji: "🐶" },
-  2: { name: "Gatos", emoji: "🐱" },
-  3: { name: "Loros", emoji: "🦜" },
-  4: { name: "Conejos", emoji: "🐰" },
-  5: { name: "Tortugas", emoji: "🐢" },
-  6: { name: "Erizos", emoji: "🦔" }
-};
 
 export default function Dashboard() {
   const [data, setData] = useState(null);
@@ -374,6 +367,7 @@ function AnimalCard({ animal, onSelect, type }) {
         <span>{SPECIES_INFO[animal.species_id]?.emoji || "🐾"}</span>
         {animal.name}
       </h3>
+      <AnimalProfileFacts animal={animal} compact />
       <span className={`inline-block mt-3 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${
         isObs ? "bg-yellow-300 text-yellow-900" : "bg-green-100 text-green-700"
       }`}>

@@ -5,15 +5,9 @@ import {
   getEventColorClasses,
   formatEventDisplayValue,
 } from '../lib/eventColors';
-
-const SPECIES_INFO = {
-  1: { name: "Perros", emoji: "🐶" },
-  2: { name: "Gatos", emoji: "🐱" },
-  3: { name: "Loros", emoji: "🦜" },
-  4: { name: "Conejos", emoji: "🐰" },
-  5: { name: "Tortugas", emoji: "🐢" },
-  6: { name: "Erizos", emoji: "🦔" }
-};
+import WeightHistoryList from '../components/WeightHistoryList';
+import AnimalProfileFacts from '../components/AnimalProfileFacts';
+import { SPECIES_INFO } from '../lib/animalProfile';
 
 function getEventColor(val, evtType, colorRules, report, reports, animalWeightKg) {
   return resolveEventColor(
@@ -142,9 +136,10 @@ export default function AnimalHistory({ animalId = 1 }) {
 
   return (
     <div className="max-w-3xl mx-auto p-6 mt-8 bg-white/50 rounded-3xl">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 pb-6 border-b border-gray-200">
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center text-3xl shadow-inner">
+      <div className="mb-8 pb-6 border-b border-gray-200">
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+        <div className="flex items-start gap-4">
+          <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center text-3xl shadow-inner shrink-0">
             {SPECIES_INFO[data.animal.species_id]?.emoji || "🐾"}
           </div>
           <div>
@@ -154,33 +149,7 @@ export default function AnimalHistory({ animalId = 1 }) {
                 <span className="text-xs font-bold uppercase tracking-wide bg-amber-100 text-amber-800 px-2.5 py-1 rounded-full">Rescate</span>
               )}
             </h2>
-            <p className="text-gray-500 font-medium">Historial Clínico Cronológico</p>
-            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-sm text-gray-600">
-              {data.animal.coat_color && <span>Pelaje: <strong>{data.animal.coat_color}</strong></span>}
-              {data.animal.is_rescue ? (
-                (data.animal.age_estimate_min != null || data.animal.age_estimate_max != null) && (
-                  <span>
-                    Edad est.: <strong>
-                      {data.animal.age_estimate_min ?? '?'}–{data.animal.age_estimate_max ?? '?'} años
-                    </strong>
-                  </span>
-                )
-              ) : (
-                data.animal.age_years != null && (
-                  <span>Edad: <strong>{data.animal.age_years} años</strong></span>
-                )
-              )}
-              {data.animal.is_simil_breed && <span className="font-bold text-indigo-700">SÍMIL raza</span>}
-            </div>
-            {(data.animal.is_blind || data.animal.is_deaf || data.animal.no_smell || data.animal.has_neurological || data.animal.has_involuntary_movements) && (
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {data.animal.is_blind && <span className="text-xs font-bold bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full border border-rose-100">Ciego</span>}
-                {data.animal.is_deaf && <span className="text-xs font-bold bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full border border-rose-100">Sordo</span>}
-                {data.animal.no_smell && <span className="text-xs font-bold bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full border border-rose-100">Sin olfato</span>}
-                {data.animal.has_neurological && <span className="text-xs font-bold bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full border border-rose-100">Neurológico</span>}
-                {data.animal.has_involuntary_movements && <span className="text-xs font-bold bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full border border-rose-100">Mov. involuntarios</span>}
-              </div>
-            )}
+            <p className="text-gray-500 font-medium">Ficha e historial clínico</p>
           </div>
         </div>
         
@@ -201,6 +170,17 @@ export default function AnimalHistory({ animalId = 1 }) {
           </div>
         )}
       </div>
+      <AnimalProfileFacts animal={data.animal} />
+      </div>
+
+      {data.weight_history && data.weight_history.length > 0 && (
+        <div className="mb-6 bg-violet-50 border border-violet-200 p-4 rounded-2xl">
+          <h3 className="text-sm font-bold text-violet-800 uppercase tracking-wide mb-3">
+            ⚖️ Evolución de peso
+          </h3>
+          <WeightHistoryList items={data.weight_history} />
+        </div>
+      )}
 
       {/* MEDICACIONES ACTIVAS */}
       {data.active_medications && data.active_medications.length > 0 && (

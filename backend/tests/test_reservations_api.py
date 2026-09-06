@@ -71,3 +71,82 @@ def test_cannot_change_service_event_type(client, seed, auth_headers):
         headers=auth_headers,
     )
     assert bad.status_code == 400
+
+
+def test_create_weekly_series(client, seed, auth_headers, db):
+    from src.models.models import Reservation
+
+    res = client.post(
+        "/reservations/",
+        json={
+            "animal_id": None,
+            "start_date": "2026-09-07T10:00:00-03:00",
+            "end_date": "2026-09-07T11:00:00-03:00",
+            "status": "Otras actividades",
+            "notes": "Limpieza semanal",
+            "recurrence": "weekly",
+            "recurrence_until": "2026-09-28",
+        },
+        headers=auth_headers,
+    )
+    assert res.status_code == 200, res.text
+    first = res.json()
+    assert first["series_id"]
+    assert first["recurrence"] == "weekly"
+
+    db.expire_all()
+    rows = db.query(Reservation).filter(Reservation.series_id == first["series_id"]).all()
+    assert len(rows) == 4
+
+
+def test_delete_following_in_series(client, seed, auth_headers, db):
+    from src.models.models import Reservation
+
+    created = client.post(
+        "/reservations/",
+        json={
+            "animal_id": None,
+            "start_date": "2026-09-01T10:00:00-03:00",
+            "end_date": "2026-09-01T11:00:00-03:00",
+            "status": "Otras actividades",
+            "notes": "Paseo diario",
+            "recurrence": "daily",
+            "recurrence_until": "2026-09-05",
+        },
+        headers=auth_headers,
+    ).json()
+
+    db.expire_all()
+    rows = (
+        db.query(Reservation)
+        .filter(Reservation.series_id == created["series_id"])
+        .order_by(Reservation.start_date)
+        .all()
+    )
+    assert len(rows) == 5
+    middle = rows[2]
+
+    res = client.delete(
+        f"/reservations/{middle.id}?scope=following",
+        headers=auth_headers,
+    )
+    assert res.status_code == 204
+    db.expire_all()
+    left = db.query(Reservation).filter(Reservation.series_id == created["series_id"]).all()
+    assert len(left) == 2
+
+
+def test_recurrence_requires_until(client, seed, auth_headers):
+    res = client.post(
+        "/reservations/",
+        json={
+            "animal_id": None,
+            "start_date": "2026-09-01T10:00:00-03:00",
+            "end_date": "2026-09-01T11:00:00-03:00",
+            "status": "Otras actividades",
+            "notes": "Sin hasta",
+            "recurrence": "monthly",
+        },
+        headers=auth_headers,
+    )
+    assert res.status_code == 400

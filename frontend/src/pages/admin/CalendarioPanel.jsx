@@ -3,7 +3,7 @@ import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay, startOfMonth, endOfMonth, addMonths, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
-import { Plus, X, Calendar as CalendarIcon, Save, Trash2 } from 'lucide-react';
+import { Plus, X, Calendar as CalendarIcon, Save, Trash2, Search } from 'lucide-react';
 import { parseApiDateTime, toApiDateTime, formatForInput, isAllDayAlert } from '../../lib/datetimeAr';
 import { API_BASE, apiUrl, mediaUrl } from '../../lib/api';
 import AgendaGroupedView from './AgendaGroupedView';
@@ -67,10 +67,12 @@ const reservationTitle = (r) => {
     if (speciesLabel) parts.push(speciesLabel);
     if (animalName) parts.push(animalName);
     if (desc) parts.push(desc);
-    return parts.length ? parts.join(' - ') : 'Otras actividades';
+    const title = parts.length ? parts.join(' - ') : 'Otras actividades';
+    return r.series_id ? `🔁 ${title}` : title;
   }
   const name = r.animal?.name || (r.animal_id ? `Paciente #${r.animal_id}` : 'Actividad');
-  return `${name} - ${r.status}`;
+  const prefix = r.series_id ? '🔁 ' : '';
+  return `${prefix}${name} - ${r.status}`;
 };
 
 const SPECIES_INFO = {
@@ -81,6 +83,70 @@ const SPECIES_INFO = {
   5: { name: "Tortugas", emoji: "🐢" },
   6: { name: "Erizos", emoji: "🦔" }
 };
+
+function eventSearchText(ev) {
+  const r = ev.resource || {};
+  return [
+    ev.title,
+    ev.status,
+    r.status,
+    r.notes,
+    r.animal?.name,
+    r.animal_name,
+    r.alert_type,
+    r.product_name,
+    r.species?.name,
+    r.recurrence,
+    r.series_id ? 'serie recurrente' : '',
+  ].filter(Boolean).join(' ').toLowerCase();
+}
+
+const RECURRENCE_OPTIONS = [
+  { value: 'none', label: 'No se repite' },
+  { value: 'daily', label: 'Todos los días' },
+  { value: 'weekly', label: 'Todas las semanas' },
+  { value: 'monthly', label: 'Todos los meses' },
+  { value: 'yearly', label: 'Todos los años' },
+];
+
+const RECURRENCE_MAX = { daily: 366, weekly: 104, monthly: 36, yearly: 10 };
+
+function toLocalIsoDate(dateObj) {
+  const y = dateObj.getFullYear();
+  const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const d = String(dateObj.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function defaultUntilDate(startLocal, freq) {
+  if (!startLocal || freq === 'none') return '';
+  const d = new Date(startLocal);
+  if (Number.isNaN(d.getTime())) return '';
+  if (freq === 'daily') d.setDate(d.getDate() + 30);
+  if (freq === 'weekly') d.setDate(d.getDate() + 12 * 7);
+  if (freq === 'monthly') d.setMonth(d.getMonth() + 12);
+  if (freq === 'yearly') d.setFullYear(d.getFullYear() + 5);
+  return toLocalIsoDate(d);
+}
+
+function countRecurrencePreview(startLocal, freq, until) {
+  if (!startLocal || !until || freq === 'none') return 1;
+  const start = new Date(startLocal);
+  const end = new Date(`${until}T23:59:59`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return 0;
+  const max = RECURRENCE_MAX[freq] || 1;
+  let n = 0;
+  const cursor = new Date(start);
+  while (cursor <= end && n < max) {
+    n += 1;
+    if (freq === 'daily') cursor.setDate(cursor.getDate() + 1);
+    else if (freq === 'weekly') cursor.setDate(cursor.getDate() + 7);
+    else if (freq === 'monthly') cursor.setMonth(cursor.getMonth() + 1);
+    else if (freq === 'yearly') cursor.setFullYear(cursor.getFullYear() + 1);
+    else break;
+  }
+  return n;
+}
 
 export default function CalendarioPanel() {
   const [events, setEvents] = useState([]);
@@ -103,7 +169,10 @@ export default function CalendarioPanel() {
     end_date: '',
     status: 'Pendiente',
     notes: '',
-    belongings_photos: null
+    belongings_photos: null,
+    recurrence: 'none',
+    recurrence_until: '',
+    series_id: null,
   });
 
   const token = localStorage.getItem('token');
@@ -217,7 +286,15 @@ export default function CalendarioPanel() {
   }, [animals, formData.status]);
 
   const openModal = (data, id = null) => {
-    setFormData(data);
+    setFormData({
+      recurrence: 'none',
+      recurrence_until: '',
+      series_id: null,
+      ...data,
+      recurrence: data.recurrence || 'none',
+      recurrence_until: data.recurrence_until || '',
+      series_id: data.series_id || null,
+    });
     setEditingId(id);
     setStatusMode(getStatusMode(data.status));
     setSelectedSpecies('');
@@ -250,7 +327,10 @@ export default function CalendarioPanel() {
       end_date: formatForInput(r.end_date),
       status: r.status,
       notes: r.notes || '',
-      belongings_photos: r.belongings_photos || null
+      belongings_photos: r.belongings_photos || null,
+      recurrence: r.recurrence || 'none',
+      recurrence_until: r.recurrence_until || '',
+      series_id: r.series_id || null,
     }, r.id);
     setSelectedSpecies(r.species_id ? String(r.species_id) : '');
     setSelectedAnimalIds([]);
@@ -280,6 +360,15 @@ export default function CalendarioPanel() {
 
     const isOther = isOtherActivity(formData.status);
     const speciesId = selectedSpecies ? parseInt(selectedSpecies, 10) : null;
+    const recurrence = editingId ? undefined : (formData.recurrence || 'none');
+    const recurrenceUntil = !editingId && recurrence && recurrence !== 'none'
+      ? formData.recurrence_until
+      : undefined;
+
+    if (!editingId && recurrence && recurrence !== 'none' && !recurrenceUntil) {
+      alert("Indicá hasta cuándo se repite la actividad.");
+      return;
+    }
 
     if (isOther && !formData.notes?.trim()) {
       alert("Por favor, ingresa una descripción para la actividad.");
@@ -354,6 +443,11 @@ export default function CalendarioPanel() {
         return res.json();
       };
 
+      const recurrenceFields = !editingId ? {
+        recurrence: recurrence || 'none',
+        recurrence_until: recurrenceUntil || null,
+      } : {};
+
       if (isOther && editingId) {
         const savedData = await postOrPut({
           animal_id: formData.animal_id ? parseInt(formData.animal_id, 10) : null,
@@ -373,6 +467,7 @@ export default function CalendarioPanel() {
             end_date: toApiDateTime(formData.end_date),
             status: formData.status,
             notes: formData.notes,
+            ...recurrenceFields,
           });
           if (!savedData) return;
         }
@@ -384,6 +479,7 @@ export default function CalendarioPanel() {
           end_date: toApiDateTime(formData.end_date),
           status: formData.status,
           notes: formData.notes,
+          ...recurrenceFields,
         });
         if (!savedData) return;
       } else {
@@ -395,6 +491,7 @@ export default function CalendarioPanel() {
             end_date: toApiDateTime(formData.end_date),
             status: formData.status,
             notes: formData.notes,
+            ...recurrenceFields,
           }, editingId || null);
           if (!savedData) return;
 
@@ -421,12 +518,17 @@ export default function CalendarioPanel() {
     }
   };
 
-  const deleteReservation = async () => {
+  const deleteReservation = async (scope = 'one') => {
     if (!isAdmin) return;
-    if (!editingId || !window.confirm("¿Seguro que deseas cancelar/borrar esta reserva?")) return;
-    
+    if (!editingId) return;
+    const message = scope === 'following'
+      ? "¿Borrar esta actividad y todas las siguientes de la serie?"
+      : "¿Seguro que deseas cancelar/borrar esta reserva?";
+    if (!window.confirm(message)) return;
+
     try {
-      const res = await fetch(`${API_BASE}/reservations/${editingId}`, {
+      const qs = scope === 'following' ? '?scope=following' : '';
+      const res = await fetch(`${API_BASE}/reservations/${editingId}${qs}`, {
         method: "DELETE",
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -476,6 +578,43 @@ export default function CalendarioPanel() {
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [currentView, setCurrentView] = useState('month');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  const frequentActivities = useMemo(() => {
+    const counts = new Map();
+    for (const ev of events) {
+      if (ev.resource?.status !== 'Otras actividades') continue;
+      const note = (ev.resource?.notes || '').trim();
+      if (!note) continue;
+      const key = note.toLowerCase();
+      const prev = counts.get(key);
+      if (prev) prev.count += 1;
+      else counts.set(key, { note, count: 1 });
+    }
+    return [...counts.values()]
+      .sort((a, b) => b.count - a.count || a.note.localeCompare(b.note, 'es'))
+      .slice(0, 8);
+  }, [events]);
+
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (q.length < 2) return [];
+    return events
+      .filter((ev) => eventSearchText(ev).includes(q))
+      .sort((a, b) => (b.start?.getTime?.() || 0) - (a.start?.getTime?.() || 0))
+      .slice(0, 12);
+  }, [events, searchQuery]);
+
+  const jumpToSearchResult = (event) => {
+    setSearchOpen(false);
+    setSearchQuery('');
+    if (event.start) {
+      setCurrentDate(event.start);
+      setCurrentView('day');
+    }
+    handleSelectEvent(event);
+  };
 
   const openQuickService = (status) => {
     const now = new Date();
@@ -545,6 +684,54 @@ export default function CalendarioPanel() {
             </button>
           </div>
         )}
+        <div className="relative w-full sm:max-w-md">
+          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setSearchOpen(true);
+            }}
+            onFocus={() => setSearchOpen(true)}
+            onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
+            placeholder="Buscar actividad pasada o frecuente..."
+            className="w-full border border-gray-300 rounded-xl pl-9 pr-9 py-2.5 bg-gray-50 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => { setSearchQuery(''); setSearchOpen(false); }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+              aria-label="Limpiar búsqueda"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+          {searchOpen && searchQuery.trim().length >= 2 && (
+            <ul className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-64 overflow-y-auto">
+              {searchResults.length === 0 && (
+                <li className="px-3 py-3 text-sm text-gray-400 italic">No hay coincidencias.</li>
+              )}
+              {searchResults.map((ev) => (
+                <li key={`${ev.id}-${ev.start?.getTime?.() || 0}`}>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => jumpToSearchResult(ev)}
+                    className="w-full text-left px-3 py-2.5 hover:bg-indigo-50 border-b border-gray-100 last:border-0"
+                  >
+                    <p className="text-sm font-medium text-gray-800 truncate">{ev.title}</p>
+                    <p className="text-xs text-gray-500">
+                      {ev.start ? format(ev.start, "d MMM yyyy · HH:mm", { locale: es }) : ''}
+                      {ev.resource?.notes ? ` · ${ev.resource.notes}` : ''}
+                    </p>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
 
       <div className="h-[55dvh] sm:h-[65dvh] min-h-[320px] overflow-x-auto scroll-touch -mx-1">
@@ -794,7 +981,14 @@ export default function CalendarioPanel() {
                     type="datetime-local" 
                     className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-800 disabled:opacity-70 disabled:bg-gray-100"
                     value={formData.start_date}
-                    onChange={(e) => setFormData({...formData, start_date: e.target.value})}
+                    onChange={(e) => {
+                      const start_date = e.target.value;
+                      const next = { ...formData, start_date };
+                      if (!editingId && formData.recurrence !== 'none') {
+                        next.recurrence_until = defaultUntilDate(start_date, formData.recurrence);
+                      }
+                      setFormData(next);
+                    }}
                     disabled={!isAdmin}
                   />
                 </div>
@@ -809,6 +1003,51 @@ export default function CalendarioPanel() {
                   />
                 </div>
               </div>
+
+              {!editingId && isAdmin && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Repetición</label>
+                    <select
+                      className="w-full border border-gray-300 rounded-lg p-2 bg-gray-50 text-gray-800"
+                      value={formData.recurrence || 'none'}
+                      onChange={(e) => {
+                        const recurrence = e.target.value;
+                        setFormData({
+                          ...formData,
+                          recurrence,
+                          recurrence_until: defaultUntilDate(formData.start_date, recurrence),
+                        });
+                      }}
+                    >
+                      {RECURRENCE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {formData.recurrence && formData.recurrence !== 'none' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Hasta</label>
+                      <input
+                        type="date"
+                        className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-800"
+                        value={formData.recurrence_until || ''}
+                        min={formData.start_date ? formData.start_date.slice(0, 10) : undefined}
+                        onChange={(e) => setFormData({ ...formData, recurrence_until: e.target.value })}
+                      />
+                      <p className="text-[11px] text-gray-500 mt-1">
+                        Se crearán {countRecurrencePreview(formData.start_date, formData.recurrence, formData.recurrence_until)} eventos.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+              {editingId && formData.series_id && (
+                <p className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                  🔁 Forma parte de una serie {RECURRENCE_OPTIONS.find((o) => o.value === formData.recurrence)?.label?.toLowerCase() || 'recurrente'}.
+                  Editar cambia solo esta fecha.
+                </p>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -847,6 +1086,34 @@ export default function CalendarioPanel() {
                   disabled={!isAdmin}
                   required={isOtherActivity(formData.status)}
                 ></textarea>
+                {isAdmin && isOtherActivity(formData.status) && frequentActivities.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-[11px] font-medium text-gray-500 mb-1.5">Frecuentes / anteriores</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {frequentActivities
+                        .filter((item) => {
+                          const q = formData.notes.trim().toLowerCase();
+                          return !q || item.note.toLowerCase().includes(q);
+                        })
+                        .slice(0, 6)
+                        .map((item) => (
+                          <button
+                            key={item.note}
+                            type="button"
+                            onClick={() => setFormData({ ...formData, notes: item.note })}
+                            className={`text-xs px-2 py-1 rounded-full border transition ${
+                              formData.notes.trim().toLowerCase() === item.note.toLowerCase()
+                                ? 'bg-slate-600 text-white border-slate-600'
+                                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            {item.note}
+                            {item.count > 1 ? ` (${item.count})` : ''}
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+                )}
               </div>
               
               {!isServiceEvent(formData.status) && (
@@ -899,13 +1166,23 @@ export default function CalendarioPanel() {
                   </button>
                   {editingId && (
                     <button 
-                      onClick={deleteReservation}
+                      onClick={() => deleteReservation('one')}
                       className="pet-btn pet-btn--danger px-4 rounded-xl font-medium"
+                      title="Borrar solo esta"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   )}
                 </div>
+              )}
+              {isAdmin && editingId && formData.series_id && (
+                <button
+                  type="button"
+                  onClick={() => deleteReservation('following')}
+                  className="w-full text-xs text-red-600 hover:text-red-700 font-medium py-1"
+                >
+                  Borrar esta y las siguientes de la serie
+                </button>
               )}
             </div>
           </div>

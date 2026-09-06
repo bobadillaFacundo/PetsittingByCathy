@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { redirectToLogin } from "../lib/auth";
 import { API_BASE, apiUrl, mediaUrl } from '../lib/api';
+import AnimalProfileFacts from './AnimalProfileFacts';
 
 const SPECIES_INFO = {
   1: { name: "Perros", emoji: "🐶" },
@@ -430,14 +431,17 @@ export default function VoiceRecorder({ onSave }) {
         </div>
       ) : (
         <div className="flex flex-col items-center w-full animate-fadeIn">
-          <div className="flex items-center gap-4 mb-6 bg-indigo-50 px-6 py-3 rounded-full border border-indigo-100">
-            <span className="text-indigo-800 font-semibold">Paciente seleccionado: <span className="font-bold text-xl ml-1">{selectedAnimal.name}</span></span>
-            <button 
-              onClick={() => setSelectedAnimal(null)}
-              className="text-xs text-indigo-600 hover:text-indigo-800 underline font-medium"
-            >
-              Cambiar
-            </button>
+          <div className="flex flex-col items-center gap-2 mb-6 w-full max-w-xl">
+            <div className="flex items-center gap-4 bg-indigo-50 px-6 py-3 rounded-full border border-indigo-100">
+              <span className="text-indigo-800 font-semibold">Paciente seleccionado: <span className="font-bold text-xl ml-1">{selectedAnimal.name}</span></span>
+              <button 
+                onClick={() => setSelectedAnimal(null)}
+                className="text-xs text-indigo-600 hover:text-indigo-800 underline font-medium"
+              >
+                Cambiar
+              </button>
+            </div>
+            <AnimalProfileFacts animal={selectedAnimal} compact />
           </div>
 
           <p className="text-center text-gray-600 font-medium mb-4">Paso 2: Toca para grabar, toca para detener</p>

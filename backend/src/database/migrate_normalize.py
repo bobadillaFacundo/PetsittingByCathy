@@ -89,6 +89,127 @@ def _migrate_reservations_for_other_activities(db, inspector) -> None:
         _mark_migration_applied(db, "reservations_nullable_animal")
 
 
+def _migrate_weight_records(db, inspector) -> None:
+    if not table_exists(inspector, "weight_records"):
+        print("Creando weight_records...")
+        run_ddl(
+            "CREATE TABLE IF NOT EXISTS weight_records ("
+            "id SERIAL PRIMARY KEY, "
+            "animal_id INTEGER NOT NULL REFERENCES animals(id), "
+            "kg DOUBLE PRECISION NOT NULL, "
+            "recorded_at TIMESTAMP NOT NULL, "
+            "source VARCHAR DEFAULT 'ficha', "
+            "report_id INTEGER REFERENCES reports(id)"
+            ")"
+        )
+        run_ddl("CREATE INDEX IF NOT EXISTS ix_weight_records_animal_id ON weight_records (animal_id)")
+        print("  OK weight_records")
+
+    _ensure_schema_migrations_table(inspector)
+    if _migration_applied(db, "weight_records_from_reports"):
+        return
+
+    from src.models.models import EventType, Report, ReportEvent
+    from src.services.weight_helpers import record_weight
+
+    peso_type = db.query(EventType).filter(EventType.name.ilike("peso")).first()
+    if peso_type:
+        events = (
+            db.query(ReportEvent, Report)
+            .join(Report, ReportEvent.report_id == Report.id)
+            .filter(ReportEvent.event_type_id == peso_type.id)
+            .order_by(Report.created_at.asc())
+            .all()
+        )
+        for event, report in events:
+            record_weight(
+                db,
+                report.animal_id,
+                event.value,
+                source="reporte",
+                report_id=report.id,
+                recorded_at=report.created_at,
+            )
+        db.commit()
+    _mark_migration_applied(db, "weight_records_from_reports")
+    print("  OK backfill weight_records")
+
+
+def _migrate_animal_care_profile(inspector) -> None:
+    if not table_exists(inspector, "animals"):
+        return
+    columns = {
+        "is_escapist": "BOOLEAN DEFAULT FALSE",
+        "has_attachment_issues": "BOOLEAN DEFAULT FALSE",
+        "dog_sociability": "VARCHAR",
+        "needs_medication": "BOOLEAN DEFAULT FALSE",
+        "needs_diapers": "BOOLEAN DEFAULT FALSE",
+        "needs_isolation": "BOOLEAN DEFAULT FALSE",
+        "needs_muzzle": "BOOLEAN DEFAULT FALSE",
+        "has_special_diet": "BOOLEAN DEFAULT FALSE",
+        "care_notes": "TEXT",
+        "housing_type": "VARCHAR",
+        "aversive_to_people": "BOOLEAN DEFAULT FALSE",
+        "aversive_to_dogs": "BOOLEAN DEFAULT FALSE",
+        "has_bitten_people": "BOOLEAN DEFAULT FALSE",
+        "has_bitten_dogs": "BOOLEAN DEFAULT FALSE",
+        "bites_often": "BOOLEAN DEFAULT FALSE",
+        "lives_with_dogs": "BOOLEAN DEFAULT FALSE",
+        "lives_with_dogs_count": "INTEGER",
+        "plays_with_dogs": "BOOLEAN DEFAULT FALSE",
+        "familiar_with_animals": "VARCHAR",
+        "fears": "TEXT",
+        "destroys_things": "BOOLEAN DEFAULT FALSE",
+        "destroys_what": "VARCHAR",
+        "likes_water": "BOOLEAN DEFAULT FALSE",
+        "likes_pool": "BOOLEAN DEFAULT FALSE",
+        "food_brand": "VARCHAR",
+        "food_amount": "VARCHAR",
+        "food_times_per_day": "VARCHAR",
+        "special_diet_details": "TEXT",
+        "intake_vaccines": "TEXT",
+        "intake_dewormed_internal": "BOOLEAN DEFAULT FALSE",
+        "intake_dewormed_external": "BOOLEAN DEFAULT FALSE",
+        "intake_medication": "TEXT",
+        "allergies": "TEXT",
+        "health_issues": "TEXT",
+        "walks_outside_neighborhood": "BOOLEAN DEFAULT FALSE",
+        "contact_name": "VARCHAR",
+        "contact_phone": "VARCHAR",
+        "contact_email": "VARCHAR",
+        "contact_notes": "TEXT",
+    }
+    added = False
+    for name, ddl_type in columns.items():
+        inspector = inspect(engine)
+        if not column_exists(inspector, "animals", name):
+            print(f"Agregando animals.{name}...")
+            run_ddl(f"ALTER TABLE animals ADD COLUMN IF NOT EXISTS {name} {ddl_type}")
+            added = True
+    if added:
+        print("  OK animals care profile")
+
+
+def _migrate_reservation_recurrence(inspector) -> None:
+    if not table_exists(inspector, "reservations"):
+        return
+    if not column_exists(inspector, "reservations", "recurrence"):
+        print("Agregando reservations.recurrence...")
+        run_ddl("ALTER TABLE reservations ADD COLUMN IF NOT EXISTS recurrence VARCHAR DEFAULT 'none'")
+        print("  OK reservations.recurrence")
+    inspector = inspect(engine)
+    if not column_exists(inspector, "reservations", "recurrence_until"):
+        print("Agregando reservations.recurrence_until...")
+        run_ddl("ALTER TABLE reservations ADD COLUMN IF NOT EXISTS recurrence_until DATE")
+        print("  OK reservations.recurrence_until")
+    inspector = inspect(engine)
+    if not column_exists(inspector, "reservations", "series_id"):
+        print("Agregando reservations.series_id...")
+        run_ddl("ALTER TABLE reservations ADD COLUMN IF NOT EXISTS series_id VARCHAR")
+        run_ddl("CREATE INDEX IF NOT EXISTS ix_reservations_series_id ON reservations (series_id)")
+        print("  OK reservations.series_id")
+
+
 def migrate():
     print("Creando tablas nuevas si no existen...")
     Base.metadata.create_all(bind=engine)
@@ -320,12 +441,22 @@ def migrate():
         inspector = inspect(engine)
         _migrate_reservations_for_other_activities(db, inspector)
 
+        # --- Reservas: recurrencia (diaria / semanal / mensual / anual) ---
+        inspector = inspect(engine)
+        _migrate_reservation_recurrence(inspector)
+
         # --- Animales: peso en kg ---
         inspector = inspect(engine)
         if table_exists(inspector, "animals") and not column_exists(inspector, "animals", "weight_kg"):
             print("Agregando animals.weight_kg...")
             run_ddl("ALTER TABLE animals ADD COLUMN IF NOT EXISTS weight_kg DOUBLE PRECISION")
             print("  OK animals.weight_kg")
+
+        inspector = inspect(engine)
+        _migrate_weight_records(db, inspector)
+
+        inspector = inspect(engine)
+        _migrate_animal_care_profile(inspector)
 
         # --- Vacunas: foto/certificado asociado ---
         inspector = inspect(engine)

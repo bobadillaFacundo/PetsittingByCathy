@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.exc import SQLAlchemyError
 import os
 import json
 import traceback
+import uuid
 from typing import List
 
 from src.database.session import get_db
@@ -16,6 +17,13 @@ from src.dtos.reservation_dto import (
 )
 from src.auth import get_current_user
 from src.timezone_ar import to_ar_naive
+from src.services.recurrence import (
+    MAX_OCCURRENCES,
+    RECURRENCE_NONE,
+    VALID_RECURRENCES,
+    build_occurrences,
+    exceeds_max,
+)
 
 router = APIRouter(prefix="/reservations", tags=["Reservations"])
 
@@ -107,12 +115,40 @@ def _normalize_reservation_payload(data: dict) -> dict:
         data["start_date"] = to_ar_naive(data["start_date"])
     if "end_date" in data and data["end_date"] is not None:
         data["end_date"] = to_ar_naive(data["end_date"])
+    if "recurrence" in data:
+        rec = (data.get("recurrence") or RECURRENCE_NONE).strip().lower()
+        data["recurrence"] = rec if rec in VALID_RECURRENCES else RECURRENCE_NONE
     return data
+
+
+def _validate_recurrence(data: dict) -> None:
+    rec = data.get("recurrence") or RECURRENCE_NONE
+    until = data.get("recurrence_until")
+    if rec == RECURRENCE_NONE:
+        data["recurrence_until"] = None
+        data["series_id"] = None
+        return
+    if until is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Indicá hasta cuándo se repite la actividad.",
+        )
+    start = data["start_date"]
+    if until < start.date():
+        raise HTTPException(
+            status_code=400,
+            detail="La fecha de fin de la serie no puede ser anterior al inicio.",
+        )
+    if exceeds_max(start, rec, until):
+        raise HTTPException(
+            status_code=400,
+            detail=f"La serie supera el máximo de {MAX_OCCURRENCES[rec]} repeticiones. Acortá la fecha 'hasta'.",
+        )
 
 
 def _db_error_detail(exc: SQLAlchemyError) -> str:
     err = str(getattr(exc, "orig", exc)).lower()
-    if any(k in err for k in ("animal_id", "species_id", "null value", "not-null", "does not exist", "undefinedcolumn")):
+    if any(k in err for k in ("animal_id", "species_id", "recurrence", "series_id", "null value", "not-null", "does not exist", "undefinedcolumn")):
         return (
             "No se pudo guardar la actividad. "
             "Reiniciá el backend en Render para aplicar la migración de base de datos."
@@ -128,18 +164,40 @@ def create_reservation(
 ):
     data = _normalize_reservation_payload(reservation.model_dump())
     _validate_reservation_data(db, data)
-    db_reservation = Reservation(**data)
-    db.add(db_reservation)
+    _validate_recurrence(data)
+
+    occurrences = build_occurrences(
+        data["start_date"],
+        data["end_date"],
+        data.get("recurrence"),
+        data.get("recurrence_until"),
+    )
+    series_id = uuid.uuid4().hex if len(occurrences) > 1 else None
+
+    created = []
+    for occ_start, occ_end in occurrences:
+        row = Reservation(
+            **{
+                **data,
+                "start_date": occ_start,
+                "end_date": occ_end,
+                "series_id": series_id,
+            }
+        )
+        db.add(row)
+        created.append(row)
+
     try:
         db.flush()
         db.commit()
-        db.refresh(db_reservation)
+        for row in created:
+            db.refresh(row)
     except SQLAlchemyError as exc:
         db.rollback()
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=_db_error_detail(exc)) from exc
 
-    return reservation_to_response(db_reservation)
+    return reservation_to_response(created[0])
 
 
 @router.get("", response_model=List[ReservationResponse])
@@ -192,6 +250,7 @@ def update_reservation(
 @router.delete("/{reservation_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_reservation(
     reservation_id: int,
+    scope: str = Query("one", description="one = solo esta; following = esta y las siguientes de la serie"),
     db: Session = Depends(get_db),
     current_admin=Depends(get_current_user),
 ):
@@ -199,7 +258,17 @@ def delete_reservation(
     if not db_reservation:
         raise HTTPException(status_code=404, detail="Reserva no encontrada")
 
-    db.delete(db_reservation)
+    if scope == "following" and db_reservation.series_id:
+        (
+            db.query(Reservation)
+            .filter(
+                Reservation.series_id == db_reservation.series_id,
+                Reservation.start_date >= db_reservation.start_date,
+            )
+            .delete(synchronize_session=False)
+        )
+    else:
+        db.delete(db_reservation)
     db.commit()
     return None
 

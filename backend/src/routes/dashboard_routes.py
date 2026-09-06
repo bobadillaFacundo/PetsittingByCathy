@@ -38,7 +38,12 @@ class DashboardResponse(BaseModel):
 @router.get("", response_model=DashboardResponse)
 def get_dashboard(db: Session = Depends(get_db)):
     # 1. Animales Activos solamente (is_active=True)
-    animals = db.query(Animal).filter(Animal.is_active == True).all()
+    animals = (
+        db.query(Animal)
+        .options(joinedload(Animal.species), joinedload(Animal.breed))
+        .filter(Animal.is_active == True)
+        .all()
+    )
     
     # 2. Agrupar por severidad dinámica
     normal_animals = [a for a in animals if getattr(a, 'severity', 'normal') == 'normal']
@@ -51,13 +56,14 @@ def get_dashboard(db: Session = Depends(get_db)):
     
     threshold_date = today_ar() + timedelta(days=15)
     
-    # Vacunas — solo la última por animal+vacuna (evita duplicados)
+    # Vacunas — primero la última por animal+vacuna, después el umbral de vencimiento.
+    # Si se filtra por fecha antes del max(id), una dosis nueva a futuro no reemplaza la vencida.
     latest_vaccine_ids = (
         db.query(func.max(Vaccine.id))
         .join(HealthRecord)
         .join(Animal, HealthRecord.animal_id == Animal.id)
         .filter(
-            Vaccine.next_due_date <= threshold_date,
+            Vaccine.next_due_date.isnot(None),
             Animal.is_active == True
         )
         .group_by(HealthRecord.animal_id, Vaccine.vaccine_id)
@@ -65,7 +71,10 @@ def get_dashboard(db: Session = Depends(get_db)):
     latest_vax_ids = [row[0] for row in latest_vaccine_ids]
     
     if latest_vax_ids:
-        expiring_vaccines = db.query(Vaccine).filter(Vaccine.id.in_(latest_vax_ids)).all()
+        expiring_vaccines = db.query(Vaccine).filter(
+            Vaccine.id.in_(latest_vax_ids),
+            Vaccine.next_due_date <= threshold_date,
+        ).all()
         for v in expiring_vaccines:
             hr = db.query(HealthRecord).filter(HealthRecord.id == v.health_record_id).first()
             if hr:
@@ -80,12 +89,12 @@ def get_dashboard(db: Session = Depends(get_db)):
                         severity="high" if days_left < 0 else "medium"
                     ))
                 
-    # Desparasitaciones — solo la última por animal+producto (evita duplicados)
+    # Desparasitaciones — primero la última por animal+producto, después el umbral.
     latest_deworming_ids = (
         db.query(func.max(Deworming.id))
         .join(Animal)
         .filter(
-            Deworming.next_due_date <= threshold_date,
+            Deworming.next_due_date.isnot(None),
             Animal.is_active == True
         )
         .group_by(Deworming.animal_id, Deworming.product_id)
@@ -95,7 +104,10 @@ def get_dashboard(db: Session = Depends(get_db)):
     if latest_dew_ids:
         expiring_dewormings = db.query(Deworming).options(
             joinedload(Deworming.product)
-        ).filter(Deworming.id.in_(latest_dew_ids)).all()
+        ).filter(
+            Deworming.id.in_(latest_dew_ids),
+            Deworming.next_due_date <= threshold_date,
+        ).all()
         for de in expiring_dewormings:
             animal = db.query(Animal).filter(Animal.id == de.animal_id, Animal.is_active == True).first()
             if animal:

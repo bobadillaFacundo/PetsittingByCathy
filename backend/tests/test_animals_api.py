@@ -14,7 +14,32 @@ class TestAnimalsList:
     def test_get_animal(self, client, seed):
         res = client.get(f"/animals/{seed['animal'].id}")
         assert res.status_code == 200
-        assert res.json()["name"] == "Kira"
+        data = res.json()
+        assert data["name"] == "Kira"
+        assert data["species_name"] == "Perro"
+        assert data["breed_name"] == "Caniche"
+
+    def test_update_care_profile(self, client, seed, auth_headers):
+        aid = seed["animal"].id
+        res = client.put(
+            f"/animals/{aid}",
+            json={
+                "is_escapist": True,
+                "has_attachment_issues": True,
+                "dog_sociability": "selective",
+                "needs_diapers": True,
+                "needs_isolation": False,
+                "care_notes": "No dejar solo en el patio",
+            },
+            headers=auth_headers,
+        )
+        assert res.status_code == 200, res.text
+        data = res.json()
+        assert data["is_escapist"] is True
+        assert data["has_attachment_issues"] is True
+        assert data["dog_sociability"] == "selective"
+        assert data["needs_diapers"] is True
+        assert data["care_notes"] == "No dejar solo en el patio"
 
     def test_get_animal_not_found(self, client, db, seed):
         res = client.get("/animals/99999")
@@ -34,6 +59,18 @@ class TestAnimalHistory:
     def test_history_not_found(self, client, db, seed):
         res = client.get("/animals/99999/history")
         assert res.status_code == 404
+
+    def test_weight_history_from_ficha(self, client, seed, auth_headers, db):
+        aid = seed["animal"].id
+        res = client.put(f"/animals/{aid}", json={"weight_kg": 12.5}, headers=auth_headers)
+        assert res.status_code == 200
+        hist = client.get(f"/animals/{aid}/weights").json()
+        assert len(hist) >= 1
+        assert hist[0]["kg"] == 12.5
+        assert hist[0]["recorded_at"]
+        assert hist[0]["source"] == "ficha"
+        history = client.get(f"/animals/{aid}/history").json()
+        assert any(w["kg"] == 12.5 for w in history.get("weight_history", []))
 
 
 @pytest.mark.api
