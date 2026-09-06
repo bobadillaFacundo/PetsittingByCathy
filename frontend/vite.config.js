@@ -9,7 +9,7 @@ const buildId = process.env.VERCEL_GIT_COMMIT_SHA
 
 /** Limpia SW/caché cuando hay deploy nuevo (evita 404 en bundles viejos). */
 function deployCacheBustPlugin() {
-  const snippet = `<script>(function(){var v=${JSON.stringify(buildId)},k="pbc_build",r="pbc_reload";try{if(sessionStorage.getItem(r))return sessionStorage.removeItem(r);var p=localStorage.getItem(k);if(p&&p!==v){localStorage.setItem(k,v);sessionStorage.setItem(r,"1");var done=function(){location.reload()};var jobs=[Promise.resolve()];if("serviceWorker"in navigator){jobs.push(navigator.serviceWorker.getRegistrations().then(function(rs){return Promise.all(rs.map(function(x){return x.unregister()}))}))}if(window.caches){jobs.push(caches.keys().then(function(ks){return Promise.all(ks.map(function(c){return caches.delete(c)}))}))}Promise.all(jobs).then(done).catch(done);return}localStorage.setItem(k,v)}catch(e){}})();</script>`
+  const snippet = `<script>(function(){var v=${JSON.stringify(buildId)},k="pbc_build_v2",r="pbc_reload";try{if(sessionStorage.getItem(r))return sessionStorage.removeItem(r);var p=localStorage.getItem(k);if(p&&p!==v){localStorage.setItem(k,v);sessionStorage.setItem(r,"1");var done=function(){location.reload()};var jobs=[Promise.resolve()];if("serviceWorker"in navigator){jobs.push(navigator.serviceWorker.getRegistrations().then(function(rs){return Promise.all(rs.map(function(x){return x.unregister()}))}))}if(window.caches){jobs.push(caches.keys().then(function(ks){return Promise.all(ks.map(function(c){return caches.delete(c)}))}))}Promise.all(jobs).then(done).catch(done);return}localStorage.setItem(k,v)}catch(e){}})();</script>`
   return {
     name: 'deploy-cache-bust',
     transformIndexHtml(html) {
@@ -71,8 +71,9 @@ export default defineConfig({
       workbox: {
         skipWaiting: true,
         clientsClaim: true,
-        // Sin navigateFallback a /index.html: no está en precache (glob sin html)
-        // y Workbox tira non-precached-url. El rewrite de Vercel alcanza para la SPA.
+        // Desactivar NavigationRoute: el default de vite-plugin-pwa es "index.html"
+        // y con globPatterns sin html Workbox tira non-precached-url.
+        navigateFallback: null,
         navigateFallbackDenylist: [/^\/api/, /^\/uploads/, /^\/health/],
         globPatterns: ['**/*.{js,css,ico,png,svg,woff2}'],
       },
