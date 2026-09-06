@@ -22,17 +22,30 @@ def split_care_profile(data: dict) -> tuple[dict, dict]:
     return animal, care
 
 
-def merge_care_profile(animal: Any) -> dict:
-    payload = {col.name: getattr(animal, col.name) for col in animal.__table__.columns}
-    profile = None
+def _safe_rel(obj: Any, name: str):
+    """Lee relación sin romper si el ORM está detached (sqlalchemy e3q8)."""
+    state = getattr(obj, "__dict__", None) or {}
+    if name in state:
+        return state[name]
     try:
-        profile = getattr(animal, "care_profile", None)
+        return getattr(obj, name, None)
     except Exception:
-        profile = None
+        return None
+
+
+def merge_care_profile(animal: Any) -> dict:
+    try:
+        payload = {col.name: getattr(animal, col.name) for col in animal.__table__.columns}
+    except Exception:
+        payload = {
+            k: v for k, v in getattr(animal, "__dict__", {}).items()
+            if not str(k).startswith("_")
+        }
+    profile = _safe_rel(animal, "care_profile")
     for name in CARE_PROFILE_FIELDS:
         payload[name] = getattr(profile, name, None) if profile is not None else None
-    species = getattr(animal, "species", None)
-    breed = getattr(animal, "breed", None)
+    species = _safe_rel(animal, "species")
+    breed = _safe_rel(animal, "breed")
     payload["species_name"] = species.name if species is not None and getattr(species, "name", None) else None
     payload["breed_name"] = breed.name if breed is not None and getattr(breed, "name", None) else None
     return payload

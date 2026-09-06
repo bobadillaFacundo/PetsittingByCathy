@@ -34,7 +34,8 @@ def create_animal(animal: AnimalCreate, db: Session = Depends(get_db), current_a
         from src.services.weight_helpers import record_weight
         record_weight(db, db_animal.id, db_animal.weight_kg, source="ficha")
     db.commit()
-    return _load_animal(db, db_animal.id)
+    loaded = _load_animal(db, db_animal.id)
+    return AnimalResponse.model_validate(loaded)
 
 @router.get("/species")
 def get_species(db: Session = Depends(get_db)):
@@ -135,7 +136,8 @@ def update_animal(animal_id: int, animal_update: AnimalUpdate, db: Session = Dep
         from src.services.weight_helpers import record_weight
         record_weight(db, db_animal.id, new_weight, source="ficha")
     db.commit()
-    return _load_animal(db, animal_id)
+    loaded = _load_animal(db, animal_id)
+    return AnimalResponse.model_validate(loaded)
 
 @router.delete("/{animal_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_animal(animal_id: int, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
@@ -404,7 +406,7 @@ def get_animal_history(animal_id: int, db: Session = Depends(get_db)):
     weight_history = [WeightHistoryDTO(**item) for item in list_weight_history(db, animal_id)]
 
     return AnimalHistoryResponse(
-        animal=animal,
+        animal=AnimalResponse.model_validate(animal),
         reports=history,
         observations=observation_dtos,
         active_medications=med_dtos,

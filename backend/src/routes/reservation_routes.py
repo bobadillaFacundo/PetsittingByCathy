@@ -64,7 +64,9 @@ def _validate_reservation_animal(db: Session, animal_id: int, status: str):
 
 def _get_reservation_query(db: Session):
     return db.query(Reservation).options(
-        selectinload(Reservation.animal),
+        selectinload(Reservation.animal).selectinload(Animal.care_profile),
+        selectinload(Reservation.animal).selectinload(Animal.species),
+        selectinload(Reservation.animal).selectinload(Animal.breed),
         selectinload(Reservation.species),
     )
 

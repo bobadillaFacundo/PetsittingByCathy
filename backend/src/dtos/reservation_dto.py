@@ -60,14 +60,15 @@ def reservation_to_response(row) -> ReservationResponse:
     if getattr(row, "animal", None) is not None:
         try:
             animal = AnimalResponse.model_validate(row.animal)
-        except ValidationError:
+        except (ValidationError, Exception):
+            # DetachedInstanceError (e3q8) u otros fallos de lazy-load
             animal = None
 
     species = None
     if getattr(row, "species", None) is not None:
         try:
             species = SpeciesBrief.model_validate(row.species)
-        except ValidationError:
+        except (ValidationError, Exception):
             species = None
 
     return ReservationResponse(
