@@ -63,13 +63,21 @@ export default function AuditoriaPanel() {
   };
 
   const getSymptomChartName = (e, report) => {
-    const type = (e.type || '').toLowerCase();
-    if (type === 'peso') return null;
+    const type = (e.type || '').toLowerCase().trim();
+    if (!type || type === 'peso') return null;
     const isRoutine = ['comida', 'agua', 'pis', 'caca'].includes(type);
     const isAnomaly = getEventColor(e, report) !== 'green';
-    if (!isRoutine && !isAnomaly) return null;
+    // Rutina solo si es anómala; el resto de tipos (enfermedad, observación, etc.) siempre
     if (isRoutine && !isAnomaly) return null;
-    return isRoutine ? `Problema con ${e.type}` : e.type;
+    if (isRoutine) return `Problema con ${e.type}`;
+    return e.type || type;
+  };
+
+  /** Nombre para gráfico ampliado: incluye rutina normal si no hay anomalías. */
+  const getAnyEventChartName = (e) => {
+    const type = (e.type || '').toLowerCase().trim();
+    if (!type || type === 'peso') return null;
+    return e.type || type;
   };
 
   const reportHasSymptom = (report, symptomName) => {
@@ -114,7 +122,7 @@ export default function AuditoriaPanel() {
     setIsLoading(true);
     try {
       const [reportsRes, animalsRes, rulesRes] = await Promise.all([
-        fetch(`${API_BASE}/reports/all`, {
+        fetch(`${API_BASE}/reports/all?limit=300`, {
           headers: {
             "Authorization": `Bearer ${localStorage.getItem("token")}`
           }
@@ -245,23 +253,30 @@ export default function AuditoriaPanel() {
   }, [reports]);
 
   const chartDataSintomas = useMemo(() => {
-    const counts = {};
-    const baseReports = filterAnimal === 'Todas'
-      ? recentReportsGlobal
-      : recentReportsGlobal.filter((r) => r.animal_name === filterAnimal);
+    const buildCounts = (nameFn) => {
+      const counts = {};
+      const baseReports = filterAnimal === 'Todas'
+        ? recentReportsGlobal
+        : recentReportsGlobal.filter((r) => r.animal_name === filterAnimal);
 
-    baseReports.forEach((r) => {
-      r.events.forEach((e) => {
-        const chartName = getSymptomChartName(e, r);
-        if (!chartName) return;
-        if (!counts[chartName]) counts[chartName] = new Set();
-        counts[chartName].add(r.animal_name.trim());
+      baseReports.forEach((r) => {
+        (r.events || []).forEach((e) => {
+          const chartName = nameFn(e, r);
+          if (!chartName) return;
+          if (!counts[chartName]) counts[chartName] = new Set();
+          counts[chartName].add((r.animal_name || 'Desconocido').trim());
+        });
       });
-    });
-    return Object.keys(counts)
-      .map((name) => ({ name, value: counts[name].size }))
-      .sort((a, b) => b.value - a.value);
-  }, [recentReportsGlobal, filterAnimal, colorRules]);
+      return Object.keys(counts)
+        .map((name) => ({ name, value: counts[name].size }))
+        .sort((a, b) => b.value - a.value);
+    };
+
+    // Preferir solo anomalías; si no hay, mostrar todos los eventos (así el gráfico no queda vacío)
+    const anomalies = buildCounts(getSymptomChartName);
+    if (anomalies.length > 0) return anomalies;
+    return buildCounts((e) => getAnyEventChartName(e));
+  }, [recentReportsGlobal, filterAnimal, colorRules, mascotas]);
 
   const chartDataAnimalsBySymptom = useMemo(() => {
     if (filterSymptom === 'Todos') return [];
@@ -365,45 +380,57 @@ export default function AuditoriaPanel() {
         </div>
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
           <h3 className="text-lg font-bold text-gray-800 mb-1">Distribución de Síntomas</h3>
-          <p className="text-sm text-gray-500 mb-4">Clic en un segmento para ver mascotas afectadas</p>
+          <p className="text-sm text-gray-500 mb-4">
+            Últimas 48 h · clic en un segmento para filtrar
+            {filterAnimal !== 'Todas' ? ` · ${filterAnimal}` : ''}
+          </p>
           {chartDataSintomas.length > 0 ? (
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="w-full" style={{ height: 320, minHeight: 320 }}>
+              <ResponsiveContainer width="100%" height={320} minHeight={320}>
                 <PieChart>
                   <Pie
                     data={chartDataSintomas}
                     dataKey="value"
                     nameKey="name"
                     cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={5}
+                    cy="45%"
+                    innerRadius={55}
+                    outerRadius={90}
+                    paddingAngle={3}
                     onClick={handleSymptomPieClick}
-                    className="cursor-pointer transition-all"
+                    className="cursor-pointer"
+                    isAnimationActive={false}
                   >
                     {chartDataSintomas.map((entry, i) => (
                       <Cell
-                        key={entry.name}
+                        key={`cell-${entry.name}-${i}`}
                         fill={filterSymptom === 'Todos' || filterSymptom === entry.name ? COLORS[i % COLORS.length] : '#e5e7eb'}
-                        className="hover:opacity-80 transition-opacity"
-                        stroke={filterSymptom === entry.name ? '#312e81' : 'transparent'}
-                        strokeWidth={filterSymptom === entry.name ? 2 : 0}
+                        stroke={filterSymptom === entry.name ? '#312e81' : '#fff'}
+                        strokeWidth={filterSymptom === entry.name ? 2 : 1}
                       />
                     ))}
                   </Pie>
                   <RechartsTooltip
                     formatter={(value, _name, props) => [
                       `${value} mascota${value !== 1 ? 's' : ''}`,
-                      props.payload.name,
+                      props?.payload?.name || '',
                     ]}
                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                   />
-                  <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
+                  <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{ paddingTop: '8px' }} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
-          ) : <div className="h-64 flex items-center justify-center text-gray-400">Sin datos</div>}
+          ) : (
+            <div className="h-64 flex flex-col items-center justify-center text-gray-400 gap-2 text-center px-4">
+              <span className="font-medium">Sin datos para graficar</span>
+              <span className="text-xs text-gray-400">
+                {recentReportsFiltered.length === 0
+                  ? 'No hay reportes en las últimas 48 horas.'
+                  : 'Los reportes recientes no tienen eventos para mostrar.'}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -428,8 +455,8 @@ export default function AuditoriaPanel() {
             </button>
           </div>
           {chartDataAnimalsBySymptom.length > 0 ? (
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="w-full" style={{ height: 288, minHeight: 288 }}>
+              <ResponsiveContainer width="100%" height={288} minHeight={288}>
                 <BarChart data={chartDataAnimalsBySymptom} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
                   <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#6b7280' }} axisLine={false} tickLine={false} />
@@ -441,6 +468,7 @@ export default function AuditoriaPanel() {
                   <Bar
                     dataKey="Reportes"
                     radius={[4, 4, 0, 0]}
+                    isAnimationActive={false}
                     onClick={(data) => {
                       if (!data?.name) return;
                       setFilterAnimal(filterAnimal === data.name ? 'Todas' : data.name);
@@ -451,7 +479,6 @@ export default function AuditoriaPanel() {
                       <Cell
                         key={entry.name}
                         fill={filterAnimal === entry.name ? '#4f46e5' : '#818cf8'}
-                        className="hover:opacity-80 transition-opacity"
                       />
                     ))}
                   </Bar>

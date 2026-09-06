@@ -65,7 +65,10 @@ function matchColorRules(value, colorRules) {
   let partialYellow = [];
 
   (colorRules || []).forEach((r) => {
-    const keys = (r.keywords || '').split(',').map((k) => k.trim().toLowerCase()).filter(Boolean);
+    const raw = r.keywords_list || r.keywords || '';
+    const keys = Array.isArray(raw)
+      ? raw.map((k) => String(k).trim().toLowerCase()).filter(Boolean)
+      : String(raw).split(',').map((k) => k.trim().toLowerCase()).filter(Boolean);
     if (r.color === 'red') {
       if (r.match_type === 'exact') exactRed.push(...keys);
       else partialRed.push(...keys);
