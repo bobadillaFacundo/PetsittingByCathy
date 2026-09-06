@@ -137,10 +137,18 @@ def health_schema():
             name for name in Animal.__table__.columns.keys() if name not in animal_cols
         )
     care_table = "animal_care_profiles" in inspector.get_table_names()
+    care_missing = []
+    if care_table:
+        care_cols = {c["name"] for c in inspector.get_columns("animal_care_profiles")}
+        from src.models.models import AnimalCareProfile
+        care_missing = sorted(
+            name for name in AnimalCareProfile.__table__.columns.keys() if name not in care_cols
+        )
     return {
         "reservations_species_id": "species_id" in cols,
         "reservations_animal_id_nullable": cols.get("animal_id", {}).get("nullable", False),
         "animals_missing_columns": missing_animals,
         "animal_care_profiles": care_table,
-        "api_version": "reservations-v4",
+        "care_missing_columns": care_missing,
+        "api_version": "care-intake-v5",
     }

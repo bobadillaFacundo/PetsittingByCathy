@@ -1004,7 +1004,7 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
                     <div>
                       <p className="block text-sm font-bold text-amber-900 mb-1">Formulario de ingreso</p>
                       <p className="text-xs text-amber-800 mb-2">
-                        Datos que mandan los clientes. Los chicos los ven en la ficha.
+                        Copiá acá lo que mandan los clientes en el Drive. No se importa solo: hay que tildar/completar y guardar. Después los chicos lo ven en el tablero y en la ficha.
                       </p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {CARE_OPTIONS.map((t) => (

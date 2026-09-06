@@ -163,14 +163,63 @@ def _migrate_weight_records(db, inspector) -> None:
 
 
 def _migrate_animal_care_profile(inspector) -> None:
-    """Tabla aparte animal_care_profiles (CREATE TABLE vía metadata; acá aseguramos filas)."""
+    """Tabla aparte animal_care_profiles: columnas + una fila por animal."""
     if not table_exists(inspector, "animals"):
         return
-    # create_all ya puede haber creado la tabla; si no, se crea en el próximo create_all
     if not table_exists(inspector, "animal_care_profiles"):
         print("animal_care_profiles aún no existe; se crea con metadata.create_all")
         return
-    # Una fila por animal (booleanos en FALSE: create_all no pone DEFAULT en Postgres)
+
+    # create_all no agrega columnas nuevas a tablas ya existentes
+    care_columns = {
+        "is_escapist": "BOOLEAN DEFAULT FALSE NOT NULL",
+        "has_attachment_issues": "BOOLEAN DEFAULT FALSE NOT NULL",
+        "dog_sociability": "VARCHAR",
+        "needs_medication": "BOOLEAN DEFAULT FALSE NOT NULL",
+        "needs_diapers": "BOOLEAN DEFAULT FALSE NOT NULL",
+        "needs_isolation": "BOOLEAN DEFAULT FALSE NOT NULL",
+        "needs_muzzle": "BOOLEAN DEFAULT FALSE NOT NULL",
+        "has_special_diet": "BOOLEAN DEFAULT FALSE NOT NULL",
+        "care_notes": "TEXT",
+        "housing_type": "VARCHAR",
+        "aversive_to_people": "BOOLEAN DEFAULT FALSE NOT NULL",
+        "aversive_to_dogs": "BOOLEAN DEFAULT FALSE NOT NULL",
+        "has_bitten_people": "BOOLEAN DEFAULT FALSE NOT NULL",
+        "has_bitten_dogs": "BOOLEAN DEFAULT FALSE NOT NULL",
+        "bites_often": "BOOLEAN DEFAULT FALSE NOT NULL",
+        "lives_with_dogs": "BOOLEAN DEFAULT FALSE NOT NULL",
+        "lives_with_dogs_count": "INTEGER",
+        "plays_with_dogs": "BOOLEAN DEFAULT FALSE NOT NULL",
+        "familiar_with_animals": "VARCHAR",
+        "fears": "TEXT",
+        "destroys_things": "BOOLEAN DEFAULT FALSE NOT NULL",
+        "destroys_what": "VARCHAR",
+        "likes_water": "BOOLEAN DEFAULT FALSE NOT NULL",
+        "likes_pool": "BOOLEAN DEFAULT FALSE NOT NULL",
+        "food_brand": "VARCHAR",
+        "food_amount": "VARCHAR",
+        "food_times_per_day": "VARCHAR",
+        "special_diet_details": "TEXT",
+        "intake_vaccines": "TEXT",
+        "intake_dewormed_internal": "BOOLEAN DEFAULT FALSE NOT NULL",
+        "intake_dewormed_external": "BOOLEAN DEFAULT FALSE NOT NULL",
+        "intake_medication": "TEXT",
+        "allergies": "TEXT",
+        "health_issues": "TEXT",
+        "walks_outside_neighborhood": "BOOLEAN DEFAULT FALSE NOT NULL",
+        "contact_name": "VARCHAR",
+        "contact_phone": "VARCHAR",
+        "contact_email": "VARCHAR",
+        "contact_notes": "TEXT",
+    }
+    for col_name, col_type in care_columns.items():
+        inspector = inspect(engine)
+        if not column_exists(inspector, "animal_care_profiles", col_name):
+            print(f"Agregando animal_care_profiles.{col_name}...")
+            run_ddl(
+                f"ALTER TABLE animal_care_profiles ADD COLUMN IF NOT EXISTS {col_name} {col_type}"
+            )
+
     bool_cols = (
         "is_escapist", "has_attachment_issues", "needs_medication", "needs_diapers",
         "needs_isolation", "needs_muzzle", "has_special_diet", "aversive_to_people",
@@ -188,7 +237,7 @@ def _migrate_animal_care_profile(inspector) -> None:
         "  SELECT 1 FROM animal_care_profiles p WHERE p.animal_id = a.id"
         ")"
     )
-    print("  OK animal_care_profiles (filas por animal)")
+    print("  OK animal_care_profiles (columnas + filas por animal)")
 
 
 def _migrate_reservation_recurrence(inspector) -> None:
