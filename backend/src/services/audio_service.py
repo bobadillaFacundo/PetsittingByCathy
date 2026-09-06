@@ -112,9 +112,29 @@ class AudioService:
 
 
 class NLPService:
+    _ES_RULE = (
+        "IDIOMA OBLIGATORIO: respondé SIEMPRE en español rioplatense (Argentina). "
+        "Prohibido inglés u otros idiomas en el texto visible para el usuario "
+        "(clima, alertas, resúmenes, mensajes)."
+    )
+
+    @staticmethod
+    def _with_spanish(messages: list) -> list:
+        """Garantiza instrucción de idioma al inicio, sin duplicar si ya está."""
+        if messages and messages[0].get("role") == "system":
+            content = messages[0].get("content") or ""
+            if "IDIOMA OBLIGATORIO" not in content:
+                messages = [
+                    {**messages[0], "content": f"{NLPService._ES_RULE}\n\n{content}"},
+                    *messages[1:],
+                ]
+            return messages
+        return [{"role": "system", "content": NLPService._ES_RULE}, *messages]
+
     @staticmethod
     def _call_llm(messages: list, json_format: bool = False, temperature: float = None) -> str:
         """Llama al LLM del servidor (vLLM) o Groq."""
+        messages = NLPService._with_spanish(messages)
         vllm_base = os.getenv("VLLM_BASE_URL", "").strip()
         is_groq = (USE_GROQ or not vllm_base) and bool(GROQ_API_KEY)
 
@@ -184,6 +204,7 @@ Debes incluir (si hay información disponible):
 - Conclusión veterinaria.
 
 Usa texto plano con sangrías y saltos de línea claros. NO uses símbolos de Markdown (como asteriscos, negritas o numerales).
+Redactá TODO en español.
 
 Reportes del período:
 {context_text}
@@ -281,7 +302,7 @@ Eres un asistente veterinario experto. Tienes acceso al siguiente historial clí
 {context_str}
 
 Responde a la pregunta del usuario basándote ÚNICAMENTE en el historial anterior.
-Sé breve, amable y directo. Si no sabes la respuesta o no está en el historial, dilo amablemente.
+Sé breve, amable y directo. Respondé siempre en español. Si no sabes la respuesta o no está en el historial, dilo amablemente.
 """
         try:
             messages = [
@@ -298,6 +319,7 @@ Sé breve, amable y directo. Si no sabes la respuesta o no está en el historial
         system_prompt = f"""
 Sos un asistente que resume de forma NEUTRA y FACTUAL el historial de "{animal_name}" en una guardería canina.
 No sos un diagnóstico veterinario ni una alerta dramática.
+Escribí TODO el resumen en español (Argentina). Nunca en inglés.
 
 TONO (obligatorio):
 - Neutro, sobrio, sin dramatizar.
@@ -306,7 +328,7 @@ TONO (obligatorio):
 - Si algo es anómalo, describilo con calma (ej: "se registró caca blanda") sin magnificarlo.
 
 CONTENIDO:
-1. Un solo párrafo corto (3 a 5 oraciones).
+1. Un solo párrafo corto (3 a 5 oraciones) en español.
 2. Decí solo lo que aparece en el historial: rutina (comida/agua/pis/caca) y hallazgos explícitos.
 3. Compará reportes solo si hay datos suficientes; si no, decí que hay poca información para comparar.
 4. No inventes causas, diagnósticos, tratamientos ni pronósticos.
@@ -321,7 +343,7 @@ REGLAS:
         try:
             messages = [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Historial de {animal_name}:\n{history_context}\n\nRedactá un resumen neutro y breve."}
+                {"role": "user", "content": f"Historial de {animal_name}:\n{history_context}\n\nRedactá un resumen neutro y breve EN ESPAÑOL."}
             ]
             return NLPService._call_llm(messages, json_format=False, temperature=0.1)
         except Exception as e:
@@ -339,15 +361,17 @@ REGLAS:
 Lee los siguientes reportes de las últimas 24 horas y genera el "Clima de Hoy".
 
 Reglas estrictas:
-1. Redacta un párrafo general resumiendo el estado de la guardería (ej: "Día tranquilo, la mayoría comió bien, pero hay algunas alertas en observación"). Usa emojis de clima (☀️, ⛅, ⛈️).
-2. Extrae alertas reales SOLO si hay síntomas que requieran atención (no exageres, si un animal no hizo caca un día no es crítico, pero si vomitó sangre sí).
-3. Responde ÚNICAMENTE en formato JSON válido, sin texto adicional, con la siguiente estructura:
+1. TODO el contenido (clima y alertas) debe estar EN ESPAÑOL de Argentina. Prohibido inglés.
+2. Redactá un párrafo general resumiendo el estado de la guardería (ej: "Día tranquilo, la mayoría comió bien, pero hay algunas alertas en observación"). Usá emojis de clima (☀️, ⛅, ⛈️).
+3. Extraé alertas reales SOLO si hay síntomas que requieran atención (no exageres: si un animal no hizo caca un día no es crítico; si vomitó sangre sí).
+4. Cada alerta.message debe ser una frase corta en español, clara para el cuidador.
+5. Respondé ÚNICAMENTE en formato JSON válido, sin texto adicional, con esta estructura:
 {{
-  "weather": "Párrafo del clima aquí...",
+  "weather": "Párrafo del clima aquí en español...",
   "alerts": [
     {{
       "animal_name": "Nombre",
-      "message": "Mensaje corto de la alerta médica o de comportamiento",
+      "message": "Mensaje corto de la alerta en español",
       "severity": "medium" o "high"
     }}
   ]
@@ -357,16 +381,39 @@ Reportes de las últimas 24 horas:
 {reports_text}
 """
         messages = [
-            {"role": "system", "content": "Eres un asistente JSON de uso veterinario que no alucina."},
+            {"role": "system", "content": "Sos un asistente JSON veterinario. No alucinás. Todo el texto visible va en español."},
             {"role": "user", "content": prompt}
         ]
 
         try:
             ai_text = NLPService._call_llm(messages, json_format=True, temperature=0.0)
-            return json.loads(ai_text)
+            data = json.loads(ai_text)
+            return NLPService._normalize_weather_spanish(data)
         except Exception as e:
             print(f"Error generando clima: {e}")
             return {
                 "weather": "No se pudo generar el clima por un error de conexión con la IA.",
                 "alerts": []
             }
+
+    @staticmethod
+    def _normalize_weather_spanish(data: dict) -> dict:
+        """Asegura estructura usable; mensajes vacíos se descartan."""
+        weather = (data or {}).get("weather") or "Sin resumen de clima."
+        alerts = []
+        for item in (data or {}).get("alerts") or []:
+            if not isinstance(item, dict):
+                continue
+            name = (item.get("animal_name") or "").strip()
+            message = (item.get("message") or "").strip()
+            if not name or not message:
+                continue
+            sev = (item.get("severity") or "medium").lower()
+            if sev not in ("medium", "high"):
+                sev = "medium"
+            alerts.append({
+                "animal_name": name,
+                "message": message,
+                "severity": sev,
+            })
+        return {"weather": weather, "alerts": alerts}
