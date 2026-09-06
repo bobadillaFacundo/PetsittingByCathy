@@ -25,8 +25,16 @@ GROQ_STT_URL   = "https://api.groq.com/openai/v1/audio/transcriptions"
 USE_CUSTOM_WHISPER = os.getenv("USE_CUSTOM_WHISPER", "0").strip().lower() in ("1", "true", "yes")
 CUSTOM_WHISPER_URL = os.getenv("CUSTOM_WHISPER_URL", "http://100.82.178.56:9000/v1/audio/transcriptions")
 
-# Modelo de chat/NLP de Groq
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+from src.services.groq_models import (
+    DEFAULT_NLP_MODEL,
+    extract_groq_text,
+    is_groq_model_unavailable,
+    nlp_models_to_try,
+    resolve_groq_model,
+)
+
+# Modelo de chat/NLP de Groq (llama-3.1-8b-instant ya no está en Groq)
+GROQ_MODEL = resolve_groq_model(os.getenv("GROQ_MODEL"), DEFAULT_NLP_MODEL)
 GROQ_URL   = "https://api.groq.com/openai/v1/chat/completions"
 
 # Servidor vLLM local (Tailscale). Override con env vars si hace falta.
@@ -130,9 +138,27 @@ class NLPService:
 
         url = GROQ_URL if is_groq else VLLM_URL
 
-        response = requests.post(url, headers=headers, json=payload, timeout=90)
-        response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"]
+        if not is_groq:
+            response = requests.post(url, headers=headers, json=payload, timeout=90)
+            response.raise_for_status()
+            return extract_groq_text(response.json())
+
+        last_error = None
+        for model_name in nlp_models_to_try(GROQ_MODEL):
+            payload["model"] = model_name
+            response = requests.post(url, headers=headers, json=payload, timeout=90)
+            if response.status_code == 200:
+                content = extract_groq_text(response.json())
+                if content:
+                    return content
+                last_error = f"Groq {model_name} devolvió contenido vacío"
+                continue
+            if is_groq_model_unavailable(response.status_code, response.text):
+                print(f"[NLP] Groq modelo no disponible ({model_name}): {response.text[:180]}")
+                last_error = response.text
+                continue
+            response.raise_for_status()
+        raise RuntimeError(last_error or "Groq no respondió")
 
     @staticmethod
     def generate_clinical_history(animal_name: str, reports_data: list, lab_results_data: list = None) -> str:

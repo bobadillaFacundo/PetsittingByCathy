@@ -39,11 +39,11 @@ services:
       - key: USE_GROQ
         value: "1"            # en producción siempre Groq (no hay vLLM local)
       - key: GROQ_MODEL
-        value: llama-3.1-8b-instant
+        value: openai/gpt-oss-20b
       - key: GROQ_VISION_MODEL
         value: qwen/qwen3.6-27b
       - key: GROQ_VISION_MODEL_FALLBACK
-        value: llama-3.2-11b-vision-preview
+        value: qwen/qwen3.8-27b
       - key: VISION_SKIP_LOCAL_FALLBACKS
         value: "1"
       - key: GROQ_VISION_TIMEOUT

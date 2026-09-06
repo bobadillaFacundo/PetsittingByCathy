@@ -61,7 +61,7 @@ Configuración en `backend/render.yaml`:
 | `GROQ_API_KEY` | STT + NLP + visión |
 | `USE_GROQ` | `1` en producción |
 | `GROQ_STT_MODEL` | `whisper-large-v3-turbo` |
-| `GROQ_MODEL` | `llama-3.1-8b-instant` |
+| `GROQ_MODEL` | `openai/gpt-oss-20b` |
 | `GROQ_VISION_MODEL` | `qwen/qwen3.6-27b` |
 | `VISION_SKIP_LOCAL_FALLBACKS` | `1` |
 | `TZ` | `America/Argentina/Buenos_Aires` |

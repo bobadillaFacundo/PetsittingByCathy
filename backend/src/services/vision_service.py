@@ -29,10 +29,22 @@ _VLLM_BASE = os.getenv("VLLM_BASE_URL", "").rstrip("/")
 VLLM_MODEL = os.getenv("VLLM_MODEL", "Qwen/Qwen2.5-7B-Instruct-AWQ")
 VLLM_URL = f"{_VLLM_BASE}/chat/completions"
 
+from src.services.groq_models import (
+    DEFAULT_NLP_MODEL,
+    DEFAULT_VISION_FALLBACK,
+    DEFAULT_VISION_MODEL,
+    extract_groq_text,
+    is_groq_model_unavailable,
+    resolve_groq_model,
+    vision_models_to_try,
+)
+
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
-GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "qwen/qwen3.6-27b")
-GROQ_VISION_MODEL_FALLBACK = os.getenv("GROQ_VISION_MODEL_FALLBACK", "llama-3.2-11b-vision-preview").strip()
+GROQ_MODEL = resolve_groq_model(os.getenv("GROQ_MODEL"), DEFAULT_NLP_MODEL)
+GROQ_VISION_MODEL = resolve_groq_model(os.getenv("GROQ_VISION_MODEL"), DEFAULT_VISION_MODEL)
+GROQ_VISION_MODEL_FALLBACK = resolve_groq_model(
+    os.getenv("GROQ_VISION_MODEL_FALLBACK"), DEFAULT_VISION_FALLBACK
+).strip()
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "90"))
@@ -685,7 +697,14 @@ def _call_groq(
                 raise GroqUnavailableError(str(e)) from e
 
             if resp.status_code == 200:
-                return resp.json()["choices"][0]["message"]["content"]
+                content = extract_groq_text(resp.json())
+                if content:
+                    return content
+                last_error = f"Groq {model} devolvió contenido vacío"
+                break
+            if is_groq_model_unavailable(resp.status_code, resp.text):
+                last_error = _groq_error_message(resp.status_code, resp.text)
+                raise GroqUnavailableError(last_error)
 
             if resp.status_code == 429:
                 last_error = _groq_error_message(429, resp.text)
@@ -720,7 +739,7 @@ def _call_vllm_json(messages: list) -> dict:
     }
     resp = requests.post(VLLM_URL, headers=headers, json=payload, timeout=90)
     resp.raise_for_status()
-    content = resp.json()["choices"][0]["message"]["content"]
+    content = extract_groq_text(resp.json())
     return _parse_json_from_text(content)
 
 
@@ -761,13 +780,9 @@ def extract_fields_groq_vision(
         },
     ]
     content = ""
-    models_to_try = [GROQ_VISION_MODEL]
-    if (
-        GROQ_VISION_MODEL_FALLBACK
-        and GROQ_VISION_MODEL_FALLBACK != GROQ_VISION_MODEL
-        and not VISION_SKIP_LOCAL_FALLBACKS
-    ):
-        models_to_try.append(GROQ_VISION_MODEL_FALLBACK)
+    models_to_try = vision_models_to_try(GROQ_VISION_MODEL, GROQ_VISION_MODEL_FALLBACK)
+    if VISION_SKIP_LOCAL_FALLBACKS:
+        models_to_try = models_to_try[:1]
 
     last_error: Optional[Exception] = None
     for model_name in models_to_try:
@@ -1310,13 +1325,9 @@ def extract_fields_groq_vision_deworming(
         },
     ]
     content = ""
-    models_to_try = [GROQ_VISION_MODEL]
-    if (
-        GROQ_VISION_MODEL_FALLBACK
-        and GROQ_VISION_MODEL_FALLBACK != GROQ_VISION_MODEL
-        and not VISION_SKIP_LOCAL_FALLBACKS
-    ):
-        models_to_try.append(GROQ_VISION_MODEL_FALLBACK)
+    models_to_try = vision_models_to_try(GROQ_VISION_MODEL, GROQ_VISION_MODEL_FALLBACK)
+    if VISION_SKIP_LOCAL_FALLBACKS:
+        models_to_try = models_to_try[:1]
 
     last_error: Optional[Exception] = None
     for model_name in models_to_try:
