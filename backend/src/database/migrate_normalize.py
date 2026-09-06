@@ -163,61 +163,32 @@ def _migrate_weight_records(db, inspector) -> None:
 
 
 def _migrate_animal_care_profile(inspector) -> None:
-    if table_exists(inspector, "animal_care_profiles"):
-        print("  OK animal_care_profiles (tabla nueva)")
-        return
+    """Tabla aparte animal_care_profiles (CREATE TABLE vía metadata; acá aseguramos filas)."""
     if not table_exists(inspector, "animals"):
         return
-    columns = {
-        "is_escapist": "BOOLEAN DEFAULT FALSE",
-        "has_attachment_issues": "BOOLEAN DEFAULT FALSE",
-        "dog_sociability": "VARCHAR",
-        "needs_medication": "BOOLEAN DEFAULT FALSE",
-        "needs_diapers": "BOOLEAN DEFAULT FALSE",
-        "needs_isolation": "BOOLEAN DEFAULT FALSE",
-        "needs_muzzle": "BOOLEAN DEFAULT FALSE",
-        "has_special_diet": "BOOLEAN DEFAULT FALSE",
-        "care_notes": "TEXT",
-        "housing_type": "VARCHAR",
-        "aversive_to_people": "BOOLEAN DEFAULT FALSE",
-        "aversive_to_dogs": "BOOLEAN DEFAULT FALSE",
-        "has_bitten_people": "BOOLEAN DEFAULT FALSE",
-        "has_bitten_dogs": "BOOLEAN DEFAULT FALSE",
-        "bites_often": "BOOLEAN DEFAULT FALSE",
-        "lives_with_dogs": "BOOLEAN DEFAULT FALSE",
-        "lives_with_dogs_count": "INTEGER",
-        "plays_with_dogs": "BOOLEAN DEFAULT FALSE",
-        "familiar_with_animals": "VARCHAR",
-        "fears": "TEXT",
-        "destroys_things": "BOOLEAN DEFAULT FALSE",
-        "destroys_what": "VARCHAR",
-        "likes_water": "BOOLEAN DEFAULT FALSE",
-        "likes_pool": "BOOLEAN DEFAULT FALSE",
-        "food_brand": "VARCHAR",
-        "food_amount": "VARCHAR",
-        "food_times_per_day": "VARCHAR",
-        "special_diet_details": "TEXT",
-        "intake_vaccines": "TEXT",
-        "intake_dewormed_internal": "BOOLEAN DEFAULT FALSE",
-        "intake_dewormed_external": "BOOLEAN DEFAULT FALSE",
-        "intake_medication": "TEXT",
-        "allergies": "TEXT",
-        "health_issues": "TEXT",
-        "walks_outside_neighborhood": "BOOLEAN DEFAULT FALSE",
-        "contact_name": "VARCHAR",
-        "contact_phone": "VARCHAR",
-        "contact_email": "VARCHAR",
-        "contact_notes": "TEXT",
-    }
-    added = False
-    for name, ddl_type in columns.items():
-        inspector = inspect(engine)
-        if not column_exists(inspector, "animals", name):
-            print(f"Agregando animals.{name}...")
-            run_ddl(f"ALTER TABLE animals ADD COLUMN IF NOT EXISTS {name} {ddl_type}")
-            added = True
-    if added:
-        print("  OK animals care profile")
+    # create_all ya puede haber creado la tabla; si no, se crea en el próximo create_all
+    if not table_exists(inspector, "animal_care_profiles"):
+        print("animal_care_profiles aún no existe; se crea con metadata.create_all")
+        return
+    # Una fila por animal (booleanos en FALSE: create_all no pone DEFAULT en Postgres)
+    bool_cols = (
+        "is_escapist", "has_attachment_issues", "needs_medication", "needs_diapers",
+        "needs_isolation", "needs_muzzle", "has_special_diet", "aversive_to_people",
+        "aversive_to_dogs", "has_bitten_people", "has_bitten_dogs", "bites_often",
+        "lives_with_dogs", "plays_with_dogs", "destroys_things", "likes_water",
+        "likes_pool", "intake_dewormed_internal", "intake_dewormed_external",
+        "walks_outside_neighborhood",
+    )
+    col_list = "animal_id, " + ", ".join(bool_cols)
+    false_list = ", ".join(["FALSE"] * len(bool_cols))
+    run_ddl(
+        f"INSERT INTO animal_care_profiles ({col_list}) "
+        f"SELECT a.id, {false_list} FROM animals a "
+        "WHERE NOT EXISTS ("
+        "  SELECT 1 FROM animal_care_profiles p WHERE p.animal_id = a.id"
+        ")"
+    )
+    print("  OK animal_care_profiles (filas por animal)")
 
 
 def _migrate_reservation_recurrence(inspector) -> None:

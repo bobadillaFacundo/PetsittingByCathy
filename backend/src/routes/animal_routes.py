@@ -9,6 +9,20 @@ import asyncio
 
 router = APIRouter(prefix="/animals", tags=["Animals"])
 
+
+def _load_animal(db: Session, animal_id: int) -> Animal | None:
+    return (
+        db.query(Animal)
+        .options(
+            joinedload(Animal.species),
+            joinedload(Animal.breed),
+            joinedload(Animal.care_profile),
+        )
+        .filter(Animal.id == animal_id)
+        .first()
+    )
+
+
 @router.post("", response_model=AnimalResponse)
 def create_animal(animal: AnimalCreate, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
     animal_data, care_data = split_care_profile(animal.model_dump())
@@ -20,8 +34,7 @@ def create_animal(animal: AnimalCreate, db: Session = Depends(get_db), current_a
         from src.services.weight_helpers import record_weight
         record_weight(db, db_animal.id, db_animal.weight_kg, source="ficha")
     db.commit()
-    db.refresh(db_animal)
-    return db_animal
+    return _load_animal(db, db_animal.id)
 
 @router.get("/species")
 def get_species(db: Session = Depends(get_db)):
@@ -96,10 +109,15 @@ def get_animal(animal_id: int, db: Session = Depends(get_db)):
 
 @router.put("/{animal_id}", response_model=AnimalResponse)
 def update_animal(animal_id: int, animal_update: AnimalUpdate, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
-    db_animal = db.query(Animal).filter(Animal.id == animal_id).first()
+    db_animal = (
+        db.query(Animal)
+        .options(joinedload(Animal.care_profile))
+        .filter(Animal.id == animal_id)
+        .first()
+    )
     if not db_animal:
         raise HTTPException(status_code=404, detail="Animal no encontrado")
-    
+
     update_data = animal_update.model_dump(exclude_unset=True)
     animal_data, care_data = split_care_profile(update_data)
     new_weight = animal_data.get("weight_kg", ...)
@@ -110,14 +128,14 @@ def update_animal(animal_id: int, animal_update: AnimalUpdate, db: Session = Dep
         if profile is None:
             profile = AnimalCareProfile(animal_id=db_animal.id)
             db.add(profile)
+            db.flush()
         for key, value in care_data.items():
             setattr(profile, key, value)
     if new_weight is not ... and new_weight is not None:
         from src.services.weight_helpers import record_weight
         record_weight(db, db_animal.id, new_weight, source="ficha")
     db.commit()
-    db.refresh(db_animal)
-    return db_animal
+    return _load_animal(db, animal_id)
 
 @router.delete("/{animal_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_animal(animal_id: int, db: Session = Depends(get_db), current_admin = Depends(get_current_user)):
