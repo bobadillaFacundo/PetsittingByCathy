@@ -6,7 +6,7 @@ Ejecutar una vez después de actualizar modelos:
 """
 
 from sqlalchemy import inspect, text
-from src.database.session import engine, SessionLocal, Base, get_ddl_engine
+from src.database.session import engine, SessionLocal, Base, iter_ddl_engines
 from src.models import models
 from src.services.tag_helpers import parse_csv_values, set_tag_variants, set_color_keywords, set_dictionary_synonyms
 
@@ -14,12 +14,39 @@ _ddl_engine = None
 
 
 def run_ddl(sql: str) -> None:
-    """DDL con autocommit en conexión directa (Supabase pooler no soporta ALTER)."""
+    """DDL en conexión de sesión/directa. Si una URL falla, prueba la siguiente."""
     global _ddl_engine
-    if _ddl_engine is None:
-        _ddl_engine = get_ddl_engine()
-    with _ddl_engine.connect() as conn:
-        conn.execute(text(sql))
+    errors: list[str] = []
+    engines = []
+    if _ddl_engine is not None:
+        engines.append(_ddl_engine)
+    try:
+        engines.extend(iter_ddl_engines())
+    except Exception as exc:
+        errors.append(str(exc))
+
+    seen = set()
+    for candidate in engines:
+        ident = id(candidate)
+        if ident in seen:
+            continue
+        seen.add(ident)
+        try:
+            with candidate.connect() as conn:
+                conn.execute(text(sql))
+            _ddl_engine = candidate
+            return
+        except Exception as exc:
+            errors.append(str(exc))
+            print(f"[DDL] falló {sql[:90]}: {exc}")
+
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(sql))
+        return
+    except Exception as exc:
+        errors.append(str(exc))
+    raise RuntimeError("DDL falló en todas las URLs: " + " | ".join(errors[-3:]))
 
 
 def column_exists(inspector, table: str, column: str) -> bool:

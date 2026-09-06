@@ -3,7 +3,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from dotenv import load_dotenv
-from src.database.db_urls import ddl_url_candidates, redact_db_url
+from src.database.db_urls import ddl_url_candidates, is_transaction_pooler, redact_db_url
 
 load_dotenv()
 
@@ -37,13 +37,13 @@ def _ddl_candidates() -> list[str]:
 
 
 def _make_ddl_engine(url: str):
-    is_pooler = "pooler" in url or ":6543" in url
+    use_pooler_flags = "pooler" in url or is_transaction_pooler(url)
     return create_engine(
         url,
         isolation_level="AUTOCOMMIT",
         pool_pre_ping=True,
-        connect_args={"options": "-c statement_timeout=120000"} if not is_pooler else {},
-        execution_options={"prepared": False} if is_pooler else {},
+        connect_args={"options": "-c statement_timeout=120000"} if not use_pooler_flags else {},
+        execution_options={"prepared": False} if use_pooler_flags else {},
     )
 
 
@@ -52,23 +52,34 @@ def _ddl_database_url() -> str:
     return _ddl_candidates()[0]
 
 
-def get_ddl_engine():
+def iter_ddl_engines():
+    """Motores DDL en orden, priorizando sesión/directo sobre el pooler 6543."""
+    urls = _ddl_candidates()
+    preferred = [u for u in urls if not is_transaction_pooler(u)]
+    fallback = [u for u in urls if is_transaction_pooler(u)]
     last_error = None
-    for url in _ddl_candidates():
+    any_ok = False
+    for url in preferred + fallback:
         engine_candidate = _make_ddl_engine(url)
         try:
             with engine_candidate.connect() as conn:
                 conn.execute(text("SELECT 1"))
             print(f"[DDL] conexión OK {redact_db_url(url)}")
-            return engine_candidate
+            any_ok = True
+            yield engine_candidate
         except Exception as exc:
             last_error = exc
-            print(f"[DDL] no autenticó {redact_db_url(url)}: {exc}")
+            print(f"[DDL] no conectó {redact_db_url(url)}: {exc}")
             engine_candidate.dispose()
-    raise RuntimeError(
-        "No se pudo abrir una conexión DDL a la base. "
-        "Revisá DATABASE_URL / DIRECT_DATABASE_URL en Render."
-    ) from last_error
+    if not any_ok:
+        raise RuntimeError(
+            "No se pudo abrir una conexión DDL a la base. "
+            "Revisá DATABASE_URL / DIRECT_DATABASE_URL en Render."
+        ) from last_error
+
+
+def get_ddl_engine():
+    return next(iter_ddl_engines())
 
 def get_db():
     db = SessionLocal()

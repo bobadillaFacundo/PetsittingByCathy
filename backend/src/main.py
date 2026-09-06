@@ -122,8 +122,17 @@ def health_schema():
     if "reservations" not in inspector.get_table_names():
         return {"reservations": "missing"}
     cols = {c["name"]: c for c in inspector.get_columns("reservations")}
+    animal_cols = set()
+    missing_animals = []
+    if "animals" in inspector.get_table_names():
+        animal_cols = {c["name"] for c in inspector.get_columns("animals")}
+        from src.models.models import Animal
+        missing_animals = sorted(
+            name for name in Animal.__table__.columns.keys() if name not in animal_cols
+        )
     return {
         "reservations_species_id": "species_id" in cols,
         "reservations_animal_id_nullable": cols.get("animal_id", {}).get("nullable", False),
+        "animals_missing_columns": missing_animals,
         "api_version": "reservations-v3",
     }

@@ -11,6 +11,17 @@ def redact_db_url(url: str) -> str:
     return f"{parsed.scheme}://***@{host}:{port}{parsed.path}"
 
 
+def ensure_sslmode(url: str) -> str:
+    if not url or "sslmode=" in url:
+        return url
+    sep = "&" if "?" in url else "?"
+    return f"{url}{sep}sslmode=require"
+
+
+def is_transaction_pooler(url: str) -> bool:
+    return ":6543" in (url or "") or "pooler.supabase.com:6543" in (url or "")
+
+
 def swap_pooler_port(url: str) -> str:
     return url.replace(":6543", ":5432") if ":6543" in url else url
 
@@ -27,19 +38,21 @@ def supabase_direct_from_pooler(url: str) -> str | None:
         return None
     password = quote(unquote(parsed.password or ""), safe="")
     path = parsed.path or "/postgres"
-    query = f"?{parsed.query}" if parsed.query else ""
-    return f"postgresql://postgres:{password}@db.{project}.supabase.co:5432{path}{query}"
+    query = parsed.query or "sslmode=require"
+    if "sslmode=" not in query:
+        query = f"{query}&sslmode=require" if query else "sslmode=require"
+    return f"postgresql://postgres:{password}@db.{project}.supabase.co:5432{path}?{query}"
 
 
 def ddl_url_candidates(database_url: str | None, direct_url: str | None = None) -> list[str]:
-    """Orden: DIRECT → host directo Supabase → mismo host :5432 → pooler original."""
+    """Orden: DIRECT → session pooler :5432 → db.PROJECT → transaction pooler."""
     ordered: list[str] = []
     for url in (
         direct_url,
-        supabase_direct_from_pooler(database_url or ""),
         swap_pooler_port(database_url or ""),
+        supabase_direct_from_pooler(database_url or ""),
         database_url,
     ):
         if url and url not in ordered:
-            ordered.append(url)
+            ordered.append(ensure_sslmode(url))
     return ordered

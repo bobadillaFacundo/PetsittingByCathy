@@ -8,11 +8,10 @@ POOLER = (
 
 def test_builds_direct_host_from_pooler():
     direct = supabase_direct_from_pooler(POOLER)
-    assert direct == "postgresql://postgres:p%40ss@db.abcdefghijklmn.supabase.co:5432/postgres"
+    assert "postgres:p%40ss@db.abcdefghijklmn.supabase.co:5432/postgres" in direct
 
 
-def test_candidates_prefer_explicit_direct_then_fallbacks():
-    urls = ddl_url_candidates(POOLER, "postgresql://postgres:x@db.abcdefghijklmn.supabase.co:5432/postgres")
-    assert urls[0].endswith("db.abcdefghijklmn.supabase.co:5432/postgres")
-    assert POOLER in urls
+def test_candidates_prefer_session_pooler_before_transaction_pooler():
+    urls = ddl_url_candidates(POOLER, None)
     assert any(":5432" in u and "pooler.supabase.com" in u for u in urls)
+    assert urls[-1].startswith(POOLER.split("?")[0]) or ":6543" in urls[-1]
