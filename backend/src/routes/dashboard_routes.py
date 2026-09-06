@@ -37,6 +37,16 @@ class DashboardResponse(BaseModel):
 
 @router.get("", response_model=DashboardResponse)
 def get_dashboard(db: Session = Depends(get_db)):
+    from fastapi import HTTPException
+    try:
+        return _build_dashboard(db)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"dashboard: {type(e).__name__}: {e}") from e
+
+
+def _build_dashboard(db: Session) -> DashboardResponse:
     # 1. Animales Activos solamente (is_active=True)
     animals = (
         db.query(Animal)
@@ -56,7 +66,7 @@ def get_dashboard(db: Session = Depends(get_db)):
     # 3. Alertas de Vacunas y Desparasitaciones (próximos 15 días o vencidas)
     alerts_list = []
     from src.models.models import Vaccine, Deworming, HealthRecord, VaccineCatalog, VeterinaryProduct
-    from sqlalchemy.orm import joinedload
+    from sqlalchemy.orm import joinedload as jl
     
     threshold_date = today_ar() + timedelta(days=15)
     
@@ -107,7 +117,7 @@ def get_dashboard(db: Session = Depends(get_db)):
     
     if latest_dew_ids:
         expiring_dewormings = db.query(Deworming).options(
-            joinedload(Deworming.product)
+            jl(Deworming.product)
         ).filter(
             Deworming.id.in_(latest_dew_ids),
             Deworming.next_due_date <= threshold_date,

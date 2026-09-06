@@ -55,7 +55,7 @@ async def response_validation_handler(request: Request, exc: ResponseValidationE
     traceback.print_exc()
     return JSONResponse(
         status_code=500,
-        content={"detail": "Error al serializar la respuesta del servidor"},
+        content={"detail": f"Error al serializar: {exc.errors()[:3]}"},
         headers=_cors_headers(request),
     )
 
@@ -136,9 +136,11 @@ def health_schema():
         missing_animals = sorted(
             name for name in Animal.__table__.columns.keys() if name not in animal_cols
         )
+    care_table = "animal_care_profiles" in inspector.get_table_names()
     return {
         "reservations_species_id": "species_id" in cols,
         "reservations_animal_id_nullable": cols.get("animal_id", {}).get("nullable", False),
         "animals_missing_columns": missing_animals,
-        "api_version": "reservations-v3",
+        "animal_care_profiles": care_table,
+        "api_version": "reservations-v4",
     }
