@@ -20,6 +20,8 @@ services:
       # ── Supabase (Base de datos relacional) ───────────────────────────────
       - key: DATABASE_URL
         sync: false
+      - key: DIRECT_DATABASE_URL
+        sync: false
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_ANON_KEY
