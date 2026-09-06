@@ -71,10 +71,9 @@ export default defineConfig({
       workbox: {
         skipWaiting: true,
         clientsClaim: true,
-        navigateFallback: '/index.html',
-        // /api y /uploads no pasan por el SW (evita no-response de Workbox si falla la red)
-        navigateFallbackDenylist: [/^\/api/, /^\/uploads/],
-        // index.html siempre desde red (evita shell viejo con hashes de JS obsoletos)
+        // Sin navigateFallback a /index.html: no está en precache (glob sin html)
+        // y Workbox tira non-precached-url. El rewrite de Vercel alcanza para la SPA.
+        navigateFallbackDenylist: [/^\/api/, /^\/uploads/, /^\/health/],
         globPatterns: ['**/*.{js,css,ico,png,svg,woff2}'],
       },
     }),

@@ -73,9 +73,15 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
             headers=headers,
         )
     traceback.print_exc()
+    detail = "Error interno del servidor"
+    # Errores de SQL / schema: devolver pista corta para diagnosticar en prod
+    name = type(exc).__name__
+    if name in ("ProgrammingError", "OperationalError", "ResponseValidationError"):
+        msg = str(getattr(exc, "orig", None) or exc)
+        detail = f"{name}: {msg[:240]}"
     return JSONResponse(
         status_code=500,
-        content={"detail": "Error interno del servidor"},
+        content={"detail": detail},
         headers=headers,
     )
 

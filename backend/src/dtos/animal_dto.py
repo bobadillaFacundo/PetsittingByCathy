@@ -24,7 +24,11 @@ def split_care_profile(data: dict) -> tuple[dict, dict]:
 
 def merge_care_profile(animal: Any) -> dict:
     payload = {col.name: getattr(animal, col.name) for col in animal.__table__.columns}
-    profile = getattr(animal, "care_profile", None)
+    profile = None
+    try:
+        profile = getattr(animal, "care_profile", None)
+    except Exception:
+        profile = None
     for name in CARE_PROFILE_FIELDS:
         payload[name] = getattr(profile, name, None) if profile is not None else None
     species = getattr(animal, "species", None)

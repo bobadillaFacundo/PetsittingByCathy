@@ -40,7 +40,11 @@ def get_dashboard(db: Session = Depends(get_db)):
     # 1. Animales Activos solamente (is_active=True)
     animals = (
         db.query(Animal)
-        .options(joinedload(Animal.species), joinedload(Animal.breed))
+        .options(
+            joinedload(Animal.species),
+            joinedload(Animal.breed),
+            joinedload(Animal.care_profile),
+        )
         .filter(Animal.is_active == True)
         .all()
     )
@@ -140,10 +144,10 @@ def get_dashboard(db: Session = Depends(get_db)):
                 created_at=ca.created_at,
             ))
 
-    # 5. Retornar
+    # 5. Retornar (validar animales acá, con la sesión abierta y care_profile cargado)
     return DashboardResponse(
-        normal_animals=normal_animals,
-        observation_animals=observation_animals,
+        normal_animals=[AnimalResponse.model_validate(a) for a in normal_animals],
+        observation_animals=[AnimalResponse.model_validate(a) for a in observation_animals],
         alerts=alerts_list,
         critical_alerts=critical_alerts_list,
     )
