@@ -1,6 +1,37 @@
 from pydantic import BaseModel, model_validator, field_validator
-from typing import Optional, List
+from typing import Optional, List, Any
 from datetime import date, datetime
+
+CARE_PROFILE_FIELDS = (
+    "is_escapist", "has_attachment_issues", "dog_sociability", "needs_medication",
+    "needs_diapers", "needs_isolation", "needs_muzzle", "has_special_diet",
+    "care_notes", "housing_type", "aversive_to_people", "aversive_to_dogs",
+    "has_bitten_people", "has_bitten_dogs", "bites_often", "lives_with_dogs",
+    "lives_with_dogs_count", "plays_with_dogs", "familiar_with_animals", "fears",
+    "destroys_things", "destroys_what", "likes_water", "likes_pool", "food_brand",
+    "food_amount", "food_times_per_day", "special_diet_details", "intake_vaccines",
+    "intake_dewormed_internal", "intake_dewormed_external", "intake_medication",
+    "allergies", "health_issues", "walks_outside_neighborhood", "contact_name",
+    "contact_phone", "contact_email", "contact_notes",
+)
+
+
+def split_care_profile(data: dict) -> tuple[dict, dict]:
+    animal = {k: v for k, v in data.items() if k not in CARE_PROFILE_FIELDS}
+    care = {k: v for k, v in data.items() if k in CARE_PROFILE_FIELDS}
+    return animal, care
+
+
+def merge_care_profile(animal: Any) -> dict:
+    payload = {col.name: getattr(animal, col.name) for col in animal.__table__.columns}
+    profile = getattr(animal, "care_profile", None)
+    for name in CARE_PROFILE_FIELDS:
+        payload[name] = getattr(profile, name, None) if profile is not None else None
+    species = getattr(animal, "species", None)
+    breed = getattr(animal, "breed", None)
+    payload["species_name"] = species.name if species is not None and getattr(species, "name", None) else None
+    payload["breed_name"] = breed.name if breed is not None and getattr(breed, "name", None) else None
+    return payload
 
 
 class AnimalBase(BaseModel):
@@ -182,16 +213,9 @@ class AnimalResponse(AnimalBase):
     @model_validator(mode="wrap")
     @classmethod
     def attach_related_names(cls, data, handler):
-        obj = handler(data)
-        if hasattr(data, "species"):
-            species = getattr(data, "species", None)
-            if species is not None and getattr(species, "name", None):
-                obj.species_name = species.name
-        if hasattr(data, "breed"):
-            breed = getattr(data, "breed", None)
-            if breed is not None and getattr(breed, "name", None):
-                obj.breed_name = breed.name
-        return obj
+        if hasattr(data, "__table__") and hasattr(data, "id"):
+            data = merge_care_profile(data)
+        return handler(data)
 
     class Config:
         from_attributes = True

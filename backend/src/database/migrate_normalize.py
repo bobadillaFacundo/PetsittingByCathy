@@ -163,6 +163,9 @@ def _migrate_weight_records(db, inspector) -> None:
 
 
 def _migrate_animal_care_profile(inspector) -> None:
+    if table_exists(inspector, "animal_care_profiles"):
+        print("  OK animal_care_profiles (tabla nueva)")
+        return
     if not table_exists(inspector, "animals"):
         return
     columns = {

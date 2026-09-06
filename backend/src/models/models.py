@@ -152,7 +152,26 @@ class Animal(Base):
     has_neurological = Column(Boolean, default=False, nullable=False)
     has_involuntary_movements = Column(Boolean, default=False, nullable=False)
 
-    # Datos de cuidado (formulario de ingreso / Drive)
+    species = relationship("Species", back_populates="animals")
+    breed = relationship("Breed", back_populates="animals")
+    veterinarian = relationship("Veterinarian", back_populates="animals")
+    reports = relationship("Report", back_populates="animal")
+    diagnoses = relationship("AnimalDiagnosis", back_populates="animal")
+    medications = relationship("AnimalMedication", back_populates="animal")
+    observations = relationship("AnimalObservation", back_populates="animal")
+    attachments = relationship("Attachment", back_populates="animal")
+    lab_results = relationship("LabResult", back_populates="animal", cascade="all, delete-orphan")
+    dewormings = relationship("Deworming", back_populates="animal", cascade="all, delete-orphan")
+    health_record = relationship("HealthRecord", uselist=False, back_populates="animal", cascade="all, delete-orphan")
+    reservations = relationship("Reservation", back_populates="animal", cascade="all, delete-orphan")
+    weight_records = relationship("WeightRecord", back_populates="animal", cascade="all, delete-orphan")
+    care_profile = relationship("AnimalCareProfile", uselist=False, back_populates="animal", cascade="all, delete-orphan")
+
+
+class AnimalCareProfile(Base):
+    """Ficha de ingreso. Tabla aparte para no depender de ALTER en animals."""
+    __tablename__ = "animal_care_profiles"
+    animal_id = Column(Integer, ForeignKey("animals.id"), primary_key=True)
     is_escapist = Column(Boolean, default=False, nullable=False)
     has_attachment_issues = Column(Boolean, default=False, nullable=False)
     dog_sociability = Column(String, nullable=True)
@@ -162,7 +181,6 @@ class Animal(Base):
     needs_muzzle = Column(Boolean, default=False, nullable=False)
     has_special_diet = Column(Boolean, default=False, nullable=False)
     care_notes = Column(Text, nullable=True)
-
     housing_type = Column(String, nullable=True)
     aversive_to_people = Column(Boolean, default=False, nullable=False)
     aversive_to_dogs = Column(Boolean, default=False, nullable=False)
@@ -194,19 +212,7 @@ class Animal(Base):
     contact_email = Column(String, nullable=True)
     contact_notes = Column(Text, nullable=True)
 
-    species = relationship("Species", back_populates="animals")
-    breed = relationship("Breed", back_populates="animals")
-    veterinarian = relationship("Veterinarian", back_populates="animals")
-    reports = relationship("Report", back_populates="animal")
-    diagnoses = relationship("AnimalDiagnosis", back_populates="animal")
-    medications = relationship("AnimalMedication", back_populates="animal")
-    observations = relationship("AnimalObservation", back_populates="animal")
-    attachments = relationship("Attachment", back_populates="animal")
-    lab_results = relationship("LabResult", back_populates="animal", cascade="all, delete-orphan")
-    dewormings = relationship("Deworming", back_populates="animal", cascade="all, delete-orphan")
-    health_record = relationship("HealthRecord", uselist=False, back_populates="animal", cascade="all, delete-orphan")
-    reservations = relationship("Reservation", back_populates="animal", cascade="all, delete-orphan")
-    weight_records = relationship("WeightRecord", back_populates="animal", cascade="all, delete-orphan")
+    animal = relationship("Animal", back_populates="care_profile")
 
 
 class WeightRecord(Base):
