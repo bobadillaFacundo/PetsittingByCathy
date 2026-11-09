@@ -21,3 +21,4 @@ pytest
 pytest-cov
 httpx
 supabase
+psycopg
