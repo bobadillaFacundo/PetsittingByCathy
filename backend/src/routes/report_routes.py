@@ -674,25 +674,30 @@ def _build_branded_pdf(
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
+    usable_w = pdf.epw  # ancho útil; evita error tras insertar imagen
 
     logo = _resolve_species_logo(species_id)
-    top_y = 12
+    top_y = 12.0
     if logo:
         try:
-            pdf.image(logo, x=(210 - 32) / 2, y=top_y, w=32)
-            top_y = 48
+            logo_w = 32.0
+            pdf.image(logo, x=(pdf.w - logo_w) / 2, y=top_y, w=logo_w)
+            top_y = 48.0
         except Exception as e:
             print(f"[PDF] No se pudo insertar logo {logo}: {e}")
-            top_y = 12
+            top_y = 12.0
 
-    pdf.set_y(top_y)
+    # image() deja el cursor a la derecha; hay que volver al margen izquierdo
+    pdf.set_xy(pdf.l_margin, top_y)
     pdf.set_font("Helvetica", "B", 16)
-    pdf.multi_cell(0, 9, text=_pdf_safe(title), align="C")
+    pdf.multi_cell(usable_w, 9, text=_pdf_safe(title), align="C")
+    pdf.set_x(pdf.l_margin)
     pdf.set_font("Helvetica", size=10)
-    pdf.multi_cell(0, 6, text=_pdf_safe(subtitle), align="C")
+    pdf.multi_cell(usable_w, 6, text=_pdf_safe(subtitle), align="C")
     pdf.ln(6)
+    pdf.set_x(pdf.l_margin)
     pdf.set_font("Helvetica", size=11)
-    pdf.multi_cell(0, 7, text=_pdf_safe(body))
+    pdf.multi_cell(usable_w, 7, text=_pdf_safe(body), align="L")
 
     fd, path = tempfile.mkstemp(suffix=".pdf")
     os.close(fd)
@@ -1027,51 +1032,84 @@ def generate_daycare_stay_report(
     }
 
 
+def _prepare_clinical_export_context(reports: list, *, max_chars_each: int = 280) -> list[str]:
+    """
+    Prepara líneas de reportes para export.
+    No descarta fechas: la IA las procesa de a poco (chunks) y luego consolida.
+    """
+    if not reports:
+        return ["No hay reportes en este período."]
+
+    lines = []
+    for r in reports:
+        dt = r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else "?"
+        transcript = (r.audio_transcript or "").strip() or "(sin texto)"
+        if len(transcript) > max_chars_each:
+            transcript = transcript[: max_chars_each - 3] + "..."
+        lines.append(f"[{dt}] {transcript}")
+    return lines
+
+
 @router.get("/export-pdf/{animal_id}")
 def export_pdf(
     animal_id: int,
     range: str = "1month",
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user=Depends(get_current_user),
 ):
-    from datetime import datetime, timedelta
-    
     animal = db.query(Animal).filter(Animal.id == animal_id).first()
     if not animal:
         raise HTTPException(status_code=404, detail="Animal no encontrado")
-        
+
     days = 30
-    if range == "3months": days = 90
-    if range == "6months": days = 180
-    if range == "9months": days = 270
-    if range == "1year": days = 365
-    
+    if range == "3months":
+        days = 90
+    elif range == "6months":
+        days = 180
+    elif range == "9months":
+        days = 270
+    elif range == "1year":
+        days = 365
+
     threshold_date = now_ar() - timedelta(days=days)
-    
-    reports = db.query(Report).filter(Report.animal_id == animal_id, Report.created_at >= threshold_date).order_by(Report.created_at.asc()).all()
-    
-    reports_data = []
-    for r in reports:
-        dt = r.created_at.strftime("%Y-%m-%d %H:%M")
-        reports_data.append(f"[{dt}] {r.audio_transcript}")
-        
-    if not reports_data:
-        reports_data.append("No hay reportes en este período.")
+
+    reports = (
+        db.query(Report)
+        .filter(Report.animal_id == animal_id, Report.created_at >= threshold_date)
+        .order_by(Report.created_at.asc())
+        .all()
+    )
+
+    reports_data = _prepare_clinical_export_context(
+        reports,
+        max_chars_each=220 if days >= 180 else 360,
+    )
+    # Lotes más chicos en rangos largos (1 año): resumir de a poco y consolidar
+    chunk_size = 15 if days >= 180 else 25
 
     from src.models.models import LabResult
-    from sqlalchemy.orm import joinedload
     import pypdf
 
-    labs = db.query(LabResult).options(joinedload(LabResult.laboratory)).filter(
-        LabResult.animal_id == animal_id, 
-        LabResult.date >= threshold_date.date()
-    ).all()
+    # En rangos largos solo los labs más recientes (evita timeout leyendo muchos PDFs)
+    lab_limit = 3 if days >= 180 else 8
+    labs = (
+        db.query(LabResult)
+        .options(joinedload(LabResult.laboratory))
+        .filter(
+            LabResult.animal_id == animal_id,
+            LabResult.date >= threshold_date.date(),
+        )
+        .order_by(LabResult.date.desc())
+        .limit(lab_limit)
+        .all()
+    )
 
     lab_results_data = []
     from src.services.storage_service import resolve_local_path_or_download
     for lab in labs:
         doc_url = lab.document_url
-        if not doc_url: continue
+        if not doc_url:
+            continue
 
         file_path = resolve_local_path_or_download(doc_url)
         extracted_text = ""
@@ -1080,29 +1118,53 @@ def export_pdf(
                 reader = pypdf.PdfReader(file_path)
                 text_pages = [page.extract_text() for page in reader.pages if page.extract_text()]
                 extracted_text = "\n".join(text_pages)
+                if len(extracted_text) > 2500:
+                    extracted_text = extracted_text[:2497] + "..."
             except Exception as e:
                 extracted_text = f"[Error leyendo PDF: {e}]"
             finally:
-                # Limpiar temporales descargados de Supabase
                 if doc_url.startswith("http") and file_path and os.path.exists(file_path):
                     try:
                         os.remove(file_path)
                     except Exception:
                         pass
-                
+
         if extracted_text:
-            lab_results_data.append(f"Estudio: {lab.laboratory.name if lab.laboratory else 'Laboratorio'} - Fecha: {lab.date}\nContenido PDF:\n{extracted_text}\n---")
-        
-    history_text = NLPService.generate_clinical_history(animal.name, reports_data, lab_results_data)
+            lab_results_data.append(
+                f"Estudio: {lab.laboratory.name if lab.laboratory else 'Laboratorio'} - "
+                f"Fecha: {lab.date}\nContenido PDF:\n{extracted_text}\n---"
+            )
+
+    used_ai = True
+    try:
+        history_text = NLPService.generate_clinical_history(
+            animal.name,
+            reports_data,
+            lab_results_data,
+            chunk_size=chunk_size,
+        )
+        if not (history_text or "").strip():
+            raise RuntimeError("La IA devolvió un resumen vacío")
+    except Exception as e:
+        # No fallar el export: armar un PDF básico con los reportes
+        print(f"[PDF] IA falló en historia clínica, usando resumen local: {e}")
+        used_ai = False
+        history_text = (
+            f"Resumen automatico (sin IA) de {animal.name}\n"
+            f"Periodo: ultimos {days} dias\n"
+            f"Reportes encontrados: {len(reports)}\n\n"
+            + "\n".join(reports_data[:40])
+        )
 
     try:
         path = _build_branded_pdf(
             title=f"Historia Clinica: {animal.name}",
             subtitle=(
                 f"Generado el {today_ar().strftime('%Y-%m-%d')} - "
-                f"Periodo evaluado: ultimos {days} dias"
+                f"Periodo: ultimos {days} dias"
+                + ("" if used_ai else " - resumen local (IA no disponible)")
             ),
-            body=history_text or "",
+            body=history_text or "Sin contenido para exportar.",
             species_id=animal.species_id,
         )
     except Exception as e:

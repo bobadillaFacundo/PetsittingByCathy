@@ -79,9 +79,21 @@ export default function AnimalHistory({ animalId = 1, days = null, limit = 40 })
       const res = await fetch(`${API_BASE}/reports/export-pdf/${animalId}?range=${range}`, {
         headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
       });
-      if (!res.ok) throw new Error("Error generating PDF");
-      
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        const detail = errBody.detail;
+        throw new Error(
+          typeof detail === 'string'
+            ? detail
+            : `No se pudo generar el PDF (código ${res.status})`
+        );
+      }
+
       const blob = await res.blob();
+      if (blob.type && blob.type.includes('json')) {
+        const text = await blob.text();
+        throw new Error(text || 'No se pudo generar el PDF');
+      }
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -89,9 +101,10 @@ export default function AnimalHistory({ animalId = 1, days = null, limit = 40 })
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
+      a.remove();
     } catch (err) {
       console.error(err);
-      alert("Hubo un error generando el PDF. Asegúrate de tener reportes registrados.");
+      alert(err.message || 'Hubo un error generando el PDF.');
     } finally {
       setExportingPDF(false);
     }

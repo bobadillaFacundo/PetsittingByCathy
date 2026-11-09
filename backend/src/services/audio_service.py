@@ -331,103 +331,158 @@ class NLPService:
         detail = " | ".join(errors) if errors else "sin proveedores NLP configurados"
         raise RuntimeError(f"No se pudo completar la llamada NLP ({detail})")
 
-    @staticmethod
-    def generate_clinical_history(animal_name: str, reports_data: list, lab_results_data: list = None) -> str:
-        """Genera un resumen clínico detallado basado en reportes y laboratorios usando el LLM."""
-        context_text = "\n".join(reports_data) if reports_data else "Sin reportes en el período."
-        lab_block = "Sin estudios de laboratorio en el período."
-        if lab_results_data:
-            lab_block = "\n".join(lab_results_data)
-
-        system_prompt = f"""
+    _CLINICAL_HISTORY_SYSTEM = """
 ROL
 Sos el/la Veterinario/a Jefe/a clínico/a de Petsitting by Cathy: médico veterinario senior con amplia experiencia en medicina interna de pequeños animales, seguimiento longitudinal y redacción de historias clínicas formales.
 Tu criterio es clínico, preciso y responsable. No sos un redactor genérico ni un asistente conversacional: redactás documentación médica veterinaria usable por colegas y tutores informados.
 
-CONTEXTO
-Trabajás sobre el historial de un paciente alojado/seguido en un entorno de guardería veterinaria que registra diariamente:
-- Alimentación, hidratación, micción y defecación.
-- Síntomas, enfermedades, vómitos, cambios de ánimo/energía.
-- Medicación administrada o indicada.
-- Observaciones clínicas de cuidadores.
-- Estudios de laboratorio adjuntos (cuando existen).
-Tu tarea es transformar ese registro crudo en una HISTORIA CLÍNICA profesional del paciente "{animal_name}" para el período solicitado, correlacionando clínica diaria con laboratorios cuando haya datos.
-
-OBJETIVO
-Producir un documento clínico claro, ordenado y defendible: que un colega pueda entender la evolución del paciente en pocos minutos sin volver a leer cada reporte suelto.
-
-ESTRUCTURA OBLIGATORIA (texto plano; SIN Markdown; SIN asteriscos; SIN títulos con #)
-Usá exactamente estos encabezados en mayúsculas y en este orden:
-
-1) IDENTIFICACIÓN Y PERÍODO
-   - Paciente y alcance temporal implícito de los datos analizados.
-2) RESUMEN CLÍNICO EJECUTIVO
-   - 3 a 5 oraciones con la síntesis del estado general y la tendencia del período.
-3) ESTADO GENERAL, ÁNIMO Y APETITO
-   - Energía, humor, apetito e hidratación según lo registrado; tendencias y excepciones.
-4) FUNCIONES FISIOLÓGICAS
-   - Orina (pis), heces (caca), vómitos u otros signos digestivos/urinarios.
-   - Destacá patrones (ej: caca blanda intermitente, retención, normalidad sostenida).
-5) SIGNOS, SÍNTOMAS Y EVOLUCIÓN PATOLÓGICA
-   - Enfermedades, síntomas o hallazgos anómalos del período, con cronología cuando sea posible.
-6) ESTUDIOS DE LABORATORIO E INTEGRACIÓN CLÍNICA
-   - Incluí esta sección SOLO si hay laboratorios.
-   - Resumí hallazgos relevantes y correlacionalos con la clínica diaria (concordancia o discordancia).
-   - Si no hay laboratorios, omití la sección por completo.
-7) MEDICACIÓN Y ADHERENCIA
-   - Incluí SOLO si hay evidencia de medicación en los datos.
-   - Qué se administró/indicó y si la evolución sugiere buena respuesta o persistencia de signos.
-   - Si no amerita, omití la sección.
-8) IMPRESIÓN CLÍNICA Y CIERRE
-   - Impresión profesional basada SOLO en evidencia disponible.
-   - Mencionar limitaciones si los datos son escasos o inconsistentes.
-   - Recomendaciones SOLO si se desprenden de forma directa y prudente de los datos (sin inventar tratamientos).
-
-REGLAS DE ORO (INQUEBRANTABLES)
-1. Basate ÚNICAMENTE en reportes, eventos y laboratorios provistos. PROHIBIDO inventar diagnósticos, valores de lab, fechas, dosis o síntomas no registrados.
-2. Distinguí hechos observados de interpretaciones: primero el dato, después la lectura clínica prudente.
-3. No dramatices ni minimices: lenguaje clínico sobrio. Evitá alarmismo teatral y también el optimismo vacío.
-4. Si un eje no tiene datos (ej. no hay mención de vómitos), no asumas normalidad absoluta: indicá ausencia de registros sobre ese eje cuando sea relevante.
-5. Cuando haya laboratorios, correlacionalos con la clínica; no copies el PDF entero: sintetizá lo clínicamente útil.
-6. Si hay contradicciones entre días, explicitá la variación (no promedies inventando un estado único).
-7. Español rioplatense (Argentina). Prohibido inglés. Prohibido Markdown.
-8. No uses emojis. No uses listas con viñetas decorativas: podés usar guiones simples si mejora la lectura clínica.
-9. No firmes con nombre inventado ni inventes matrícula/colegio profesional.
-10. Preferí precisión temporal ("al inicio del período", "en los últimos registros") antes que vaguedades.
-11. Si la evidencia es insuficiente para una conclusión fuerte, decilo: "con los datos disponibles no es posible concluir…"
-12. Nunca contradigas un valor de laboratorio o un reporte explícito.
-
-CALIDAD ESPERADA
-- Densidad clínica alta, relleno cero.
-- Debe servir como exportable formal (PDF de historia clínica).
-- Un tutor informado y un veterinario externo deben poder usarlo como resumen serio del período.
+REGLAS DE ORO
+1. Basate ÚNICAMENTE en los datos provistos. PROHIBIDO inventar diagnósticos, valores, fechas o síntomas.
+2. Español rioplatense (Argentina). Prohibido inglés. Prohibido Markdown (#, *, **).
+3. Lenguaje clínico sobrio, sin dramatizar ni minimizar.
+4. Si falta evidencia, decilo; no completes huecos.
 """
 
-        user_prompt = f"""Redactá la historia clínica del paciente "{animal_name}".
+    @staticmethod
+    def _chunk_list(items: list, chunk_size: int) -> list[list]:
+        if chunk_size <= 0:
+            return [items]
+        return [items[i:i + chunk_size] for i in range(0, len(items), chunk_size)]
 
-REPORTES DIARIOS Y EVENTOS DEL PERÍODO
-{context_text}
+    @staticmethod
+    def _summarize_clinical_chunk(
+        animal_name: str,
+        chunk_lines: list,
+        chunk_index: int,
+        total_chunks: int,
+    ) -> str:
+        """Resumen parcial de un lote de reportes (paso 1: de a poco)."""
+        block = "\n".join(chunk_lines)
+        prompt = f"""Paciente: {animal_name}
+Lote {chunk_index}/{total_chunks} de reportes diarios.
 
-ESTUDIOS DE LABORATORIO (texto extraído; puede estar incompleto o ruidoso)
-{lab_block}
+Hacé un RESUMEN CLÍNICO PARCIAL (texto plano, 8-15 líneas) de SOLO este lote:
+- Apetito / agua
+- Pis / caca / vómitos
+- Ánimo / energía
+- Síntomas o medicación si aparecen
+- Fechas o tendencia dentro del lote
 
-Generá ahora el documento completo con la estructura obligatoria, en español, texto plano.
+No armes la historia clínica completa todavía. No inventes.
+
+REPORTES DEL LOTE:
+{block}
 """
-
         messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
+            {"role": "system", "content": NLPService._CLINICAL_HISTORY_SYSTEM},
+            {"role": "user", "content": prompt},
         ]
+        return NLPService._call_llm(
+            messages, json_format=False, temperature=0.15, purpose="historia_clinica"
+        )
+
+    @staticmethod
+    def _consolidate_clinical_summaries(
+        animal_name: str,
+        partial_summaries: list[str],
+        lab_results_data: list | None = None,
+    ) -> str:
+        """Une los resúmenes parciales en la historia clínica final (paso 2)."""
+        labs = "Sin estudios de laboratorio en el período."
+        if lab_results_data:
+            labs = "\n".join(lab_results_data)
+
+        joined = "\n\n----\n\n".join(
+            f"RESUMEN PARCIAL {i + 1}:\n{s}" for i, s in enumerate(partial_summaries)
+        )
+
+        prompt = f"""Consolidá los resúmenes parciales del paciente "{animal_name}" en UNA historia clínica formal.
+
+ESTRUCTURA OBLIGATORIA (texto plano, sin Markdown):
+1) IDENTIFICACION Y PERIODO
+2) RESUMEN CLINICO EJECUTIVO
+3) ESTADO GENERAL, ANIMO Y APETITO
+4) FUNCIONES FISIOLOGICAS
+5) SIGNOS, SINTOMAS Y EVOLUCION PATOLOGICA
+6) ESTUDIOS DE LABORATORIO E INTEGRACION CLINICA (solo si hay labs)
+7) MEDICACION Y ADHERENCIA (solo si amerita)
+8) IMPRESION CLINICA Y CIERRE
+
+RESUMENES PARCIALES (ya analizados de a poco):
+{joined}
+
+LABORATORIOS:
+{labs}
+
+Redactá el documento final consolidado en español, texto plano.
+"""
+        messages = [
+            {"role": "system", "content": NLPService._CLINICAL_HISTORY_SYSTEM},
+            {"role": "user", "content": prompt},
+        ]
+        return NLPService._call_llm(
+            messages, json_format=False, temperature=0.2, purpose="historia_clinica"
+        )
+
+    @staticmethod
+    def generate_clinical_history(
+        animal_name: str,
+        reports_data: list,
+        lab_results_data: list = None,
+        chunk_size: int = 20,
+    ) -> str:
+        """
+        Historia clínica por lotes:
+        1) resume de a poco (chunks de reportes)
+        2) consolida en el documento final
+        """
+        lines = [ln for ln in (reports_data or []) if ln and str(ln).strip()]
+        if not lines:
+            lines = ["No hay reportes en este período."]
 
         try:
-            return NLPService._call_llm(
-                messages, json_format=False, temperature=0.2, purpose="historia_clinica"
+            # Poco volumen: una sola pasada
+            if len(lines) <= chunk_size:
+                partial = NLPService._summarize_clinical_chunk(
+                    animal_name, lines, 1, 1
+                )
+                return NLPService._consolidate_clinical_summaries(
+                    animal_name, [partial], lab_results_data
+                )
+
+            chunks = NLPService._chunk_list(lines, chunk_size)
+            partials = []
+            for idx, chunk in enumerate(chunks, start=1):
+                try:
+                    print(
+                        f"[HISTORIA] Lote {idx}/{len(chunks)} "
+                        f"({len(chunk)} líneas) para {animal_name}"
+                    )
+                    partials.append(
+                        NLPService._summarize_clinical_chunk(
+                            animal_name, chunk, idx, len(chunks)
+                        )
+                    )
+                except Exception as e:
+                    print(f"[HISTORIA] Falló lote {idx}: {e}")
+                    # Conservar un extracto crudo del lote para no perder la ventana
+                    preview = "\n".join(chunk[:8])
+                    partials.append(
+                        f"Resumen parcial {idx} (fallback local):\n{preview}"
+                    )
+
+            if not partials:
+                raise RuntimeError("No se pudo resumir ningún lote")
+
+            return NLPService._consolidate_clinical_summaries(
+                animal_name, partials, lab_results_data
             )
         except Exception as e:
             print(f"Error generando historia clínica: {e}")
             return (
                 f"HISTORIA CLINICA: {animal_name}\n\n"
-                "Ocurrió un error al generar el resumen con IA. Por favor, intente de nuevo."
+                "Ocurrió un error al generar el resumen con IA. Por favor, intente de nuevo.\n\n"
+                + "\n".join(lines[:30])
             )
 
     @staticmethod
