@@ -601,6 +601,243 @@ from fastapi.responses import FileResponse
 from fpdf import FPDF
 import tempfile
 
+# Solo estados que implican ingreso real a la guardería
+DAYCARE_CHECKIN_STATUSES = {"Ingresada", "Finalizada"}
+
+
+def _find_last_daycare_checkin(db: Session, animal_id: int):
+    """Última vez que la mascota ingresó a guardería (reserva de estadía)."""
+    from src.models.models import Reservation
+
+    # Preferir la que sigue Ingresada; si no, la Finalizada más reciente
+    current = (
+        db.query(Reservation)
+        .filter(
+            Reservation.animal_id == animal_id,
+            Reservation.status == "Ingresada",
+        )
+        .order_by(Reservation.start_date.desc())
+        .first()
+    )
+    if current:
+        return current
+
+    return (
+        db.query(Reservation)
+        .filter(
+            Reservation.animal_id == animal_id,
+            Reservation.status.in_(list(DAYCARE_CHECKIN_STATUSES)),
+        )
+        .order_by(Reservation.start_date.desc())
+        .first()
+    )
+
+
+def _build_daycare_stay_context(db: Session, animal: Animal, reservation) -> dict:
+    """Arma el contexto de la estadía: último ingreso → ahora."""
+    from src.models.models import (
+        AnimalMedication,
+        MedicationCatalog,
+        AnimalObservation,
+        AnimalCareProfile,
+    )
+
+    period_start_dt = reservation.start_date
+    period_end_dt = now_ar()
+    period_start = period_start_dt.strftime("%Y-%m-%d %H:%M")
+    period_end = period_end_dt.strftime("%Y-%m-%d %H:%M")
+
+    reports = (
+        db.query(Report)
+        .options(joinedload(Report.events).joinedload(ReportEvent.event_type))
+        .filter(
+            Report.animal_id == animal.id,
+            Report.created_at >= period_start_dt,
+            Report.created_at <= period_end_dt,
+        )
+        .order_by(Report.created_at.asc())
+        .all()
+    )
+
+    event_lines = []
+    transcript_lines = []
+    for r in reports:
+        dt = r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else "?"
+        if r.audio_transcript:
+            transcript_lines.append(f"[{dt}] {r.audio_transcript}")
+        for ev in r.events or []:
+            etype = ev.event_type.name if ev.event_type else "Evento"
+            event_lines.append(f"[{dt}] {etype}: {ev.value}")
+
+    meds = (
+        db.query(AnimalMedication)
+        .options(joinedload(AnimalMedication.medication), joinedload(AnimalMedication.schedules))
+        .filter(
+            AnimalMedication.animal_id == animal.id,
+            AnimalMedication.is_current == True,  # noqa: E712
+        )
+        .all()
+    )
+    med_lines = []
+    for m in meds:
+        name = m.medication.name if m.medication else "Medicamento"
+        times = ", ".join(
+            sorted(
+                {
+                    s.scheduled_time.strftime("%H:%M")
+                    for s in (m.schedules or [])
+                    if s.scheduled_time
+                }
+            )
+        )
+        forever = "tratamiento continuo" if m.is_forever else (
+            f"{m.duration_days} días" if m.duration_days else "duración no indicada"
+        )
+        med_lines.append(
+            f"- {name} | dosis: {m.dosage} | frec.: {m.frequency}"
+            f"{f' | horarios: {times}' if times else ''} | {forever}"
+        )
+
+    observations = (
+        db.query(AnimalObservation)
+        .filter(
+            AnimalObservation.animal_id == animal.id,
+            AnimalObservation.created_at >= period_start_dt,
+            AnimalObservation.created_at <= period_end_dt,
+        )
+        .order_by(AnimalObservation.created_at.asc())
+        .all()
+    )
+    obs_lines = []
+    for o in observations:
+        dt = o.created_at.strftime("%Y-%m-%d %H:%M") if o.created_at else "?"
+        obs_lines.append(f"[{dt}] {o.observation}")
+
+    profile = (
+        db.query(AnimalCareProfile)
+        .filter(AnimalCareProfile.animal_id == animal.id)
+        .first()
+    )
+    profile_bits = []
+    if profile:
+        if profile.dog_sociability:
+            profile_bits.append(f"Sociabilidad con perros: {profile.dog_sociability}")
+        if profile.plays_with_dogs:
+            profile_bits.append("Juega con otros perros: sí")
+        if profile.aversive_to_dogs:
+            profile_bits.append("Aversión a perros: sí")
+        if profile.needs_isolation:
+            profile_bits.append("Requiere aislamiento: sí")
+        if profile.needs_medication:
+            profile_bits.append("Requiere medicación: sí")
+        if profile.intake_medication:
+            profile_bits.append(f"Medicación en ingreso: {profile.intake_medication}")
+        if profile.special_diet_details:
+            profile_bits.append(f"Dieta especial: {profile.special_diet_details}")
+        if profile.food_brand or profile.food_amount:
+            profile_bits.append(
+                f"Comida habitual: {profile.food_brand or ''} {profile.food_amount or ''}".strip()
+            )
+        if profile.care_notes:
+            profile_bits.append(f"Notas de cuidado: {profile.care_notes}")
+        if profile.familiar_with_animals:
+            profile_bits.append(f"Familiaridad con animales: {profile.familiar_with_animals}")
+
+    return {
+        "period_start": period_start,
+        "period_end": period_end,
+        "reservation_status": reservation.status,
+        "reservation_id": reservation.id,
+        "reports_count": len(reports),
+        "events_text": "\n".join(event_lines) if event_lines else "Sin eventos registrados.",
+        "transcripts_text": "\n".join(transcript_lines) if transcript_lines else "Sin transcripciones.",
+        "medications_text": "\n".join(med_lines) if med_lines else "Sin medicación activa registrada.",
+        "observations_text": "\n".join(obs_lines) if obs_lines else "Sin observaciones adicionales.",
+        "profile_text": "\n".join(profile_bits) if profile_bits else "Sin ficha de ingreso adicional.",
+        "has_active_medication": bool(med_lines),
+    }
+
+
+def _render_stay_report_pdf(animal_name: str, period_start: str, period_end: str, report_text: str) -> str:
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.cell(200, 10, text=f"Reporte de Estadía: {animal_name}", new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.set_font("Helvetica", size=10)
+    pdf.cell(
+        200,
+        8,
+        text=f"Periodo: {period_start} → {period_end}  |  Generado: {today_ar().strftime('%Y-%m-%d')}",
+        new_x="LMARGIN",
+        new_y="NEXT",
+        align="C",
+    )
+    pdf.ln(8)
+    pdf.set_font("Helvetica", size=12)
+    safe_text = report_text.encode("latin-1", "replace").decode("latin-1")
+    pdf.multi_cell(0, 8, text=safe_text)
+    fd, path = tempfile.mkstemp(suffix=".pdf")
+    os.close(fd)
+    pdf.output(path)
+    return path
+
+
+@router.get("/daycare-stay-report/{animal_id}")
+def generate_daycare_stay_report(
+    animal_id: int,
+    format: str = "json",
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Genera el reporte de estadía de una mascota desde su último ingreso
+    hasta la fecha actual (comida, pis, caca, convivencia, medicación si aplica).
+    format=json → vista previa; format=pdf → descarga PDF.
+    """
+    animal = db.query(Animal).filter(Animal.id == animal_id).first()
+    if not animal:
+        raise HTTPException(status_code=404, detail="Animal no encontrado")
+
+    reservation = _find_last_daycare_checkin(db, animal_id)
+    if not reservation:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "No hay un ingreso de guardería registrado para esta mascota. "
+                "Creá o marcá una reserva como Ingresada o Finalizada."
+            ),
+        )
+
+    context = _build_daycare_stay_context(db, animal, reservation)
+    report_text = NLPService.generate_daycare_stay_report(animal.name, context)
+
+    if (format or "json").lower() == "pdf":
+        path = _render_stay_report_pdf(
+            animal.name,
+            context["period_start"],
+            context["period_end"],
+            report_text,
+        )
+        safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in animal.name)
+        return FileResponse(
+            path,
+            media_type="application/pdf",
+            filename=f"reporte_estadia_{safe_name}.pdf",
+        )
+
+    return {
+        "animal_id": animal.id,
+        "animal_name": animal.name,
+        "period_start": context["period_start"],
+        "period_end": context["period_end"],
+        "reservation_id": context["reservation_id"],
+        "reservation_status": context["reservation_status"],
+        "reports_count": context["reports_count"],
+        "has_active_medication": context["has_active_medication"],
+        "report": report_text,
+    }
+
+
 @router.get("/export-pdf/{animal_id}")
 def export_pdf(
     animal_id: int,

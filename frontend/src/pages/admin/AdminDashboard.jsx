@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { 
   Users, Activity, BookOpen, LogOut, Settings, 
-  Menu, Home, Database, HeartPulse, FileText, PawPrint, Palette
+  Menu, Home, Database, HeartPulse, FileText, PawPrint, Palette, ClipboardList
 } from 'lucide-react';
 import MascotasCRUD from './MascotasCRUD';
 import AuditoriaPanel from './AuditoriaPanel';
@@ -12,6 +12,7 @@ import CatalogsPanel from './CatalogsPanel';
 import UsuariosPanel from './UsuariosPanel';
 import ExportacionPanel from './ExportacionPanel';
 import ColoresPanel from './ColoresPanel';
+import GeneracionReportePanel from './GeneracionReportePanel';
 import { clearSession, isAuthenticated } from '../../lib/auth';
 
 export default function AdminDashboard() {
@@ -41,6 +42,7 @@ export default function AdminDashboard() {
     ] : []),
     { id: 'guarderia', label: 'Mascotas', icon: PawPrint },
     { id: 'pacientes', label: 'Guardería', icon: HeartPulse },
+    { id: 'generacion-reporte', label: 'Generación Reporte', shortLabel: 'Reporte', icon: ClipboardList },
     { id: 'catalogos', label: 'Gestión de Catálogos', icon: Settings },
     { id: 'exportar', label: 'Exportar Historias', icon: FileText },
     ...(isSuperAdmin ? [
@@ -138,6 +140,10 @@ export default function AdminDashboard() {
 
             {activeTab === 'exportar' && (
               <ExportacionPanel />
+            )}
+
+            {activeTab === 'generacion-reporte' && (
+              <GeneracionReportePanel />
             )}
 
             {activeTab === 'analisis' && (

@@ -218,8 +218,11 @@ def resolve_alert(alert_id: int, db: Session = Depends(get_db)):
 
 @router.get("/dictionary")
 def get_dictionary(db: Session = Depends(get_db)):
-    from src.models.models import TagSet
-    from src.services.tag_helpers import load_tag_sets, add_tag_variant, tag_set_to_dict
-    tags = load_tag_sets(db)
-    result = [tag_set_to_dict(tag) for tag in tags]
-    return result
+    from src.services.tag_helpers import (
+        ensure_required_tag_sets,
+        ensure_optional_tag_sets,
+        tag_set_to_dict,
+    )
+    ensure_optional_tag_sets(db)
+    tags = ensure_required_tag_sets(db)
+    return [tag_set_to_dict(tag) for tag in tags]

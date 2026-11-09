@@ -17,6 +17,19 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 USE_GROQ     = os.getenv("USE_GROQ", "").strip().lower() in ("1", "true", "yes")
 
+# DeepSeek (NLP principal). Token: DEEPSEEK_API_KEY en backend/.env
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "").strip()
+USE_DEEPSEEK = os.getenv("USE_DEEPSEEK", "1" if DEEPSEEK_API_KEY else "0").strip().lower() in (
+    "1", "true", "yes",
+)
+DEEPSEEK_MODEL = (os.getenv("DEEPSEEK_MODEL") or "deepseek-chat").strip()
+_DEEPSEEK_BASE = (os.getenv("DEEPSEEK_BASE_URL") or "https://api.deepseek.com").rstrip("/")
+DEEPSEEK_URL = (
+    _DEEPSEEK_BASE
+    if _DEEPSEEK_BASE.endswith("/chat/completions")
+    else f"{_DEEPSEEK_BASE}/chat/completions"
+)
+
 # Modelo STT de Groq para transcripción de audio
 GROQ_STT_MODEL = os.getenv("GROQ_STT_MODEL", "whisper-large-v3-turbo")
 GROQ_STT_URL   = "https://api.groq.com/openai/v1/audio/transcriptions"
@@ -54,9 +67,16 @@ elif GROQ_API_KEY:
 else:
     print("ADVERTENCIA: GROQ_API_KEY y USE_CUSTOM_WHISPER no configurados. STT fallará o usará mock.")
 
-print(f"[NLP] Postproceso -> {VLLM_URL} (modelo={VLLM_MODEL})")
-if USE_GROQ and GROQ_API_KEY:
-    print(f"[NLP] USE_GROQ=1: se usará Groq ({GROQ_MODEL}) en lugar del vLLM del servidor")
+if USE_DEEPSEEK and DEEPSEEK_API_KEY:
+    print(f"[NLP] Principal: DeepSeek ({DEEPSEEK_MODEL}) -> {DEEPSEEK_URL}")
+    if GROQ_API_KEY:
+        print(f"[NLP] Respaldo: Groq ({GROQ_MODEL})")
+elif USE_GROQ and GROQ_API_KEY:
+    print(f"[NLP] Principal: Groq ({GROQ_MODEL}) [DeepSeek no configurado]")
+elif _VLLM_BASE:
+    print(f"[NLP] Principal: vLLM ({VLLM_MODEL}) -> {VLLM_URL}")
+else:
+    print("[NLP] ADVERTENCIA: sin DeepSeek, Groq ni VLLM_BASE_URL configurados.")
 
 
 def _transcribe_with_api(file_path: str) -> str:
@@ -132,41 +152,48 @@ class NLPService:
         return [{"role": "system", "content": NLPService._ES_RULE}, *messages]
 
     @staticmethod
-    def _call_llm(messages: list, json_format: bool = False, temperature: float = None) -> str:
-        """Llama al LLM del servidor (vLLM) o Groq."""
-        messages = NLPService._with_spanish(messages)
-        vllm_base = os.getenv("VLLM_BASE_URL", "").strip()
-        is_groq = (USE_GROQ or not vllm_base) and bool(GROQ_API_KEY)
+    def _post_chat(url: str, api_key: str | None, payload: dict, timeout: int = 90) -> str:
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        response = requests.post(url, headers=headers, json=payload, timeout=timeout)
+        response.raise_for_status()
+        content = extract_groq_text(response.json())
+        if not content:
+            raise RuntimeError(f"Respuesta vacía desde {url}")
+        return content
 
-        headers = {
-            "Content-Type": "application/json"
-        }
-        if is_groq:
-            headers["Authorization"] = f"Bearer {GROQ_API_KEY}"
-
-        if temperature is None:
-            temperature = 0.05 if json_format else 0.7
-
+    @staticmethod
+    def _call_deepseek(messages: list, json_format: bool, temperature: float) -> str:
         payload = {
-            "model": GROQ_MODEL if is_groq else VLLM_MODEL,
+            "model": DEEPSEEK_MODEL,
             "messages": messages,
-            "temperature": temperature
+            "temperature": temperature,
         }
-
         if json_format:
             payload["response_format"] = {"type": "json_object"}
+        return NLPService._post_chat(DEEPSEEK_URL, DEEPSEEK_API_KEY, payload)
 
-        url = GROQ_URL if is_groq else VLLM_URL
-
-        if not is_groq:
-            response = requests.post(url, headers=headers, json=payload, timeout=90)
-            response.raise_for_status()
-            return extract_groq_text(response.json())
-
+    @staticmethod
+    def _call_groq(messages: list, json_format: bool, temperature: float) -> str:
         last_error = None
         for model_name in nlp_models_to_try(GROQ_MODEL):
-            payload["model"] = model_name
-            response = requests.post(url, headers=headers, json=payload, timeout=90)
+            payload = {
+                "model": model_name,
+                "messages": messages,
+                "temperature": temperature,
+            }
+            if json_format:
+                payload["response_format"] = {"type": "json_object"}
+            response = requests.post(
+                GROQ_URL,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {GROQ_API_KEY}",
+                },
+                json=payload,
+                timeout=90,
+            )
             if response.status_code == 200:
                 content = extract_groq_text(response.json())
                 if content:
@@ -181,44 +208,150 @@ class NLPService:
         raise RuntimeError(last_error or "Groq no respondió")
 
     @staticmethod
+    def _call_vllm(messages: list, json_format: bool, temperature: float) -> str:
+        payload = {
+            "model": VLLM_MODEL,
+            "messages": messages,
+            "temperature": temperature,
+        }
+        if json_format:
+            payload["response_format"] = {"type": "json_object"}
+        return NLPService._post_chat(VLLM_URL, None, payload)
+
+    @staticmethod
+    def _call_llm(messages: list, json_format: bool = False, temperature: float = None) -> str:
+        """Llama al LLM: DeepSeek (principal) → Groq (respaldo) → vLLM."""
+        messages = NLPService._with_spanish(messages)
+        if temperature is None:
+            temperature = 0.05 if json_format else 0.7
+
+        errors = []
+
+        # 1) DeepSeek principal
+        if USE_DEEPSEEK and DEEPSEEK_API_KEY:
+            try:
+                return NLPService._call_deepseek(messages, json_format, temperature)
+            except Exception as e:
+                print(f"[NLP] DeepSeek falló, intentando respaldo: {e}")
+                errors.append(f"DeepSeek: {e}")
+
+        # 2) Groq como respaldo (o principal si no hay DeepSeek)
+        vllm_base = os.getenv("VLLM_BASE_URL", "").strip()
+        use_groq_now = bool(GROQ_API_KEY) and (USE_GROQ or not vllm_base or bool(errors))
+        if use_groq_now:
+            try:
+                return NLPService._call_groq(messages, json_format, temperature)
+            except Exception as e:
+                print(f"[NLP] Groq falló: {e}")
+                errors.append(f"Groq: {e}")
+
+        # 3) vLLM local si está configurado
+        if vllm_base:
+            try:
+                return NLPService._call_vllm(messages, json_format, temperature)
+            except Exception as e:
+                print(f"[NLP] vLLM falló: {e}")
+                errors.append(f"vLLM: {e}")
+
+        detail = " | ".join(errors) if errors else "sin proveedores NLP configurados"
+        raise RuntimeError(f"No se pudo completar la llamada NLP ({detail})")
+
+    @staticmethod
     def generate_clinical_history(animal_name: str, reports_data: list, lab_results_data: list = None) -> str:
         """Genera un resumen clínico detallado basado en reportes y laboratorios usando el LLM."""
-        context_text = "\n".join(reports_data)
-        lab_text = ""
+        context_text = "\n".join(reports_data) if reports_data else "Sin reportes en el período."
+        lab_block = "Sin estudios de laboratorio en el período."
         if lab_results_data:
-            lab_text = "\nTambién se proporcionan resultados de estudios de laboratorio (texto extraído de PDFs adjuntos):\n" + "\n".join(lab_results_data)
-            
-        prompt = f"""
-Eres un veterinario jefe redactando una Historia Clínica formal para el paciente '{animal_name}'.
-A continuación, se te proporcionan todos los reportes diarios y eventos del paciente en el período solicitado.{lab_text}
+            lab_block = "\n".join(lab_results_data)
 
-Tu tarea es analizar esta información y redactar un resumen clínico profesional, organizado y fácil de leer.
-Si hay laboratorios, asegúrate de correlacionar la evolución clínica de los reportes con los resultados numéricos o diagnósticos del laboratorio.
+        system_prompt = f"""
+ROL
+Sos el/la Veterinario/a Jefe/a clínico/a de Petsitting by Cathy: médico veterinario senior con amplia experiencia en medicina interna de pequeños animales, seguimiento longitudinal y redacción de historias clínicas formales.
+Tu criterio es clínico, preciso y responsable. No sos un redactor genérico ni un asistente conversacional: redactás documentación médica veterinaria usable por colegas y tutores informados.
 
-Debes incluir (si hay información disponible):
-- Evolución general del estado de ánimo y apetito.
-- Resumen de signos vitales o eventos fisiológicos (orina, heces, vómitos).
-- Evolución de enfermedades o síntomas registrados.
-- Hallazgos relevantes de los estudios de laboratorio (si se proveen).
-- Adherencia a medicación (si aplica).
-- Conclusión veterinaria.
+CONTEXTO
+Trabajás sobre el historial de un paciente alojado/seguido en un entorno de guardería veterinaria que registra diariamente:
+- Alimentación, hidratación, micción y defecación.
+- Síntomas, enfermedades, vómitos, cambios de ánimo/energía.
+- Medicación administrada o indicada.
+- Observaciones clínicas de cuidadores.
+- Estudios de laboratorio adjuntos (cuando existen).
+Tu tarea es transformar ese registro crudo en una HISTORIA CLÍNICA profesional del paciente "{animal_name}" para el período solicitado, correlacionando clínica diaria con laboratorios cuando haya datos.
 
-Usa texto plano con sangrías y saltos de línea claros. NO uses símbolos de Markdown (como asteriscos, negritas o numerales).
-Redactá TODO en español.
+OBJETIVO
+Producir un documento clínico claro, ordenado y defendible: que un colega pueda entender la evolución del paciente en pocos minutos sin volver a leer cada reporte suelto.
 
-Reportes del período:
-{context_text}
+ESTRUCTURA OBLIGATORIA (texto plano; SIN Markdown; SIN asteriscos; SIN títulos con #)
+Usá exactamente estos encabezados en mayúsculas y en este orden:
+
+1) IDENTIFICACIÓN Y PERÍODO
+   - Paciente y alcance temporal implícito de los datos analizados.
+2) RESUMEN CLÍNICO EJECUTIVO
+   - 3 a 5 oraciones con la síntesis del estado general y la tendencia del período.
+3) ESTADO GENERAL, ÁNIMO Y APETITO
+   - Energía, humor, apetito e hidratación según lo registrado; tendencias y excepciones.
+4) FUNCIONES FISIOLÓGICAS
+   - Orina (pis), heces (caca), vómitos u otros signos digestivos/urinarios.
+   - Destacá patrones (ej: caca blanda intermitente, retención, normalidad sostenida).
+5) SIGNOS, SÍNTOMAS Y EVOLUCIÓN PATOLÓGICA
+   - Enfermedades, síntomas o hallazgos anómalos del período, con cronología cuando sea posible.
+6) ESTUDIOS DE LABORATORIO E INTEGRACIÓN CLÍNICA
+   - Incluí esta sección SOLO si hay laboratorios.
+   - Resumí hallazgos relevantes y correlacionalos con la clínica diaria (concordancia o discordancia).
+   - Si no hay laboratorios, omití la sección por completo.
+7) MEDICACIÓN Y ADHERENCIA
+   - Incluí SOLO si hay evidencia de medicación en los datos.
+   - Qué se administró/indicó y si la evolución sugiere buena respuesta o persistencia de signos.
+   - Si no amerita, omití la sección.
+8) IMPRESIÓN CLÍNICA Y CIERRE
+   - Impresión profesional basada SOLO en evidencia disponible.
+   - Mencionar limitaciones si los datos son escasos o inconsistentes.
+   - Recomendaciones SOLO si se desprenden de forma directa y prudente de los datos (sin inventar tratamientos).
+
+REGLAS DE ORO (INQUEBRANTABLES)
+1. Basate ÚNICAMENTE en reportes, eventos y laboratorios provistos. PROHIBIDO inventar diagnósticos, valores de lab, fechas, dosis o síntomas no registrados.
+2. Distinguí hechos observados de interpretaciones: primero el dato, después la lectura clínica prudente.
+3. No dramatices ni minimices: lenguaje clínico sobrio. Evitá alarmismo teatral y también el optimismo vacío.
+4. Si un eje no tiene datos (ej. no hay mención de vómitos), no asumas normalidad absoluta: indicá ausencia de registros sobre ese eje cuando sea relevante.
+5. Cuando haya laboratorios, correlacionalos con la clínica; no copies el PDF entero: sintetizá lo clínicamente útil.
+6. Si hay contradicciones entre días, explicitá la variación (no promedies inventando un estado único).
+7. Español rioplatense (Argentina). Prohibido inglés. Prohibido Markdown.
+8. No uses emojis. No uses listas con viñetas decorativas: podés usar guiones simples si mejora la lectura clínica.
+9. No firmes con nombre inventado ni inventes matrícula/colegio profesional.
+10. Preferí precisión temporal ("al inicio del período", "en los últimos registros") antes que vaguedades.
+11. Si la evidencia es insuficiente para una conclusión fuerte, decilo: "con los datos disponibles no es posible concluir…"
+12. Nunca contradigas un valor de laboratorio o un reporte explícito.
+
+CALIDAD ESPERADA
+- Densidad clínica alta, relleno cero.
+- Debe servir como exportable formal (PDF de historia clínica).
+- Un tutor informado y un veterinario externo deben poder usarlo como resumen serio del período.
 """
+
+        user_prompt = f"""Redactá la historia clínica del paciente "{animal_name}".
+
+REPORTES DIARIOS Y EVENTOS DEL PERÍODO
+{context_text}
+
+ESTUDIOS DE LABORATORIO (texto extraído; puede estar incompleto o ruidoso)
+{lab_block}
+
+Generá ahora el documento completo con la estructura obligatoria, en español, texto plano.
+"""
+
         messages = [
-            {"role": "system", "content": "Eres un asistente de redacción médica veterinaria avanzado."},
-            {"role": "user", "content": prompt}
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
         ]
-        
+
         try:
-            return NLPService._call_llm(messages, json_format=False)
+            return NLPService._call_llm(messages, json_format=False, temperature=0.2)
         except Exception as e:
             print(f"Error generando historia clínica: {e}")
-            return f"## Historia Clínica: {animal_name}\n\n*Ocurrió un error al generar el resumen con IA. Por favor, intente de nuevo.*"
+            return (
+                f"HISTORIA CLINICA: {animal_name}\n\n"
+                "Ocurrió un error al generar el resumen con IA. Por favor, intente de nuevo."
+            )
 
     @staticmethod
     def extract_events_from_transcript(transcript: str, dictionaries: list, animal_name: str, tag_sets: list) -> Dict[str, Any]:
@@ -313,6 +446,114 @@ Sé breve, amable y directo. Respondé siempre en español. Si no sabes la respu
         except Exception as e:
             print(f"Error con LLM (chat): {e}")
             return "Ocurrió un error al contactar al modelo de IA. Revisa los logs o tu conexión."
+
+    @staticmethod
+    def generate_daycare_stay_report(
+        animal_name: str,
+        stay_context: dict,
+    ) -> str:
+        """Genera un reporte de estadía en guardería (última ingreso → hoy) con IA."""
+        period_start = stay_context.get("period_start") or "sin fecha"
+        period_end = stay_context.get("period_end") or "hoy"
+        reservation_status = stay_context.get("reservation_status") or "desconocido"
+        events_text = stay_context.get("events_text") or "Sin eventos registrados."
+        transcripts_text = stay_context.get("transcripts_text") or "Sin transcripciones."
+        medications_text = stay_context.get("medications_text") or "Sin medicación activa registrada."
+        observations_text = stay_context.get("observations_text") or "Sin observaciones adicionales."
+        profile_text = stay_context.get("profile_text") or "Sin ficha de ingreso adicional."
+
+        system_prompt = f"""
+ROL
+Sos la Coordinadora Senior de Guardería de Petsitting by Cathy: profesional experta en cuidado diario de mascotas, observación conductual y redacción de reportes de estadía para tutores.
+No sos veterinaria clínica ni diagnosticás enfermedades: tu autoridad es el control operativo del animal DURANTE su estadía en la guardería.
+
+CONTEXTO
+Trabajás en una guardería de animales que registra y controla el estado de cada mascota mientras está a cargo:
+- Ingreso y egreso de estadías.
+- Rutina fisiológica diaria (comida, agua, pis, caca).
+- Convivencia y sociabilidad con otros animales y personas.
+- Administración de medicación cuando el tutor o la ficha lo indican.
+- Observaciones de ánimo, energía, juego, estrés o incidentes.
+El reporte que redactás es el documento que se entrega al tutor sobre CÓMO estuvo la mascota en esta estadía (desde el último ingreso hasta ahora).
+
+OBJETIVO
+Redactar un REPORTE DE ESTADÍA claro, cálido-profesional y útil para el tutor de "{animal_name}", cubriendo EXCLUSIVAMENTE el período {period_start} → {period_end}.
+
+ESTRUCTURA OBLIGATORIA (texto plano, sin Markdown, sin asteriscos, sin numerales de título con #)
+Usá exactamente estos encabezados en mayúsculas, en este orden:
+
+1) ENCABEZADO DE ESTADÍA
+   - Nombre de la mascota, período (desde / hasta) y estado de la reserva si se conoce.
+2) ALIMENTACIÓN Y AGUA
+   - Cómo comió (todo / poco / nada / irregular) y cómo tomó agua, con tendencia del período.
+3) HIGIENE FISIOLÓGICA (PIS Y CACA)
+   - Pis: frecuencia/normalidad según lo registrado.
+   - Caca: consistencia y hallazgos (normal, blanda, no hizo, etc.) sin dramatizar.
+4) CONVIVENCIA Y SOCIALIZACIÓN
+   - Cómo se llevó con otros animales y con el entorno (juego, tolerancia, aislamiento, incidentes).
+   - Si no hay datos explícitos de convivencia, decilo: "No se registraron observaciones de convivencia en este período."
+5) MEDICACIÓN (SOLO SI AMERITA)
+   - Incluí esta sección SOLO si hay medicación activa en ficha O eventos/transcripciones de medicación en el período.
+   - Si no amerita, omití la sección por completo (no escribas "N/A").
+6) OBSERVACIONES RELEVANTES
+   - Ánimo, energía, sueño, vómitos, incidentes u otras notas útiles del período.
+7) CIERRE PARA EL TUTOR
+   - 2 a 4 oraciones de síntesis humana y tranquilizadora (sin inventar elogios vacíos ni alarmas).
+
+REGLAS DE ORO (INQUEBRANTABLES)
+1. Basate ÚNICAMENTE en los datos provistos (eventos, transcripciones, medicación, observaciones, ficha). PROHIBIDO inventar, asumir o rellenar huecos.
+2. Si un eje (comida/pis/caca/convivencia) no tiene datos, escribí explícitamente que no hay registros en el período; no completes con "normal" inventado.
+3. Priorizá hechos concretos y tendencias (ej: "los primeros días comió poco; luego recuperó el apetito") sobre adjetivos vagos.
+4. Tono: español rioplatense (Argentina), profesional, cercano, sobrio. Sin dramatizar. Sin diagnósticos médicos. Sin recomendaciones veterinarias salvo que el dato lo diga explícitamente.
+5. No uses inglés. No uses Markdown. No inventes fechas fuera del período.
+6. Si la medicación no aplica, NO menciones medicación en ninguna sección.
+7. Diferenciá claramente lo observado en guardería de lo que solo figura en la ficha de ingreso (la ficha es contexto; los reportes/eventos son evidencia de la estadía).
+8. Si hay señales de alerta leves (caca blanda, poco apetito un día), describilas con calma. Si hay señales graves explícitas (sangre, vómito reiterado), reportalas con claridad sin alarmismo teatral.
+9. El reporte debe poder leerse completo en menos de 2 minutos: concreto, ordenado, sin relleno.
+10. Nunca contradigas los datos: si un día dice "no comió" y otro "comió todo", reflejá la variación.
+
+CALIDAD
+- Preferí verbos de observación: "se registró", "según los reportes", "en la mayoría de los días".
+- Evitá frases vacías tipo "tuvo una estadía maravillosa" si no hay evidencia.
+- El tutor debe terminar sabiendo: ¿comió? ¿hizo pis/caca? ¿cómo convivió? ¿tomó su medicación (si aplica)?
+"""
+
+        user_prompt = f"""Generá el reporte de estadía de "{animal_name}".
+
+METADATOS DE ESTADÍA
+- Período: {period_start} → {period_end}
+- Estado de reserva/ingreso: {reservation_status}
+
+FICHA / CONTEXTO DE INGRESO (solo contexto, no evidencia diaria)
+{profile_text}
+
+MEDICACIÓN EN FICHA
+{medications_text}
+
+EVENTOS ESTRUCTURADOS DEL PERÍODO (comida, agua, pis, caca, medicación, etc.)
+{events_text}
+
+TRANSCRIPCIONES DE REPORTES DIARIOS DEL PERÍODO
+{transcripts_text}
+
+OBSERVACIONES ADICIONALES DEL PERÍODO
+{observations_text}
+
+Redactá ahora el reporte completo en español, con la estructura obligatoria.
+"""
+        try:
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ]
+            return NLPService._call_llm(messages, json_format=False, temperature=0.25)
+        except Exception as e:
+            print(f"Error generando reporte de estadía: {e}")
+            return (
+                f"REPORTE DE ESTADÍA: {animal_name}\n\n"
+                "Ocurrió un error al generar el reporte con IA. "
+                "Revisá la conexión con el modelo e intentá de nuevo."
+            )
 
     @staticmethod
     def analyze_animal_evolution(animal_name: str, history_context: str) -> str:
