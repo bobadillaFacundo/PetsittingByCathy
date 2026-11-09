@@ -60,18 +60,43 @@ export default function GeneracionReportePanel() {
 
   const downloadPdf = async () => {
     if (!selectedAnimalId) return;
+    if (!result?.report) {
+      setError('Primero generá el reporte y después descargá el PDF.');
+      return;
+    }
     setDownloadingPdf(true);
     setError('');
     try {
+      // Usa el texto ya generado (sin volver a llamar a la IA) + logo por especie
       const res = await fetch(
-        `${API_BASE}/reports/daycare-stay-report/${selectedAnimalId}?format=pdf`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        `${API_BASE}/reports/daycare-stay-report/${selectedAnimalId}/pdf`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            report: result.report,
+            period_start: result.period_start,
+            period_end: result.period_end,
+          }),
+        }
       );
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || 'No se pudo descargar el PDF');
+        const detail = data.detail;
+        throw new Error(
+          typeof detail === 'string'
+            ? detail
+            : 'No se pudo descargar el PDF'
+        );
       }
       const blob = await res.blob();
+      if (blob.type && blob.type.includes('json')) {
+        const text = await blob.text();
+        throw new Error(text || 'No se pudo descargar el PDF');
+      }
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       const name = result?.animal_name || selectedAnimalId;

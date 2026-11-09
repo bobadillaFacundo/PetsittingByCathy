@@ -68,13 +68,19 @@ elif USE_CUSTOM_WHISPER:
 else:
     print("ADVERTENCIA: GROQ_API_KEY no configurada. STT de audio fallará o usará mock.")
 
-# DeepSeek para TODO el NLP (reportes, chat, clima, evolución, etc.).
-# Groq se reserva para audio/STT y como respaldo NLP.
+# DeepSeek: chat, clima, evolución, reporte de estadía, etc.
+# Groq: STT + extracción de voz + Exportar Historias (historia clínica).
+GROQ_PREFERRED_PURPOSES = frozenset({
+    "extraccion_eventos",  # análisis del transcript de voz
+    "historia_clinica",    # Exportar Historias (PDF)
+})
 
 if USE_DEEPSEEK and DEEPSEEK_API_KEY:
-    print(f"[NLP] DeepSeek principal (reportes/chat/clima/evolución) -> {DEEPSEEK_MODEL}")
+    print(f"[NLP] DeepSeek -> chat/clima/evolución/estadía ({DEEPSEEK_MODEL})")
 if GROQ_API_KEY:
-    print(f"[STT/NLP] Groq = audio siempre + respaldo NLP -> {GROQ_MODEL}")
+    print(
+        f"[NLP] Groq -> STT + extraccion_eventos + historia_clinica ({GROQ_MODEL})"
+    )
 elif _VLLM_BASE:
     print(f"[NLP] Fallback vLLM ({VLLM_MODEL}) -> {VLLM_URL}")
 else:
@@ -269,8 +275,9 @@ class NLPService:
     ) -> str:
         """
         NLP routing:
-        - DeepSeek: reportes, chat, clima, evolución (y demás NLP)
-        - Groq: respaldo NLP
+        - Groq primero: extraccion_eventos (voz) + historia_clinica (Exportar)
+        - DeepSeek primero: chat, clima, evolución, reporte_estadia, resto
+        - El otro proveedor actúa de respaldo
         Audio/STT nunca pasa por acá: siempre Groq en AudioService.
         """
         messages = NLPService._with_spanish(messages)
@@ -278,24 +285,41 @@ class NLPService:
             temperature = 0.05 if json_format else 0.7
 
         errors = []
+        prefer_groq = purpose in GROQ_PREFERRED_PURPOSES
 
-        # 1) DeepSeek para chat / clima / evolución / reportes / todo NLP
-        if USE_DEEPSEEK and DEEPSEEK_API_KEY:
-            try:
-                return NLPService._call_deepseek(messages, json_format, temperature, purpose)
-            except Exception as e:
-                print(f"[NLP] DeepSeek falló ({purpose}), respaldo Groq: {e}")
-                errors.append(f"DeepSeek: {e}")
+        def try_groq():
+            if not GROQ_API_KEY:
+                return None
+            return NLPService._call_groq(messages, json_format, temperature, purpose)
 
-        # 2) Groq como respaldo NLP (el audio STT no usa este método)
-        if GROQ_API_KEY:
-            try:
-                return NLPService._call_groq(messages, json_format, temperature, purpose)
-            except Exception as e:
-                print(f"[NLP] Groq falló: {e}")
-                errors.append(f"Groq: {e}")
+        def try_deepseek():
+            if not (USE_DEEPSEEK and DEEPSEEK_API_KEY):
+                return None
+            return NLPService._call_deepseek(messages, json_format, temperature, purpose)
 
-        # 3) vLLM local si está configurado
+        primary, secondary = (
+            (try_groq, try_deepseek) if prefer_groq else (try_deepseek, try_groq)
+        )
+        primary_name = "Groq" if prefer_groq else "DeepSeek"
+        secondary_name = "DeepSeek" if prefer_groq else "Groq"
+
+        try:
+            result = primary()
+            if result is not None:
+                return result
+        except Exception as e:
+            print(f"[NLP] {primary_name} falló ({purpose}), intento {secondary_name}: {e}")
+            errors.append(f"{primary_name}: {e}")
+
+        try:
+            result = secondary()
+            if result is not None:
+                return result
+        except Exception as e:
+            print(f"[NLP] {secondary_name} falló ({purpose}): {e}")
+            errors.append(f"{secondary_name}: {e}")
+
+        # vLLM local si está configurado
         vllm_base = os.getenv("VLLM_BASE_URL", "").strip()
         if vllm_base:
             try:

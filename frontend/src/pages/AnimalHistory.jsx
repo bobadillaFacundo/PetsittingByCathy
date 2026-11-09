@@ -16,11 +16,13 @@ function getEventColor(val, evtType, colorRules, report, reports, animalWeightKg
   );
 }
 
-export default function AnimalHistory({ animalId = 1 }) {
+let cachedColorRules = null;
+
+export default function AnimalHistory({ animalId = 1, days = null, limit = 40 }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [exportingPDF, setExportingPDF] = useState(false);
-  const [colorRules, setColorRules] = useState([]);
+  const [colorRules, setColorRules] = useState(cachedColorRules || []);
   const [editingReport, setEditingReport] = useState(null);
   const [editTranscript, setEditTranscript] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
@@ -31,20 +33,36 @@ export default function AnimalHistory({ animalId = 1 }) {
 
   const fetchHistory = useCallback(() => {
     setLoading(true);
-    Promise.all([
-      fetch(`${API_BASE}/animals/${animalId}/history`, { headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` } }),
-      fetch(`${API_BASE}/catalogs/color-rules`, { headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` } })
-    ])
+    setData(null);
+    const params = new URLSearchParams();
+    if (days != null && Number(days) > 0) params.set('days', String(days));
+    if (limit != null) params.set('limit', String(limit));
+    const qs = params.toString();
+    const historyUrl = `${API_BASE}/animals/${animalId}/history${qs ? `?${qs}` : ''}`;
+
+    const headers = { Authorization: `Bearer ${localStorage.getItem("token")}` };
+    const historyPromise = fetch(historyUrl, { headers });
+    const rulesPromise = cachedColorRules
+      ? Promise.resolve(null)
+      : fetch(`${API_BASE}/catalogs/color-rules`, { headers });
+
+    Promise.all([historyPromise, rulesPromise])
     .then(async ([histRes, rulesRes]) => {
       if (histRes.ok) setData(await histRes.json());
-      if (rulesRes.ok) setColorRules(await rulesRes.json());
+      if (rulesRes && rulesRes.ok) {
+        const rules = await rulesRes.json();
+        cachedColorRules = rules;
+        setColorRules(rules);
+      } else if (cachedColorRules) {
+        setColorRules(cachedColorRules);
+      }
       setLoading(false);
     })
     .catch(err => {
       console.error(err);
       setLoading(false);
     });
-  }, [animalId]);
+  }, [animalId, days, limit]);
 
   useEffect(() => {
     fetchHistory();
@@ -149,7 +167,12 @@ export default function AnimalHistory({ animalId = 1 }) {
                 <span className="text-xs font-bold uppercase tracking-wide bg-amber-100 text-amber-800 px-2.5 py-1 rounded-full">Rescate</span>
               )}
             </h2>
-            <p className="text-gray-500 font-medium">Ficha e historial clínico</p>
+            <p className="text-gray-500 font-medium">
+              Ficha e historial clínico
+              {days != null && Number(days) > 0
+                ? ` · últimos ${days} días`
+                : ''}
+            </p>
           </div>
         </div>
         

@@ -600,11 +600,104 @@ def get_all_reports(limit: int = 100, db: Session = Depends(get_db), current_adm
 from fastapi.responses import FileResponse
 from fpdf import FPDF
 import tempfile
+from pathlib import Path
 
 # Estados de estadía (ingreso real o confirmada en guardería)
 DAYCARE_CHECKIN_STATUSES = {"Ingresada", "Finalizada", "Confirmada"}
 # Para el análisis IA solo miramos la última semana (más rápido y relevante)
 STAY_REPORT_LOOKBACK_DAYS = 7
+
+# Logos de marca por especie (carpeta /logos en la raíz del repo)
+SPECIES_BRAND_LOGOS = {
+    1: "perro.jpg",
+    2: "gato.jpg",
+    3: "loro.jpg",
+    4: "conejo.jpg",
+    5: "tortuga.jpg",
+}
+
+
+def _pdf_safe(text: str) -> str:
+    """Helvetica solo soporta latin-1; evita crash por flechas/emojis."""
+    if not text:
+        return ""
+    replacements = {
+        "→": "->",
+        "←": "<-",
+        "—": "-",
+        "–": "-",
+        "“": '"',
+        "”": '"',
+        "‘": "'",
+        "’": "'",
+        "…": "...",
+        "•": "-",
+    }
+    out = str(text)
+    for src, dst in replacements.items():
+        out = out.replace(src, dst)
+    return out.encode("latin-1", "replace").decode("latin-1")
+
+
+def _logos_dir() -> Path:
+    here = Path(__file__).resolve()
+    candidates = [
+        here.parents[3] / "logos",  # repo/logos
+        here.parents[2] / "logos",  # backend/logos
+        Path.cwd() / "logos",
+        Path.cwd().parent / "logos",
+    ]
+    for path in candidates:
+        if path.is_dir():
+            return path
+    return candidates[0]
+
+
+def _resolve_species_logo(species_id: int | None) -> str | None:
+    if not species_id:
+        return None
+    filename = SPECIES_BRAND_LOGOS.get(int(species_id))
+    if not filename:
+        return None
+    logo_path = _logos_dir() / filename
+    return str(logo_path) if logo_path.is_file() else None
+
+
+def _build_branded_pdf(
+    *,
+    title: str,
+    subtitle: str,
+    body: str,
+    species_id: int | None = None,
+) -> str:
+    """PDF con logo de marca según especie y texto seguro para Helvetica."""
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+
+    logo = _resolve_species_logo(species_id)
+    top_y = 12
+    if logo:
+        try:
+            pdf.image(logo, x=(210 - 32) / 2, y=top_y, w=32)
+            top_y = 48
+        except Exception as e:
+            print(f"[PDF] No se pudo insertar logo {logo}: {e}")
+            top_y = 12
+
+    pdf.set_y(top_y)
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.multi_cell(0, 9, text=_pdf_safe(title), align="C")
+    pdf.set_font("Helvetica", size=10)
+    pdf.multi_cell(0, 6, text=_pdf_safe(subtitle), align="C")
+    pdf.ln(6)
+    pdf.set_font("Helvetica", size=11)
+    pdf.multi_cell(0, 7, text=_pdf_safe(body))
+
+    fd, path = tempfile.mkstemp(suffix=".pdf")
+    os.close(fd)
+    pdf.output(path)
+    return path
 
 
 def _find_last_daycare_checkin(db: Session, animal_id: int):
@@ -811,28 +904,62 @@ def _build_daycare_stay_context(db: Session, animal: Animal, reservation) -> dic
     }
 
 
-def _render_stay_report_pdf(animal_name: str, period_start: str, period_end: str, report_text: str) -> str:
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(200, 10, text=f"Reporte de Estadía: {animal_name}", new_x="LMARGIN", new_y="NEXT", align="C")
-    pdf.set_font("Helvetica", size=10)
-    pdf.cell(
-        200,
-        8,
-        text=f"Periodo: {period_start} → {period_end}  |  Generado: {today_ar().strftime('%Y-%m-%d')}",
-        new_x="LMARGIN",
-        new_y="NEXT",
-        align="C",
+class StayReportPdfRequest(BaseModel):
+    report: str
+    period_start: str
+    period_end: str
+
+
+def _render_stay_report_pdf(
+    animal_name: str,
+    period_start: str,
+    period_end: str,
+    report_text: str,
+    species_id: int | None = None,
+) -> str:
+    return _build_branded_pdf(
+        title=f"Reporte de Estadia: {animal_name}",
+        subtitle=(
+            f"Periodo: {period_start} -> {period_end} | "
+            f"Generado: {today_ar().strftime('%Y-%m-%d')}"
+        ),
+        body=report_text or "",
+        species_id=species_id,
     )
-    pdf.ln(8)
-    pdf.set_font("Helvetica", size=12)
-    safe_text = report_text.encode("latin-1", "replace").decode("latin-1")
-    pdf.multi_cell(0, 8, text=safe_text)
-    fd, path = tempfile.mkstemp(suffix=".pdf")
-    os.close(fd)
-    pdf.output(path)
-    return path
+
+
+@router.post("/daycare-stay-report/{animal_id}/pdf")
+def daycare_stay_report_pdf_from_text(
+    animal_id: int,
+    payload: StayReportPdfRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Arma el PDF con el texto ya generado (sin volver a llamar a la IA)."""
+    animal = db.query(Animal).filter(Animal.id == animal_id).first()
+    if not animal:
+        raise HTTPException(status_code=404, detail="Animal no encontrado")
+    if not (payload.report or "").strip():
+        raise HTTPException(status_code=400, detail="El reporte está vacío")
+
+    try:
+        path = _render_stay_report_pdf(
+            animal.name,
+            payload.period_start,
+            payload.period_end,
+            payload.report,
+            species_id=animal.species_id,
+        )
+    except Exception as e:
+        print(f"[PDF] Error generando PDF de estadía: {e}")
+        raise HTTPException(status_code=500, detail=f"No se pudo generar el PDF: {e}") from e
+
+    safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in animal.name)
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        filename=f"reporte_estadia_{safe_name}.pdf",
+    )
 
 
 @router.get("/daycare-stay-report/{animal_id}")
@@ -868,12 +995,17 @@ def generate_daycare_stay_report(
         report_text = f"{context['fallback_note']}\n\n{report_text}"
 
     if (format or "json").lower() == "pdf":
-        path = _render_stay_report_pdf(
-            animal.name,
-            context["period_start"],
-            context["period_end"],
-            report_text,
-        )
+        try:
+            path = _render_stay_report_pdf(
+                animal.name,
+                context["period_start"],
+                context["period_end"],
+                report_text,
+                species_id=animal.species_id,
+            )
+        except Exception as e:
+            print(f"[PDF] Error generando PDF de estadía: {e}")
+            raise HTTPException(status_code=500, detail=f"No se pudo generar el PDF: {e}") from e
         safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in animal.name)
         return FileResponse(
             path,
@@ -884,6 +1016,7 @@ def generate_daycare_stay_report(
     return {
         "animal_id": animal.id,
         "animal_name": animal.name,
+        "species_id": animal.species_id,
         "period_start": context["period_start"],
         "period_end": context["period_end"],
         "reservation_id": context["reservation_id"],
@@ -961,28 +1094,24 @@ def export_pdf(
             lab_results_data.append(f"Estudio: {lab.laboratory.name if lab.laboratory else 'Laboratorio'} - Fecha: {lab.date}\nContenido PDF:\n{extracted_text}\n---")
         
     history_text = NLPService.generate_clinical_history(animal.name, reports_data, lab_results_data)
-    
-    # Construir PDF
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Helvetica", size=12)
-    
-    pdf.set_font("Helvetica", 'B', 16)
-    pdf.cell(200, 10, text=f"Historia Clinica: {animal.name}", new_x="LMARGIN", new_y="NEXT", align='C')
-    pdf.set_font("Helvetica", size=10)
-    pdf.cell(200, 10, text=f"Generado el {today_ar().strftime('%Y-%m-%d')} - Periodo evaluado: ultimos {days} dias", new_x="LMARGIN", new_y="NEXT", align='C')
-    pdf.ln(10)
-    
-    pdf.set_font("Helvetica", size=12)
-    
-    # fpdf2 text rendering
-    # Para evitar problemas con caracteres especiales que la fuente por defecto no soporte
-    safe_text = history_text.encode('latin-1', 'replace').decode('latin-1')
-    pdf.multi_cell(0, 10, text=safe_text)
-    
-    fd, path = tempfile.mkstemp(suffix=".pdf")
-    os.close(fd)
-    
-    pdf.output(path)
-    
-    return FileResponse(path, media_type='application/pdf', filename=f"historia_{animal.name}.pdf")
+
+    try:
+        path = _build_branded_pdf(
+            title=f"Historia Clinica: {animal.name}",
+            subtitle=(
+                f"Generado el {today_ar().strftime('%Y-%m-%d')} - "
+                f"Periodo evaluado: ultimos {days} dias"
+            ),
+            body=history_text or "",
+            species_id=animal.species_id,
+        )
+    except Exception as e:
+        print(f"[PDF] Error generando historia clínica: {e}")
+        raise HTTPException(status_code=500, detail=f"No se pudo generar el PDF: {e}") from e
+
+    safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in (animal.name or "animal"))
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        filename=f"historia_{safe_name}.pdf",
+    )

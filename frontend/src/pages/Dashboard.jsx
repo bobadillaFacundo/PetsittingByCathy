@@ -222,7 +222,7 @@ export default function Dashboard() {
         
         {loadingWeather ? (
           <div className="animate-pulse text-indigo-600 bg-white/60 p-4 rounded-xl border border-indigo-50 text-sm font-medium">
-            La Inteligencia Artificial está leyendo los reportes de las últimas 48 horas...
+            La Inteligencia Artificial está leyendo los reportes de la última semana...
           </div>
         ) : weatherData ? (
           <div className="space-y-4">
@@ -346,7 +346,7 @@ export default function Dashboard() {
               Cerrar ✕
             </button>
           </div>
-          <AnimalHistory animalId={selectedAnimal} />
+          <AnimalHistory animalId={selectedAnimal} days={7} limit={30} />
         </div>
       )}
     </div>

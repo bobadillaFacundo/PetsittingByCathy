@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  BookOpen, RefreshCw, AlertCircle, Plus, X, Save, Search, Pencil,
+  BookOpen, RefreshCw, AlertCircle, Plus, X, Save, Pencil,
 } from 'lucide-react';
 import { API_BASE } from '../../lib/api';
 
@@ -171,16 +171,13 @@ export default function DiccionarioPanel() {
       </div>
 
       <div className="pet-panel-body space-y-4">
-        <div className="relative">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="search"
-            className="pet-input w-full pl-9 text-sm"
-            placeholder="Buscar conjunto o palabra (ej: caca, kaka, morfó)…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
+        <input
+          type="search"
+          className="pet-input w-full text-sm"
+          placeholder="Buscar conjunto o palabra (ej: caca, kaka, morfó)…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
 
         {feedback && (
           <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-800 font-medium">
@@ -303,14 +300,10 @@ export default function DiccionarioPanel() {
                       Buscador
                     </label>
                     <div className="relative">
-                      <Search
-                        size={16}
-                        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-indigo-500"
-                      />
                       <input
                         type="search"
                         className="pet-input w-full text-sm"
-                        style={{ paddingLeft: '2.5rem' }}
+                        style={modalQuery ? { paddingRight: '2.25rem' } : undefined}
                         placeholder={`Buscar en ${activeTag.name}…`}
                         value={modalQuery}
                         onChange={(e) => setModalQuery(e.target.value)}

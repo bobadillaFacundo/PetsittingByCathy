@@ -316,8 +316,21 @@ from src.dtos.animal_dto import AnimalHistoryResponse, ReportHistoryDTO, EventDT
 from sqlalchemy.orm import joinedload
 
 @router.get("/{animal_id}/history", response_model=AnimalHistoryResponse)
-def get_animal_history(animal_id: int, db: Session = Depends(get_db)):
-    from src.models.models import Report, ReportEvent, EventType, User, Attachment, AnimalObservation
+def get_animal_history(
+    animal_id: int,
+    days: int | None = None,
+    limit: int = 40,
+    db: Session = Depends(get_db),
+):
+    """
+    Historial del animal.
+    - days: si se pasa (ej. 7), solo reportes/obs de esa ventana (tablero rápido).
+    - limit: tope de reportes (default 40).
+    """
+    from src.models.models import Report, ReportEvent, Attachment, AnimalObservation
+    from src.timezone_ar import now_ar
+    from datetime import timedelta
+
     animal = (
         db.query(Animal)
         .options(joinedload(Animal.species), joinedload(Animal.breed), joinedload(Animal.care_profile))
@@ -326,45 +339,57 @@ def get_animal_history(animal_id: int, db: Session = Depends(get_db)):
     )
     if not animal:
         raise HTTPException(status_code=404, detail="Animal no encontrado")
-        
-    reports = db.query(Report).filter(Report.animal_id == animal_id).order_by(Report.created_at.desc()).all()
-    
+
+    safe_limit = max(1, min(int(limit or 40), 100))
+    reports_q = (
+        db.query(Report)
+        .options(
+            joinedload(Report.events).joinedload(ReportEvent.event_type),
+            joinedload(Report.user),
+            joinedload(Report.attachments),
+        )
+        .filter(Report.animal_id == animal_id)
+    )
+    since = None
+    if days is not None and int(days) > 0:
+        since = now_ar() - timedelta(days=int(days))
+        reports_q = reports_q.filter(Report.created_at >= since)
+
+    reports = reports_q.order_by(Report.created_at.desc()).limit(safe_limit).all()
+
     history = []
     for r in reports:
-        events = db.query(ReportEvent).filter(ReportEvent.report_id == r.id).all()
-        user = db.query(User).filter(User.id == r.user_id).first()
-        attachments = db.query(Attachment).filter(
-            Attachment.report_id == r.id,
-            Attachment.observation_id.is_(None),
-        ).all()
-        
-        event_dtos = []
-        for e in events:
-            etype = db.query(EventType).filter(EventType.id == e.event_type_id).first()
-            event_dtos.append(EventDTO(type=etype.name if etype else "Desconocido", value=e.value))
-
+        event_dtos = [
+            EventDTO(
+                type=e.event_type.name if e.event_type else "Desconocido",
+                value=e.value,
+            )
+            for e in (r.events or [])
+        ]
         attachment_dtos = [
             AttachmentDTO(id=a.id, file_url=a.file_url, file_type=a.file_type)
-            for a in attachments
+            for a in (r.attachments or [])
+            if a.observation_id is None
         ]
-            
         history.append(ReportHistoryDTO(
             id=r.id,
             created_at=r.created_at,
             transcript=r.audio_transcript,
-            user_name=user.name if user else "Desconocido",
+            user_name=r.user.name if r.user else "Desconocido",
             events=event_dtos,
             attachments=attachment_dtos,
         ))
 
     # Observaciones con multimedia (entidad débil 1:N)
-    obs_rows = (
+    obs_q = (
         db.query(AnimalObservation)
         .options(joinedload(AnimalObservation.attachments), joinedload(AnimalObservation.user))
         .filter(AnimalObservation.animal_id == animal_id)
-        .order_by(AnimalObservation.created_at.desc())
-        .all()
     )
+    if since is not None:
+        obs_q = obs_q.filter(AnimalObservation.created_at >= since)
+    obs_rows = obs_q.order_by(AnimalObservation.created_at.desc()).limit(safe_limit).all()
+
     observation_dtos = [
         ObservationDTO(
             id=o.id,
@@ -381,15 +406,20 @@ def get_animal_history(animal_id: int, db: Session = Depends(get_db)):
     ]
 
     # Medicaciones activas del animal
-    active_meds = db.query(AnimalMedication).join(MedicationCatalog).filter(
-        AnimalMedication.animal_id == animal_id,
-        AnimalMedication.is_current == True
-    ).all()
+    active_meds = (
+        db.query(AnimalMedication)
+        .options(joinedload(AnimalMedication.medication), joinedload(AnimalMedication.schedules))
+        .filter(
+            AnimalMedication.animal_id == animal_id,
+            AnimalMedication.is_current == True,  # noqa: E712
+        )
+        .all()
+    )
     med_dtos = [
         AnimalMedicationResponse(
             id=m.id,
             medication_id=m.medication_id,
-            medication_name=m.medication.name,
+            medication_name=m.medication.name if m.medication else "",
             dosage=m.dosage,
             frequency=m.frequency,
             is_current=m.is_current,
@@ -400,10 +430,14 @@ def get_animal_history(animal_id: int, db: Session = Depends(get_db)):
         )
         for m in active_meds
     ]
-        
+
     from src.dtos.animal_dto import WeightHistoryDTO
     from src.services.weight_helpers import list_weight_history
-    weight_history = [WeightHistoryDTO(**item) for item in list_weight_history(db, animal_id)]
+    weight_items = list_weight_history(db, animal_id)
+    # En vistas rápidas (tablero) no hace falta todo el historial de peso
+    if since is not None and len(weight_items) > 12:
+        weight_items = weight_items[:12]
+    weight_history = [WeightHistoryDTO(**item) for item in weight_items]
 
     return AnimalHistoryResponse(
         animal=AnimalResponse.model_validate(animal),
