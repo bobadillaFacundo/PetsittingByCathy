@@ -99,8 +99,7 @@ export default function GeneracionReportePanel() {
           Generación de Reporte de Estadía
         </h2>
         <p className="text-gray-500 text-sm mt-1">
-          Resume cómo estuvo la mascota desde su último ingreso hasta hoy: comida, pis, caca,
-          convivencia y medicación si corresponde.
+          Resume la última semana desde el ingreso: comida, pis, caca, convivencia y medicación si corresponde.
         </p>
       </div>
 

@@ -435,12 +435,23 @@ def get_evolution_analysis(animal_id: int, db: Session = Depends(get_db)):
     if not animal:
         raise HTTPException(status_code=404, detail="Animal no encontrado")
         
-    # Obtener últimos 2 reportes (el actual y el anterior) para comparar la evolución
-    reports = db.query(Report).filter(Report.animal_id == animal_id).order_by(Report.created_at.desc()).limit(2).all()
-    
+    # Solo reportes de la última semana (más rápido); como máximo los 8 más recientes
+    from datetime import timedelta
+    from src.timezone_ar import now_ar
+    week_ago = now_ar() - timedelta(days=7)
+    reports = (
+        db.query(Report)
+        .filter(Report.animal_id == animal_id, Report.created_at >= week_ago)
+        .order_by(Report.created_at.desc())
+        .limit(8)
+        .all()
+    )
+
     if not reports:
-        return EvolutionAnalysisResponse(analysis="No hay reportes suficientes para analizar la evolución.")
-        
+        return EvolutionAnalysisResponse(
+            analysis="No hay reportes de la última semana para analizar la evolución."
+        )
+
     # Invertir para que estén en orden cronológico (más antiguo primero) para la IA
     reports = list(reversed(reports))
     

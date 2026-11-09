@@ -660,14 +660,16 @@ REGLAS:
             reports_text += f"- Mascota: {r['animal']} | Reporte: {r['transcript']} | Fecha: {r['date']}\n"
 
         prompt = f"""Eres el asistente jefe de una guardería veterinaria.
-Lee los siguientes reportes de las últimas 24 horas y genera el "Clima de Hoy".
+Lee los siguientes reportes de la ÚLTIMA SEMANA y genera el "Clima" del tablero.
+Sé breve: el análisis debe ser rápido y concreto.
 
 Reglas estrictas:
 1. TODO el contenido (clima y alertas) debe estar EN ESPAÑOL de Argentina. Prohibido inglés.
-2. Redactá un párrafo general resumiendo el estado de la guardería (ej: "Día tranquilo, la mayoría comió bien, pero hay algunas alertas en observación"). Usá emojis de clima (☀️, ⛅, ⛈️).
+2. Redactá un párrafo corto (3-5 oraciones) resumiendo el estado de la guardería. Usá emojis de clima (☀️, ⛅, ⛈️).
 3. Extraé alertas reales SOLO si hay síntomas que requieran atención (no exageres: si un animal no hizo caca un día no es crítico; si vomitó sangre sí).
 4. Cada alerta.message debe ser una frase corta en español, clara para el cuidador.
-5. Respondé ÚNICAMENTE en formato JSON válido, sin texto adicional, con esta estructura:
+5. Priorizá lo más reciente de la semana; no inventes datos.
+6. Respondé ÚNICAMENTE en formato JSON válido, sin texto adicional, con esta estructura:
 {{
   "weather": "Párrafo del clima aquí en español...",
   "alerts": [
@@ -679,7 +681,7 @@ Reglas estrictas:
   ]
 }}
 
-Reportes de las últimas 24 horas:
+Reportes de la última semana:
 {reports_text}
 """
         messages = [

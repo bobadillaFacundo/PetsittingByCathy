@@ -166,26 +166,37 @@ def _build_dashboard(db: Session) -> DashboardResponse:
 @router.get("/weather")
 def get_weather_report(db: Session = Depends(get_db)):
     from src.services.audio_service import NLPService
-    
-    # Obtener reportes de las últimas 48hs
-    yesterday = now_ar() - timedelta(hours=48)
-    recent_reports = db.query(Report).filter(Report.created_at >= yesterday).all()
-    
+
+    # Solo última semana (más rápido y relevante para el tablero)
+    week_ago = now_ar() - timedelta(days=7)
+    recent_reports = (
+        db.query(Report)
+        .options(joinedload(Report.animal))
+        .filter(Report.created_at >= week_ago)
+        .order_by(Report.created_at.desc())
+        .limit(80)
+        .all()
+    )
+
     if not recent_reports:
         return {
-            "weather": "No hay reportes en las últimas 48 horas. El clima está despejado.",
+            "weather": "No hay reportes en la última semana. El clima está despejado.",
             "alerts": []
         }
-        
+
     reports_data = []
-    for r in recent_reports:
-        animal = db.query(Animal).filter(Animal.id == r.animal_id).first()
+    for r in reversed(recent_reports):
+        animal = r.animal
+        transcript = (r.audio_transcript or "").strip()
+        # Truncar transcripts largos para acelerar el análisis
+        if len(transcript) > 280:
+            transcript = transcript[:277] + "..."
         reports_data.append({
             "animal": animal.name if animal else "Desconocido",
-            "transcript": r.audio_transcript,
-            "date": r.created_at.strftime("%Y-%m-%d %H:%M")
+            "transcript": transcript or "(sin texto)",
+            "date": r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else "?"
         })
-        
+
     result = NLPService.generate_global_weather_report(reports_data)
     
     # Enriquecer las alertas con el animal_id y actualizar estados

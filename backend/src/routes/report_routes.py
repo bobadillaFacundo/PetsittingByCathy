@@ -601,15 +601,17 @@ from fastapi.responses import FileResponse
 from fpdf import FPDF
 import tempfile
 
-# Solo estados que implican ingreso real a la guardería
-DAYCARE_CHECKIN_STATUSES = {"Ingresada", "Finalizada"}
+# Estados de estadía (ingreso real o confirmada en guardería)
+DAYCARE_CHECKIN_STATUSES = {"Ingresada", "Finalizada", "Confirmada"}
+# Para el análisis IA solo miramos la última semana (más rápido y relevante)
+STAY_REPORT_LOOKBACK_DAYS = 7
 
 
 def _find_last_daycare_checkin(db: Session, animal_id: int):
-    """Última vez que la mascota ingresó a guardería (reserva de estadía)."""
+    """Última reserva de estadía de la mascota en guardería."""
     from src.models.models import Reservation
 
-    # Preferir la que sigue Ingresada; si no, la Finalizada más reciente
+    # Preferir la que sigue Ingresada; si no, la más reciente Confirmada/Finalizada
     current = (
         db.query(Reservation)
         .filter(
@@ -633,17 +635,39 @@ def _find_last_daycare_checkin(db: Session, animal_id: int):
     )
 
 
+def _stay_analysis_window(reservation) -> tuple:
+    """
+    Ventana de análisis: desde el ingreso (inicio del día) hasta ahora,
+    acotada a los últimos STAY_REPORT_LOOKBACK_DAYS días.
+    """
+    period_end_dt = now_ar()
+    lookback_start = period_end_dt - timedelta(days=STAY_REPORT_LOOKBACK_DAYS)
+
+    if reservation and reservation.start_date:
+        # Inicio del día del ingreso: evita cortar reportes por la hora exacta de la reserva
+        checkin_day_start = reservation.start_date.replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        # Si la reserva empieza en el futuro, usar solo lookback
+        if checkin_day_start > period_end_dt:
+            period_start_dt = lookback_start
+        else:
+            period_start_dt = max(checkin_day_start, lookback_start)
+    else:
+        period_start_dt = lookback_start
+
+    return period_start_dt, period_end_dt
+
+
 def _build_daycare_stay_context(db: Session, animal: Animal, reservation) -> dict:
-    """Arma el contexto de la estadía: último ingreso → ahora."""
+    """Arma el contexto de la estadía (última semana dentro del ingreso)."""
     from src.models.models import (
         AnimalMedication,
-        MedicationCatalog,
         AnimalObservation,
         AnimalCareProfile,
     )
 
-    period_start_dt = reservation.start_date
-    period_end_dt = now_ar()
+    period_start_dt, period_end_dt = _stay_analysis_window(reservation)
     period_start = period_start_dt.strftime("%Y-%m-%d %H:%M")
     period_end = period_end_dt.strftime("%Y-%m-%d %H:%M")
 
@@ -658,6 +682,25 @@ def _build_daycare_stay_context(db: Session, animal: Animal, reservation) -> dic
         .order_by(Report.created_at.asc())
         .all()
     )
+
+    # Si no hay datos en la ventana corta, ampliar a 30 días del animal
+    used_fallback = False
+    if not reports:
+        used_fallback = True
+        fallback_start = period_end_dt - timedelta(days=30)
+        period_start_dt = fallback_start
+        period_start = period_start_dt.strftime("%Y-%m-%d %H:%M")
+        reports = (
+            db.query(Report)
+            .options(joinedload(Report.events).joinedload(ReportEvent.event_type))
+            .filter(
+                Report.animal_id == animal.id,
+                Report.created_at >= fallback_start,
+                Report.created_at <= period_end_dt,
+            )
+            .order_by(Report.created_at.asc())
+            .all()
+        )
 
     event_lines = []
     transcript_lines = []
@@ -743,11 +786,20 @@ def _build_daycare_stay_context(db: Session, animal: Animal, reservation) -> dic
         if profile.familiar_with_animals:
             profile_bits.append(f"Familiaridad con animales: {profile.familiar_with_animals}")
 
+    reservation_status = reservation.status if reservation else "Sin reserva (última semana)"
+    reservation_id = reservation.id if reservation else None
+    note = ""
+    if used_fallback and reports:
+        note = (
+            "Nota: se ampliaron los datos a los últimos 30 días porque "
+            "no había reportes en la última semana del ingreso."
+        )
+
     return {
         "period_start": period_start,
         "period_end": period_end,
-        "reservation_status": reservation.status,
-        "reservation_id": reservation.id,
+        "reservation_status": reservation_status,
+        "reservation_id": reservation_id,
         "reports_count": len(reports),
         "events_text": "\n".join(event_lines) if event_lines else "Sin eventos registrados.",
         "transcripts_text": "\n".join(transcript_lines) if transcript_lines else "Sin transcripciones.",
@@ -755,6 +807,7 @@ def _build_daycare_stay_context(db: Session, animal: Animal, reservation) -> dic
         "observations_text": "\n".join(obs_lines) if obs_lines else "Sin observaciones adicionales.",
         "profile_text": "\n".join(profile_bits) if profile_bits else "Sin ficha de ingreso adicional.",
         "has_active_medication": bool(med_lines),
+        "fallback_note": note,
     }
 
 
@@ -799,17 +852,20 @@ def generate_daycare_stay_report(
         raise HTTPException(status_code=404, detail="Animal no encontrado")
 
     reservation = _find_last_daycare_checkin(db, animal_id)
-    if not reservation:
+    # Si no hay reserva, igual generamos con la última semana de reportes del animal
+    context = _build_daycare_stay_context(db, animal, reservation)
+    if context["reports_count"] == 0:
         raise HTTPException(
             status_code=400,
             detail=(
-                "No hay un ingreso de guardería registrado para esta mascota. "
-                "Creá o marcá una reserva como Ingresada o Finalizada."
+                "No hay reportes de la última semana para esta mascota. "
+                "Registrá un reporte diario o verificá que la mascota tenga historial reciente."
             ),
         )
 
-    context = _build_daycare_stay_context(db, animal, reservation)
     report_text = NLPService.generate_daycare_stay_report(animal.name, context)
+    if context.get("fallback_note"):
+        report_text = f"{context['fallback_note']}\n\n{report_text}"
 
     if (format or "json").lower() == "pdf":
         path = _render_stay_report_pdf(
