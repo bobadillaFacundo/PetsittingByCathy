@@ -474,3 +474,16 @@ class CriticalAlert(Base):
 
     animal = relationship("Animal")
     report = relationship("Report")
+
+
+class AiUsageLog(Base):
+    """Consumo de tokens por llamada a proveedores NLP (DeepSeek, Groq, etc.)."""
+    __tablename__ = "ai_usage_logs"
+    id = Column(Integer, primary_key=True, index=True)
+    provider = Column(String, nullable=False, index=True)  # deepseek | groq | vllm
+    model = Column(String, nullable=True)
+    purpose = Column(String, nullable=True, index=True)  # historia_clinica, extraccion_eventos, ...
+    prompt_tokens = Column(Integer, default=0, nullable=False)
+    completion_tokens = Column(Integer, default=0, nullable=False)
+    total_tokens = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime, default=now_ar, nullable=False, index=True)

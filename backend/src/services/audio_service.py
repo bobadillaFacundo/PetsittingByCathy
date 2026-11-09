@@ -60,38 +60,46 @@ VLLM_URL   = f"{_VLLM_BASE}/chat/completions"
 # ---------------------------------------------------------------------------
 whisper_model = None
 
-if USE_CUSTOM_WHISPER:
-    print(f"[STT] Usando Whisper Custom -> url={CUSTOM_WHISPER_URL}")
-elif GROQ_API_KEY:
-    print(f"[STT] Usando Groq STT -> modelo={GROQ_STT_MODEL}")
+# Audio/STT: siempre Groq (nunca DeepSeek).
+if GROQ_API_KEY:
+    print(f"[STT] Siempre Groq -> modelo={GROQ_STT_MODEL}")
+elif USE_CUSTOM_WHISPER:
+    print(f"[STT] Fallback Whisper Custom (sin GROQ_API_KEY) -> {CUSTOM_WHISPER_URL}")
 else:
-    print("ADVERTENCIA: GROQ_API_KEY y USE_CUSTOM_WHISPER no configurados. STT fallará o usará mock.")
+    print("ADVERTENCIA: GROQ_API_KEY no configurada. STT de audio fallará o usará mock.")
+
+# DeepSeek para TODO el NLP (reportes, chat, clima, evolución, etc.).
+# Groq se reserva para audio/STT y como respaldo NLP.
 
 if USE_DEEPSEEK and DEEPSEEK_API_KEY:
-    print(f"[NLP] Principal: DeepSeek ({DEEPSEEK_MODEL}) -> {DEEPSEEK_URL}")
-    if GROQ_API_KEY:
-        print(f"[NLP] Respaldo: Groq ({GROQ_MODEL})")
-elif USE_GROQ and GROQ_API_KEY:
-    print(f"[NLP] Principal: Groq ({GROQ_MODEL}) [DeepSeek no configurado]")
+    print(f"[NLP] DeepSeek principal (reportes/chat/clima/evolución) -> {DEEPSEEK_MODEL}")
+if GROQ_API_KEY:
+    print(f"[STT/NLP] Groq = audio siempre + respaldo NLP -> {GROQ_MODEL}")
 elif _VLLM_BASE:
-    print(f"[NLP] Principal: vLLM ({VLLM_MODEL}) -> {VLLM_URL}")
+    print(f"[NLP] Fallback vLLM ({VLLM_MODEL}) -> {VLLM_URL}")
 else:
-    print("[NLP] ADVERTENCIA: sin DeepSeek, Groq ni VLLM_BASE_URL configurados.")
+    print("[NLP] ADVERTENCIA: sin Groq ni DeepSeek configurados para NLP.")
 
 
 def _transcribe_with_api(file_path: str) -> str:
-    """Transcribe audio usando la API de Groq o un servidor Whisper Custom (compatible OpenAI)."""
-    url = CUSTOM_WHISPER_URL if USE_CUSTOM_WHISPER else GROQ_STT_URL
-    headers = {}
-    if not USE_CUSTOM_WHISPER and GROQ_API_KEY:
-        headers["Authorization"] = f"Bearer {GROQ_API_KEY}"
-        
+    """Transcribe audio SIEMPRE con Groq si hay key (DeepSeek no se usa para audio)."""
+    if GROQ_API_KEY:
+        url = GROQ_STT_URL
+        headers = {"Authorization": f"Bearer {GROQ_API_KEY}"}
+        model = GROQ_STT_MODEL
+    elif USE_CUSTOM_WHISPER:
+        url = CUSTOM_WHISPER_URL
+        headers = {}
+        model = "whisper-1"
+    else:
+        raise RuntimeError("No hay GROQ_API_KEY para transcribir audio.")
+
     data = {
-        "model": "whisper-1" if USE_CUSTOM_WHISPER else GROQ_STT_MODEL,
+        "model": model,
         "language": "es",
         "response_format": "json",
     }
-    
+
     with open(file_path, "rb") as audio_file:
         response = requests.post(
             url,
@@ -114,20 +122,16 @@ class AudioService:
 
     @staticmethod
     def transcribe_audio(file_path: str) -> str:
-        # ── Prioridad 1: API (Custom Whisper o Groq STT) ──────────────────
-        if USE_CUSTOM_WHISPER or GROQ_API_KEY:
+        # Audio siempre por Groq (nunca DeepSeek).
+        if GROQ_API_KEY or USE_CUSTOM_WHISPER:
             try:
                 transcript = _transcribe_with_api(file_path)
                 if not transcript:
                     return "Silencio o ruido de fondo (no se detectó voz real)."
                 return transcript
             except Exception as e:
-                print(f"[STT] Error con API de transcripción, intentando fallback local: {e}")
+                print(f"[STT] Error con API de transcripción: {e}")
 
-        # ── Prioridad 2: Eliminado para evitar OOM en Render ──────────────────────
-        # Si llega aquí sin GROQ_API_KEY, usamos el mock por defecto.
-
-        # ── Sin modelo disponible ────────────────────────────────────────────
         return "Theo comió, tomó agua, hizo pis, no hizo caca. Cleopatra tomó poca agua y tuvo caca blanda."
 
 
@@ -152,19 +156,36 @@ class NLPService:
         return [{"role": "system", "content": NLPService._ES_RULE}, *messages]
 
     @staticmethod
-    def _post_chat(url: str, api_key: str | None, payload: dict, timeout: int = 90) -> str:
+    def _post_chat(
+        url: str,
+        api_key: str | None,
+        payload: dict,
+        *,
+        provider: str,
+        purpose: str,
+        timeout: int = 90,
+    ) -> str:
+        from src.services.ai_usage import log_ai_usage
+
         headers = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
         response = requests.post(url, headers=headers, json=payload, timeout=timeout)
         response.raise_for_status()
-        content = extract_groq_text(response.json())
+        data = response.json()
+        log_ai_usage(
+            provider=provider,
+            model=payload.get("model"),
+            purpose=purpose,
+            payload=data,
+        )
+        content = extract_groq_text(data)
         if not content:
             raise RuntimeError(f"Respuesta vacía desde {url}")
         return content
 
     @staticmethod
-    def _call_deepseek(messages: list, json_format: bool, temperature: float) -> str:
+    def _call_deepseek(messages: list, json_format: bool, temperature: float, purpose: str) -> str:
         payload = {
             "model": DEEPSEEK_MODEL,
             "messages": messages,
@@ -172,10 +193,18 @@ class NLPService:
         }
         if json_format:
             payload["response_format"] = {"type": "json_object"}
-        return NLPService._post_chat(DEEPSEEK_URL, DEEPSEEK_API_KEY, payload)
+        return NLPService._post_chat(
+            DEEPSEEK_URL,
+            DEEPSEEK_API_KEY,
+            payload,
+            provider="deepseek",
+            purpose=purpose,
+        )
 
     @staticmethod
-    def _call_groq(messages: list, json_format: bool, temperature: float) -> str:
+    def _call_groq(messages: list, json_format: bool, temperature: float, purpose: str) -> str:
+        from src.services.ai_usage import log_ai_usage
+
         last_error = None
         for model_name in nlp_models_to_try(GROQ_MODEL):
             payload = {
@@ -195,8 +224,15 @@ class NLPService:
                 timeout=90,
             )
             if response.status_code == 200:
-                content = extract_groq_text(response.json())
+                data = response.json()
+                content = extract_groq_text(data)
                 if content:
+                    log_ai_usage(
+                        provider="groq",
+                        model=model_name,
+                        purpose=purpose,
+                        payload=data,
+                    )
                     return content
                 last_error = f"Groq {model_name} devolvió contenido vacío"
                 continue
@@ -208,7 +244,7 @@ class NLPService:
         raise RuntimeError(last_error or "Groq no respondió")
 
     @staticmethod
-    def _call_vllm(messages: list, json_format: bool, temperature: float) -> str:
+    def _call_vllm(messages: list, json_format: bool, temperature: float, purpose: str) -> str:
         payload = {
             "model": VLLM_MODEL,
             "messages": messages,
@@ -216,39 +252,54 @@ class NLPService:
         }
         if json_format:
             payload["response_format"] = {"type": "json_object"}
-        return NLPService._post_chat(VLLM_URL, None, payload)
+        return NLPService._post_chat(
+            VLLM_URL,
+            None,
+            payload,
+            provider="vllm",
+            purpose=purpose,
+        )
 
     @staticmethod
-    def _call_llm(messages: list, json_format: bool = False, temperature: float = None) -> str:
-        """Llama al LLM: DeepSeek (principal) → Groq (respaldo) → vLLM."""
+    def _call_llm(
+        messages: list,
+        json_format: bool = False,
+        temperature: float = None,
+        purpose: str = "nlp",
+    ) -> str:
+        """
+        NLP routing:
+        - DeepSeek: reportes, chat, clima, evolución (y demás NLP)
+        - Groq: respaldo NLP
+        Audio/STT nunca pasa por acá: siempre Groq en AudioService.
+        """
         messages = NLPService._with_spanish(messages)
         if temperature is None:
             temperature = 0.05 if json_format else 0.7
 
         errors = []
 
-        # 1) DeepSeek principal
+        # 1) DeepSeek para chat / clima / evolución / reportes / todo NLP
         if USE_DEEPSEEK and DEEPSEEK_API_KEY:
             try:
-                return NLPService._call_deepseek(messages, json_format, temperature)
+                return NLPService._call_deepseek(messages, json_format, temperature, purpose)
             except Exception as e:
-                print(f"[NLP] DeepSeek falló, intentando respaldo: {e}")
+                print(f"[NLP] DeepSeek falló ({purpose}), respaldo Groq: {e}")
                 errors.append(f"DeepSeek: {e}")
 
-        # 2) Groq como respaldo (o principal si no hay DeepSeek)
-        vllm_base = os.getenv("VLLM_BASE_URL", "").strip()
-        use_groq_now = bool(GROQ_API_KEY) and (USE_GROQ or not vllm_base or bool(errors))
-        if use_groq_now:
+        # 2) Groq como respaldo NLP (el audio STT no usa este método)
+        if GROQ_API_KEY:
             try:
-                return NLPService._call_groq(messages, json_format, temperature)
+                return NLPService._call_groq(messages, json_format, temperature, purpose)
             except Exception as e:
                 print(f"[NLP] Groq falló: {e}")
                 errors.append(f"Groq: {e}")
 
         # 3) vLLM local si está configurado
+        vllm_base = os.getenv("VLLM_BASE_URL", "").strip()
         if vllm_base:
             try:
-                return NLPService._call_vllm(messages, json_format, temperature)
+                return NLPService._call_vllm(messages, json_format, temperature, purpose)
             except Exception as e:
                 print(f"[NLP] vLLM falló: {e}")
                 errors.append(f"vLLM: {e}")
@@ -345,7 +396,9 @@ Generá ahora el documento completo con la estructura obligatoria, en español, 
         ]
 
         try:
-            return NLPService._call_llm(messages, json_format=False, temperature=0.2)
+            return NLPService._call_llm(
+                messages, json_format=False, temperature=0.2, purpose="historia_clinica"
+            )
         except Exception as e:
             print(f"Error generando historia clínica: {e}")
             return (
@@ -404,7 +457,11 @@ REPORTE REAL A ANALIZAR: "{transcript}"
 Responde ÚNICAMENTE con el objeto JSON. NO inventes eventos que no se mencionaron.
 """
         try:
-            content = NLPService._call_llm([{"role": "user", "content": prompt}], json_format=True)
+            content = NLPService._call_llm(
+                [{"role": "user", "content": prompt}],
+                json_format=True,
+                purpose="extraccion_eventos",
+            )
             
             # Limpiar por si el modelo devuelve markdown extra
             content = content.replace("```json", "").replace("```", "").strip()
@@ -442,7 +499,7 @@ Sé breve, amable y directo. Respondé siempre en español. Si no sabes la respu
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": query}
             ]
-            return NLPService._call_llm(messages, json_format=False)
+            return NLPService._call_llm(messages, json_format=False, purpose="chat")
         except Exception as e:
             print(f"Error con LLM (chat): {e}")
             return "Ocurrió un error al contactar al modelo de IA. Revisa los logs o tu conexión."
@@ -546,7 +603,9 @@ Redactá ahora el reporte completo en español, con la estructura obligatoria.
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ]
-            return NLPService._call_llm(messages, json_format=False, temperature=0.25)
+            return NLPService._call_llm(
+                messages, json_format=False, temperature=0.25, purpose="reporte_estadia"
+            )
         except Exception as e:
             print(f"Error generando reporte de estadía: {e}")
             return (
@@ -586,7 +645,9 @@ REGLAS:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Historial de {animal_name}:\n{history_context}\n\nRedactá un resumen neutro y breve EN ESPAÑOL."}
             ]
-            return NLPService._call_llm(messages, json_format=False, temperature=0.1)
+            return NLPService._call_llm(
+                messages, json_format=False, temperature=0.1, purpose="evolucion"
+            )
         except Exception as e:
             print(f"Error con LLM (evolución): {e}")
             return "Ocurrió un error al generar el análisis. Revisa los logs de la aplicación."
@@ -627,7 +688,9 @@ Reportes de las últimas 24 horas:
         ]
 
         try:
-            ai_text = NLPService._call_llm(messages, json_format=True, temperature=0.0)
+            ai_text = NLPService._call_llm(
+                messages, json_format=True, temperature=0.0, purpose="clima"
+            )
             data = json.loads(ai_text)
             return NLPService._normalize_weather_spanish(data)
         except Exception as e:

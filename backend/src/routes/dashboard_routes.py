@@ -10,6 +10,7 @@ from src.database.session import get_db
 from src.models.models import Animal, Report, ReportEvent, EventType, CriticalAlert
 from src.dtos.animal_dto import AnimalResponse
 from src.services.report_helpers import resolve_critical_alert, format_critical_alert_message
+from src.auth import get_current_user
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -226,3 +227,11 @@ def get_dictionary(db: Session = Depends(get_db)):
     ensure_optional_tag_sets(db)
     tags = ensure_required_tag_sets(db)
     return [tag_set_to_dict(tag) for tag in tags]
+
+
+@router.get("/ai-usage")
+def get_ai_usage(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    """Saldo DeepSeek + consumo local de tokens (hoy / semana / mes)."""
+    from src.services.ai_usage import build_usage_report
+
+    return build_usage_report(db)

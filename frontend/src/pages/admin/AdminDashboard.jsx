@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { 
   Users, Activity, BookOpen, LogOut, Settings, 
-  Menu, Home, Database, HeartPulse, FileText, PawPrint, Palette, ClipboardList
+  Menu, Home, Database, HeartPulse, FileText, PawPrint, Palette, ClipboardList, Cpu
 } from 'lucide-react';
 import MascotasCRUD from './MascotasCRUD';
 import AuditoriaPanel from './AuditoriaPanel';
@@ -13,6 +13,7 @@ import UsuariosPanel from './UsuariosPanel';
 import ExportacionPanel from './ExportacionPanel';
 import ColoresPanel from './ColoresPanel';
 import GeneracionReportePanel from './GeneracionReportePanel';
+import ConsumoIAPanel from './ConsumoIAPanel';
 import { clearSession, isAuthenticated } from '../../lib/auth';
 
 export default function AdminDashboard() {
@@ -43,6 +44,7 @@ export default function AdminDashboard() {
     { id: 'guarderia', label: 'Mascotas', icon: PawPrint },
     { id: 'pacientes', label: 'Guardería', icon: HeartPulse },
     { id: 'generacion-reporte', label: 'Generación Reporte', shortLabel: 'Reporte', icon: ClipboardList },
+    { id: 'consumo-ia', label: 'Consumo IA', shortLabel: 'IA', icon: Cpu },
     { id: 'catalogos', label: 'Gestión de Catálogos', icon: Settings },
     { id: 'exportar', label: 'Exportar Historias', icon: FileText },
     ...(isSuperAdmin ? [
@@ -144,6 +146,10 @@ export default function AdminDashboard() {
 
             {activeTab === 'generacion-reporte' && (
               <GeneracionReportePanel />
+            )}
+
+            {activeTab === 'consumo-ia' && (
+              <ConsumoIAPanel />
             )}
 
             {activeTab === 'analisis' && (
