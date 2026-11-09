@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
-import { format, parse, startOfWeek, getDay, startOfMonth, endOfMonth, addMonths, subMonths } from 'date-fns';
+import { format, parse, startOfWeek, getDay, startOfMonth, endOfMonth, addMonths, subMonths, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { Plus, X, Calendar as CalendarIcon, Save, Trash2, Search } from 'lucide-react';
-import { parseApiDateTime, toApiDateTime, formatForInput, isAllDayAlert } from '../../lib/datetimeAr';
+import { parseApiDateTime, toApiDateTime, formatForInput, formatArRange, isAllDayAlert, AR_TIMEZONE } from '../../lib/datetimeAr';
 import { API_BASE, apiUrl, mediaUrl } from '../../lib/api';
 import AgendaGroupedView from './AgendaGroupedView';
 
@@ -99,6 +99,51 @@ function eventSearchText(ev) {
     r.recurrence,
     r.series_id ? 'serie recurrente' : '',
   ].filter(Boolean).join(' ').toLowerCase();
+}
+
+/** Día calendario en Argentina (evita que el TZ del navegador mueva el día). */
+function arCalendarDay(value) {
+  const d = parseApiDateTime(value);
+  if (Number.isNaN(d.getTime())) return d;
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: AR_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(d);
+  const get = (t) => Number(parts.find((p) => p.type === t)?.value || 0);
+  return new Date(get('year'), get('month') - 1, get('day'), 0, 0, 0, 0);
+}
+
+/** Evento de estadía: barra all-day inclusiva (RBC usa fin exclusivo). */
+function reservationToCalendarEvent(r) {
+  const startRaw = parseApiDateTime(r.start_date);
+  const endRaw = parseApiDateTime(r.end_date);
+  const isStay = !isServiceEvent(r.status);
+  if (isStay) {
+    const startDay = arCalendarDay(r.start_date);
+    const endDay = arCalendarDay(r.end_date);
+    // Fin exclusivo: el egreso debe verse en el día de end_date
+    const endExclusive = addDays(endDay, 1);
+    return {
+      id: r.id,
+      title: reservationTitle(r),
+      start: startDay,
+      end: endExclusive,
+      allDay: true,
+      resource: r,
+      isAlert: false,
+    };
+  }
+  return {
+    id: r.id,
+    title: reservationTitle(r),
+    start: startRaw,
+    end: endRaw,
+    allDay: false,
+    resource: r,
+    isAlert: false,
+  };
 }
 
 const RECURRENCE_OPTIONS = [
@@ -210,14 +255,7 @@ export default function CalendarioPanel() {
       
       if (resRes.ok) {
         const data = await resRes.json();
-        const resEvents = data.map(r => ({
-          id: r.id,
-          title: reservationTitle(r),
-          start: parseApiDateTime(r.start_date),
-          end: parseApiDateTime(r.end_date),
-          resource: r,
-          isAlert: false
-        }));
+        const resEvents = data.map(reservationToCalendarEvent);
         calendarEvents = [...calendarEvents, ...resEvents];
       }
       
@@ -305,10 +343,20 @@ export default function CalendarioPanel() {
 
   const handleSelectSlot = ({ start, end }) => {
     if (!isAdmin) return;
+    // En vista mes, react-big-calendar usa fin exclusivo (medianoche del día siguiente).
+    let endInclusive = end;
+    if (start && end && end > start) {
+      const midnight =
+        end.getHours() === 0 && end.getMinutes() === 0 && end.getSeconds() === 0;
+      if (midnight) {
+        endInclusive = new Date(end.getTime() - 1);
+        endInclusive.setHours(18, 0, 0, 0);
+      }
+    }
     openModal({
       animal_id: '',
       start_date: formatForInput(start),
-      end_date: formatForInput(end),
+      end_date: formatForInput(endInclusive),
       status: 'Pendiente',
       notes: '',
       belongings_photos: null
@@ -600,10 +648,36 @@ export default function CalendarioPanel() {
   const searchResults = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (q.length < 2) return [];
+    const STAY_STATUS_RANK = {
+      Ingresada: 0,
+      Confirmada: 1,
+      Pendiente: 2,
+      Finalizada: 3,
+      Cancelada: 4,
+    };
+    const rank = (ev) => {
+      // Las alertas (medicación, vacunas, etc.) no deben tapar la estadía real.
+      if (ev.isAlert) return 100;
+      if (isServiceEvent(ev.resource?.status)) return 50;
+      const statusRank = STAY_STATUS_RANK[ev.resource?.status];
+      return statusRank != null ? statusRank : 40;
+    };
+    const durationMs = (ev) =>
+      Math.max(0, (ev.end?.getTime?.() || 0) - (ev.start?.getTime?.() || 0));
+
     return events
       .filter((ev) => eventSearchText(ev).includes(q))
-      .sort((a, b) => (b.start?.getTime?.() || 0) - (a.start?.getTime?.() || 0))
-      .slice(0, 12);
+      .sort((a, b) => {
+        const rankDiff = rank(a) - rank(b);
+        if (rankDiff !== 0) return rankDiff;
+        // Dentro del mismo tipo: estadías más largas / recientes primero
+        if (!a.isAlert && !b.isAlert && !isServiceEvent(a.resource?.status)) {
+          const durDiff = durationMs(b) - durationMs(a);
+          if (durDiff !== 0) return durDiff;
+        }
+        return (b.start?.getTime?.() || 0) - (a.start?.getTime?.() || 0);
+      })
+      .slice(0, 20);
   }, [events, searchQuery]);
 
   const jumpToSearchResult = (event) => {
@@ -611,7 +685,12 @@ export default function CalendarioPanel() {
     setSearchQuery('');
     if (event.start) {
       setCurrentDate(event.start);
-      setCurrentView('day');
+      const stayMs =
+        !event.isAlert && event.end
+          ? (event.end.getTime() - event.start.getTime())
+          : 0;
+      // Estadías largas: vista mes para ver todo el tramo ingreso→egreso
+      setCurrentView(stayMs > 36 * 60 * 60 * 1000 ? 'month' : 'day');
     }
     handleSelectEvent(event);
   };
@@ -714,17 +793,24 @@ export default function CalendarioPanel() {
                 <li className="px-3 py-3 text-sm text-gray-400 italic">No hay coincidencias.</li>
               )}
               {searchResults.map((ev) => (
-                <li key={`${ev.id}-${ev.start?.getTime?.() || 0}`}>
+                <li key={`${ev.isAlert ? 'a' : 'r'}-${ev.id}-${ev.start?.getTime?.() || 0}`}>
                   <button
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => jumpToSearchResult(ev)}
                     className="w-full text-left px-3 py-2.5 hover:bg-indigo-50 border-b border-gray-100 last:border-0"
                   >
-                    <p className="text-sm font-medium text-gray-800 truncate">{ev.title}</p>
+                    <p className="text-sm font-medium text-gray-800 truncate">
+                      {ev.isAlert ? 'Alerta · ' : ''}
+                      {ev.title}
+                    </p>
                     <p className="text-xs text-gray-500">
-                      {ev.start ? format(ev.start, "d MMM yyyy · HH:mm", { locale: es }) : ''}
-                      {ev.resource?.notes ? ` · ${ev.resource.notes}` : ''}
+                      {formatArRange(
+                        ev.resource?.start_date || ev.start,
+                        ev.resource?.end_date || ev.end,
+                        !ev.allDay
+                      )}
+                      {ev.resource?.notes && !ev.isAlert ? ` · ${ev.resource.notes}` : ''}
                     </p>
                   </button>
                 </li>
