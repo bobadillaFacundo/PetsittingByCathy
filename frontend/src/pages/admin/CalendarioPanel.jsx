@@ -4,7 +4,7 @@ import { format, parse, startOfWeek, getDay, startOfMonth, endOfMonth, addMonths
 import { es } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { Plus, X, Calendar as CalendarIcon, Save, Trash2, Search } from 'lucide-react';
-import { parseApiDateTime, toApiDateTime, formatForInput, formatArRange, isAllDayAlert, AR_TIMEZONE } from '../../lib/datetimeAr';
+import { parseApiDateTime, toApiDateTime, formatForInput, formatArDisplay, formatArRange, isAllDayAlert, AR_TIMEZONE } from '../../lib/datetimeAr';
 import { API_BASE, apiUrl, mediaUrl } from '../../lib/api';
 import AgendaGroupedView from './AgendaGroupedView';
 
@@ -131,6 +131,9 @@ function reservationToCalendarEvent(r) {
       start: startDay,
       end: endExclusive,
       allDay: true,
+      // Fechas reales de la reserva (inclusivas) para búsqueda/UI; no usar `end` exclusivo
+      searchStart: r.start_date,
+      searchEnd: r.end_date,
       resource: r,
       isAlert: false,
     };
@@ -141,9 +144,27 @@ function reservationToCalendarEvent(r) {
     start: startRaw,
     end: endRaw,
     allDay: false,
+    searchStart: r.start_date,
+    searchEnd: r.end_date,
     resource: r,
     isAlert: false,
   };
+}
+
+/** Texto de rango para el buscador: siempre ingreso→egreso reales, nunca el fin exclusivo del mes. */
+function searchRangeLabel(ev) {
+  const r = ev.resource || {};
+  if (!ev.isAlert && (ev.searchStart || r.start_date) && (ev.searchEnd || r.end_date)) {
+    const stay = !isServiceEvent(r.status);
+    return formatArRange(ev.searchStart || r.start_date, ev.searchEnd || r.end_date, !stay);
+  }
+  if (ev.isAlert) {
+    return formatArDisplay(r.due_date || ev.start, !ev.allDay);
+  }
+  if (ev.allDay && ev.start && ev.end) {
+    return formatArRange(ev.start, addDays(ev.end, -1), false);
+  }
+  return formatArRange(ev.start, ev.end, true);
 }
 
 const RECURRENCE_OPTIONS = [
@@ -655,29 +676,47 @@ export default function CalendarioPanel() {
       Finalizada: 3,
       Cancelada: 4,
     };
+    const animalNameOf = (ev) =>
+      (ev.resource?.animal?.name || ev.resource?.animal_name || '').toLowerCase();
+    const isStayEv = (ev) =>
+      !ev.isAlert && !isServiceEvent(ev.resource?.status);
     const rank = (ev) => {
-      // Las alertas (medicación, vacunas, etc.) no deben tapar la estadía real.
+      const name = animalNameOf(ev);
+      const nameHit = name === q || name.startsWith(q) || name.includes(q);
+      // Nombre de mascota + estadía primero (ej. "banana")
+      if (nameHit && isStayEv(ev)) {
+        const statusRank = STAY_STATUS_RANK[ev.resource?.status];
+        return statusRank != null ? statusRank : 5;
+      }
+      if (isStayEv(ev)) return 20 + (STAY_STATUS_RANK[ev.resource?.status] ?? 5);
+      if (!ev.isAlert && isServiceEvent(ev.resource?.status)) return 50;
+      if (ev.isAlert && nameHit) return 80;
       if (ev.isAlert) return 100;
-      if (isServiceEvent(ev.resource?.status)) return 50;
-      const statusRank = STAY_STATUS_RANK[ev.resource?.status];
-      return statusRank != null ? statusRank : 40;
+      return 40;
     };
-    const durationMs = (ev) =>
-      Math.max(0, (ev.end?.getTime?.() || 0) - (ev.start?.getTime?.() || 0));
+    const stayDurationMs = (ev) => {
+      const a = parseApiDateTime(ev.searchStart || ev.resource?.start_date || ev.start);
+      const b = parseApiDateTime(ev.searchEnd || ev.resource?.end_date || ev.start);
+      if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return 0;
+      return Math.max(0, b.getTime() - a.getTime());
+    };
 
-    return events
-      .filter((ev) => eventSearchText(ev).includes(q))
+    const matched = events.filter((ev) => eventSearchText(ev).includes(q));
+    const stays = matched.filter(isStayEv).sort((a, b) => {
+      const rankDiff = rank(a) - rank(b);
+      if (rankDiff !== 0) return rankDiff;
+      return stayDurationMs(b) - stayDurationMs(a);
+    });
+    const rest = matched
+      .filter((ev) => !isStayEv(ev))
       .sort((a, b) => {
         const rankDiff = rank(a) - rank(b);
         if (rankDiff !== 0) return rankDiff;
-        // Dentro del mismo tipo: estadías más largas / recientes primero
-        if (!a.isAlert && !b.isAlert && !isServiceEvent(a.resource?.status)) {
-          const durDiff = durationMs(b) - durationMs(a);
-          if (durDiff !== 0) return durDiff;
-        }
         return (b.start?.getTime?.() || 0) - (a.start?.getTime?.() || 0);
-      })
-      .slice(0, 20);
+      });
+
+    // Estadías completas primero; pocas alertas/servicios después para no tapar el rango real
+    return [...stays, ...rest.slice(0, 8)].slice(0, 20);
   }, [events, searchQuery]);
 
   const jumpToSearchResult = (event) => {
@@ -801,15 +840,13 @@ export default function CalendarioPanel() {
                     className="w-full text-left px-3 py-2.5 hover:bg-indigo-50 border-b border-gray-100 last:border-0"
                   >
                     <p className="text-sm font-medium text-gray-800 truncate">
-                      {ev.isAlert ? 'Alerta · ' : ''}
+                      {ev.isAlert
+                        ? 'Alerta · '
+                        : (!isServiceEvent(ev.resource?.status) ? 'Estadía · ' : '')}
                       {ev.title}
                     </p>
                     <p className="text-xs text-gray-500">
-                      {formatArRange(
-                        ev.resource?.start_date || ev.start,
-                        ev.resource?.end_date || ev.end,
-                        !ev.allDay
-                      )}
+                      {searchRangeLabel(ev)}
                       {ev.resource?.notes && !ev.isAlert ? ` · ${ev.resource.notes}` : ''}
                     </p>
                   </button>
