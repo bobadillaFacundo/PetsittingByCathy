@@ -377,6 +377,8 @@ class AnimalMedication(Base):
     amount_per_day = Column(String, nullable=True)
     duration_days = Column(Integer, nullable=True)
     is_forever = Column(Boolean, default=False)
+    # Día 1 del tratamiento (la carga cuenta como primer día)
+    start_date = Column(Date, nullable=True)
 
     animal = relationship("Animal", back_populates="medications")
     medication = relationship("MedicationCatalog")

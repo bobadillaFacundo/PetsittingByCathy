@@ -224,7 +224,13 @@ def confirm_report(
                     db.add(catalog)
                     db.flush()
                 dosage = fields.get("dosage") or "No especificada"
-                animal_med = AnimalMedication(animal_id=animal.id, medication_id=catalog.id, dosage=dosage, frequency="Según indicación")
+                animal_med = AnimalMedication(
+                    animal_id=animal.id,
+                    medication_id=catalog.id,
+                    dosage=dosage,
+                    frequency="Según indicación",
+                    start_date=today_ar(),
+                )
                 db.add(animal_med)
                 
             elif table_name == "AnimalObservation":
@@ -366,7 +372,9 @@ def _apply_inserts_to_report(db, report, animal, inserts):
                 db.flush()
             db.add(AnimalMedication(
                 animal_id=animal.id, medication_id=catalog.id,
-                dosage=fields.get("dosage") or "No especificada", frequency="Según indicación"
+                dosage=fields.get("dosage") or "No especificada",
+                frequency="Según indicación",
+                start_date=today_ar(),
             ))
         elif table_name == "AnimalObservation":
             text = fields.get("observation")
@@ -813,14 +821,27 @@ def _build_daycare_stay_context(db: Session, animal: Animal, reservation) -> dic
     meds = (
         db.query(AnimalMedication)
         .options(joinedload(AnimalMedication.medication), joinedload(AnimalMedication.schedules))
-        .filter(
-            AnimalMedication.animal_id == animal.id,
-            AnimalMedication.is_current == True,  # noqa: E712
-        )
+        .filter(AnimalMedication.animal_id == animal.id)
         .all()
     )
     med_lines = []
+    period_start_day = period_start_dt.date() if hasattr(period_start_dt, "date") else period_start_dt
+    period_end_day = period_end_dt.date() if hasattr(period_end_dt, "date") else period_end_dt
+
+    def _med_overlaps_period(m) -> bool:
+        if m.is_current:
+            return True
+        start = m.start_date or period_start_day
+        if m.is_forever:
+            return start <= period_end_day
+        if m.duration_days and m.duration_days > 0:
+            end = start + timedelta(days=m.duration_days - 1)
+            return start <= period_end_day and end >= period_start_day
+        return start >= period_start_day and start <= period_end_day
+
     for m in meds:
+        if not _med_overlaps_period(m):
+            continue
         name = m.medication.name if m.medication else "Medicamento"
         times = ", ".join(
             sorted(
@@ -834,9 +855,12 @@ def _build_daycare_stay_context(db: Session, animal: Animal, reservation) -> dic
         forever = "tratamiento continuo" if m.is_forever else (
             f"{m.duration_days} días" if m.duration_days else "duración no indicada"
         )
+        start_txt = m.start_date.isoformat() if m.start_date else "sin fecha de inicio"
+        estado = "actual" if m.is_current else "en el período"
         med_lines.append(
             f"- {name} | dosis: {m.dosage} | frec.: {m.frequency}"
             f"{f' | horarios: {times}' if times else ''} | {forever}"
+            f" | inicio: {start_txt} | estado: {estado}"
         )
 
     observations = (
@@ -859,6 +883,15 @@ def _build_daycare_stay_context(db: Session, animal: Animal, reservation) -> dic
         .filter(AnimalCareProfile.animal_id == animal.id)
         .first()
     )
+    # Medicación de ficha de ingreso / postoperatoria: debe figurar en MEDICACIÓN del reporte
+    if profile and profile.intake_medication and str(profile.intake_medication).strip():
+        med_lines.insert(
+            0,
+            f"- Medicación de ingreso / postoperatoria (ficha): {profile.intake_medication.strip()}",
+        )
+    if profile and profile.needs_medication and not med_lines:
+        med_lines.append("- La ficha indica que requiere medicación (detalle no cargado en medicamentos).")
+
     profile_bits = []
     if profile:
         if profile.dog_sociability:

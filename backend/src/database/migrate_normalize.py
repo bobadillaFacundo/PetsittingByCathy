@@ -240,6 +240,23 @@ def _migrate_animal_care_profile(inspector) -> None:
     print("  OK animal_care_profiles (columnas + filas por animal)")
 
 
+def _migrate_medication_start_date(inspector) -> None:
+    """Ancla el tratamiento al día de carga (día 1), no a 'hoy' al ver el calendario."""
+    if not table_exists(inspector, "animal_medications"):
+        return
+    if column_exists(inspector, "animal_medications", "start_date"):
+        return
+    print("Agregando animal_medications.start_date...")
+    run_ddl("ALTER TABLE animal_medications ADD COLUMN IF NOT EXISTS start_date DATE")
+    # Existentes: anclar a hoy para no regenerar ventanas que se corren cada día
+    run_ddl(
+        "UPDATE animal_medications "
+        "SET start_date = CURRENT_DATE "
+        "WHERE start_date IS NULL"
+    )
+    print("  OK animal_medications.start_date")
+
+
 def _migrate_reservation_recurrence(inspector) -> None:
     if not table_exists(inspector, "reservations"):
         return
@@ -508,6 +525,9 @@ def migrate():
         inspector = inspect(engine)
         _migrate_animal_care_profile(inspector)
 
+        inspector = inspect(engine)
+        _migrate_medication_start_date(inspector)
+
         # --- Vacunas: foto/certificado asociado ---
         inspector = inspect(engine)
         if table_exists(inspector, "vaccines") and not column_exists(inspector, "vaccines", "document_url"):
@@ -519,6 +539,34 @@ def migrate():
         print("Verificando conjuntos opcionales (Peso)...")
         ensure_optional_tag_sets(db)
         print("  OK conjuntos opcionales")
+
+        # --- Usuario Cathy: rotación de contraseña (una sola vez) ---
+        if table_exists(inspector, "users"):
+            if not table_exists(inspector, "schema_migrations"):
+                db.execute(text(
+                    "CREATE TABLE IF NOT EXISTS schema_migrations ("
+                    "name VARCHAR(255) PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+                ))
+                db.commit()
+            already = db.execute(text(
+                "SELECT 1 FROM schema_migrations WHERE name = 'cathy_password_reset_20261113'"
+            )).fetchone()
+            if not already:
+                print("Actualizando contraseña del usuario Cathy...")
+                # Hash bcrypt de la nueva clave (no se guarda la clave en texto plano)
+                new_hash = "$2a$10$dBS0jWSF8Y2tRpyb0s1bTOor4OkJHKfiHWP6c00.1Xschx1QCowX."
+                updated = db.execute(
+                    text(
+                        "UPDATE users SET password_hash = :ph "
+                        "WHERE lower(name) = 'cathy'"
+                    ),
+                    {"ph": new_hash},
+                )
+                db.execute(text(
+                    "INSERT INTO schema_migrations (name) VALUES ('cathy_password_reset_20261113')"
+                ))
+                db.commit()
+                print(f"  OK Cathy password reset ({updated.rowcount} fila/s)")
 
         print("\nMigración completada. Reinicia el backend.")
     except Exception as e:

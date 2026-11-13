@@ -628,9 +628,11 @@ Usá exactamente estos encabezados en mayúsculas, en este orden:
 4) CONVIVENCIA Y SOCIALIZACIÓN
    - Cómo se llevó con otros animales y con el entorno (juego, tolerancia, aislamiento, incidentes).
    - Si no hay datos explícitos de convivencia, decilo: "No se registraron observaciones de convivencia en este período."
-5) MEDICACIÓN (SOLO SI AMERITA)
-   - Incluí esta sección SOLO si hay medicación activa en ficha O eventos/transcripciones de medicación en el período.
-   - Si no amerita, omití la sección por completo (no escribas "N/A").
+5) MEDICACIÓN
+   - Si el bloque MEDICACIÓN EN FICHA tiene ítems (medicamentos cargados O medicación de ingreso/postoperatoria), esta sección es OBLIGATORIA.
+   - Incluí nombre, dosis, frecuencia, duración/horarios y, si figura, medicación postoperatoria o de ingreso.
+   - Si además hay eventos/transcripciones de medicación en el período, mencioná si se administró según esos registros.
+   - Solo omití la sección si MEDICACIÓN EN FICHA dice explícitamente que no hay medicación registrada Y no hay eventos de medicación.
 6) OBSERVACIONES RELEVANTES
    - Ánimo, energía, sueño, vómitos, incidentes u otras notas útiles del período.
 7) CIERRE PARA EL TUTOR
@@ -642,8 +644,8 @@ REGLAS DE ORO (INQUEBRANTABLES)
 3. Priorizá hechos concretos y tendencias (ej: "los primeros días comió poco; luego recuperó el apetito") sobre adjetivos vagos.
 4. Tono: español rioplatense (Argentina), profesional, cercano, sobrio. Sin dramatizar. Sin diagnósticos médicos. Sin recomendaciones veterinarias salvo que el dato lo diga explícitamente.
 5. No uses inglés. No uses Markdown. No inventes fechas fuera del período.
-6. Si la medicación no aplica, NO menciones medicación en ninguna sección.
-7. Diferenciá claramente lo observado en guardería de lo que solo figura en la ficha de ingreso (la ficha es contexto; los reportes/eventos son evidencia de la estadía).
+6. Si hay medicación en ficha (incluida postoperatoria/ingreso), NUNCA omitas la sección MEDICACIÓN ni digas que no aplica.
+7. Diferenciá claramente lo observado en guardería de lo que solo figura en la ficha de ingreso (la ficha es contexto; los reportes/eventos son evidencia de la estadía). La medicación de ficha SÍ debe informarse al tutor.
 8. Si hay señales de alerta leves (caca blanda, poco apetito un día), describilas con calma. Si hay señales graves explícitas (sangre, vómito reiterado), reportalas con claridad sin alarmismo teatral.
 9. El reporte debe poder leerse completo en menos de 2 minutos: concreto, ordenado, sin relleno.
 10. Nunca contradigas los datos: si un día dice "no comió" y otro "comió todo", reflejá la variación.

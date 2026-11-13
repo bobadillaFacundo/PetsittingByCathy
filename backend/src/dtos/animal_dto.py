@@ -336,6 +336,7 @@ class AnimalMedicationResponse(BaseModel):
     amount_per_day: Optional[str] = None
     duration_days: Optional[int] = None
     is_forever: bool = False
+    start_date: Optional[date] = None
     schedules: List[str] = []
 
     class Config:
@@ -349,6 +350,7 @@ class AnimalMedicationCreate(BaseModel):
     amount_per_day: Optional[str] = None
     duration_days: Optional[int] = None
     is_forever: bool = False
+    start_date: Optional[date] = None
     schedules: List[str] = []
 
 class AnimalMedicationUpdate(BaseModel):
@@ -359,4 +361,5 @@ class AnimalMedicationUpdate(BaseModel):
     amount_per_day: Optional[str] = None
     duration_days: Optional[int] = None
     is_forever: Optional[bool] = None
+    start_date: Optional[date] = None
     schedules: Optional[List[str]] = None

@@ -103,7 +103,7 @@ def get_calendar_alerts(
                 "due_date": serialize_ar_date(v.next_due_date),
             })
 
-    # Medicaciones activas — crónicas todos los días del rango; con duración, N días desde hoy
+    # Medicaciones activas — crónicas: todo el rango; con duración: N días desde start_date (día 1 = carga)
     active_meds = (
         db.query(AnimalMedication)
         .options(
@@ -126,18 +126,19 @@ def get_calendar_alerts(
         if not times:
             times = [dt_time(0, 0)]
 
+        # Día de carga = día 1 del tratamiento (no recalcular desde "hoy")
+        med_start = m.start_date or today
+
         if m.is_forever:
-            med_days = list(_daterange(range_start, range_end))
+            med_days = list(_daterange(max(med_start, range_start), range_end))
         elif m.duration_days and m.duration_days > 0:
-            med_start = today
-            med_end = today + timedelta(days=m.duration_days - 1)
-            # Intersección con el rango visible
+            med_end = med_start + timedelta(days=m.duration_days - 1)
             day_from = max(med_start, range_start)
             day_to = min(med_end, range_end)
             med_days = list(_daterange(day_from, day_to)) if day_from <= day_to else []
         else:
-            # Sin duración definida: al menos hoy si está en rango
-            med_days = [today] if range_start <= today <= range_end else []
+            # Sin duración: solo el día de inicio si cae en el rango
+            med_days = [med_start] if range_start <= med_start <= range_end else []
 
         for day in med_days:
             for i, t in enumerate(times):

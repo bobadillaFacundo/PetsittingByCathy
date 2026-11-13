@@ -152,6 +152,7 @@ def delete_animal(animal_id: int, db: Session = Depends(get_db), current_admin =
 
 from src.models.models import AnimalMedication, MedicationCatalog, AnimalMedicationSchedule
 from src.dtos.animal_dto import AnimalMedicationCreate, AnimalMedicationUpdate, AnimalMedicationResponse
+from src.timezone_ar import today_ar
 from sqlalchemy.orm import joinedload
 from datetime import datetime
 
@@ -194,6 +195,7 @@ def get_animal_medications(animal_id: int, db: Session = Depends(get_db)):
             "amount_per_day": m.amount_per_day,
             "duration_days": m.duration_days,
             "is_forever": m.is_forever,
+            "start_date": m.start_date.isoformat() if m.start_date else None,
             "schedules": schedules,
         })
     return result
@@ -206,7 +208,8 @@ def add_animal_medication(animal_id: int, med_in: AnimalMedicationCreate, db: Se
         db.add(catalog)
         db.commit()
         db.refresh(catalog)
-        
+
+    start = med_in.start_date or today_ar()
     db_med = AnimalMedication(
         animal_id=animal_id,
         medication_id=catalog.id,
@@ -215,7 +218,8 @@ def add_animal_medication(animal_id: int, med_in: AnimalMedicationCreate, db: Se
         is_current=med_in.is_current,
         amount_per_day=med_in.amount_per_day,
         duration_days=med_in.duration_days,
-        is_forever=med_in.is_forever
+        is_forever=med_in.is_forever,
+        start_date=start,
     )
     db.add(db_med)
     db.flush()
@@ -241,6 +245,7 @@ def add_animal_medication(animal_id: int, med_in: AnimalMedicationCreate, db: Se
         "amount_per_day": db_med.amount_per_day,
         "duration_days": db_med.duration_days,
         "is_forever": db_med.is_forever,
+        "start_date": db_med.start_date.isoformat() if db_med.start_date else None,
         "schedules": saved_times,
     }
 
@@ -300,6 +305,7 @@ def update_animal_medication(animal_id: int, medication_id: int, med_update: Ani
         "amount_per_day": db_med.amount_per_day,
         "duration_days": db_med.duration_days,
         "is_forever": db_med.is_forever,
+        "start_date": db_med.start_date.isoformat() if db_med.start_date else None,
         "schedules": saved_times,
     }
 
@@ -426,6 +432,7 @@ def get_animal_history(
             amount_per_day=m.amount_per_day,
             duration_days=m.duration_days,
             is_forever=m.is_forever,
+            start_date=m.start_date,
             schedules=[s.scheduled_time.strftime("%H:%M") for s in m.schedules] if m.schedules else []
         )
         for m in active_meds

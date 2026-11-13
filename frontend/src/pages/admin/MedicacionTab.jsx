@@ -8,6 +8,14 @@ export default function MedicacionTab({ animalId }) {
   const [isEditing, setIsEditing] = useState(null);
   const token = localStorage.getItem('token');
 
+  const todayIso = () => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
   const emptyMed = {
     medication_name: '',
     dosage: '',
@@ -16,6 +24,7 @@ export default function MedicacionTab({ animalId }) {
     amount_per_day: '',
     duration_days: '',
     is_forever: false,
+    start_date: todayIso(),
     schedules: ['']
   };
 
@@ -48,6 +57,8 @@ export default function MedicacionTab({ animalId }) {
       ...newMed,
       amount_per_day: newMed.amount_per_day || null,
       duration_days: newMed.duration_days ? parseInt(newMed.duration_days) : null,
+      // Día de carga = día 1 en el calendario
+      start_date: newMed.start_date || todayIso(),
       schedules: (newMed.schedules || [])
         .map(t => (t || '').trim().slice(0, 5))
         .filter(t => t !== '')
@@ -195,7 +206,17 @@ export default function MedicacionTab({ animalId }) {
           ))}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+          <div>
+            <label className="block text-xs font-bold text-gray-700 mb-1">Inicio (día 1)</label>
+            <input
+              type="date"
+              value={newMed.start_date || todayIso()}
+              onChange={e => setNewMed({ ...newMed, start_date: e.target.value })}
+              className="w-full border rounded-lg p-2.5 text-sm"
+            />
+            <p className="text-[11px] text-gray-400 mt-1">El día de carga cuenta como primer día.</p>
+          </div>
           <div>
             <label className="block text-xs font-bold text-gray-700 mb-1">Días en total</label>
             <input 
@@ -203,7 +224,7 @@ export default function MedicacionTab({ animalId }) {
               value={newMed.duration_days}
               onChange={e => setNewMed({...newMed, duration_days: e.target.value, is_forever: false})}
               className="w-full border rounded-lg p-2.5 text-sm"
-              placeholder="Ej. 7"
+              placeholder="Ej. 5"
               disabled={newMed.is_forever}
             />
           </div>
@@ -263,8 +284,9 @@ export default function MedicacionTab({ animalId }) {
                   <span className="font-semibold text-gray-700">Dosis:</span> {m.dosage} | 
                   <span className="font-semibold text-gray-700 ml-1">Frec.:</span> {m.frequency}
                 </p>
-                {(m.amount_per_day || m.duration_days || m.is_forever || (m.schedules && m.schedules.length > 0)) && (
+                {(m.amount_per_day || m.duration_days || m.is_forever || m.start_date || (m.schedules && m.schedules.length > 0)) && (
                   <p className="text-xs text-gray-500 mt-0.5">
+                    {m.start_date && <><span className="font-semibold text-gray-700">Inicio:</span> {m.start_date} | </>}
                     {m.amount_per_day && <><span className="font-semibold text-gray-700">Cant/día:</span> {m.amount_per_day} | </>}
                     <span className="font-semibold text-gray-700">Duración:</span> {m.is_forever ? 'Por siempre' : `${m.duration_days || '-'} días`}
                     {m.schedules && m.schedules.length > 0 && (
@@ -275,7 +297,7 @@ export default function MedicacionTab({ animalId }) {
               </div>
               <div className="flex gap-2">
                 <button 
-                  onClick={() => { setIsEditing(m.id); setNewMed({...m, duration_days: m.duration_days || '', amount_per_day: m.amount_per_day || '', schedules: m.schedules?.length > 0 ? m.schedules : ['']}); }}
+                  onClick={() => { setIsEditing(m.id); setNewMed({...m, duration_days: m.duration_days || '', amount_per_day: m.amount_per_day || '', start_date: m.start_date || todayIso(), schedules: m.schedules?.length > 0 ? m.schedules : ['']}); }}
                   className="p-2 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
                 >
                   <Pencil size={16} />
