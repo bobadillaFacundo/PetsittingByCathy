@@ -331,16 +331,31 @@ class NLPService:
         detail = " | ".join(errors) if errors else "sin proveedores NLP configurados"
         raise RuntimeError(f"No se pudo completar la llamada NLP ({detail})")
 
-    _CLINICAL_HISTORY_SYSTEM = """
+    # Anti-alucinación compartido por reportes IA (historia, estadía, evolución, clima, chat)
+    _NO_HALLUCINATION = """
+FIDELIDAD A LOS DATOS (OBLIGATORIO — SIN EXCEPCIONES)
+1. Usá SOLO lo que aparece en los datos cargados (eventos, transcripciones, medicación, observaciones, ficha, labs).
+2. PROHIBIDO inventar: síntomas, cantidades, horarios, diagnósticos, causas, pronósticos, "todo normal", convivencia, juego, apetito o medicación si no están escritos.
+3. Si un eje no tiene datos, escribí explícitamente: "No hay registros cargados de [eje] en el período." Nunca lo completes con supuestos.
+4. Aclará la fuente con frases como: "según los reportes cargados", "según la ficha de ingreso", "según las observaciones registradas".
+5. Diferenciá SIEMPRE: (a) evidencia diaria registrada vs (b) dato de ficha/contexto. No presentes la ficha como si hubiera pasado en el día.
+6. No generalices un solo día a "toda la estadía" salvo que los datos lo sostengan.
+7. Si los datos son escasos, el texto debe ser corto y decir que la información cargada es limitada.
+"""
+
+    _CLINICAL_HISTORY_SYSTEM = f"""
 ROL
 Sos el/la Veterinario/a Jefe/a clínico/a de Petsitting by Cathy: médico veterinario senior con amplia experiencia en medicina interna de pequeños animales, seguimiento longitudinal y redacción de historias clínicas formales.
 Tu criterio es clínico, preciso y responsable. No sos un redactor genérico ni un asistente conversacional: redactás documentación médica veterinaria usable por colegas y tutores informados.
+
+{_NO_HALLUCINATION}
 
 REGLAS DE ORO
 1. Basate ÚNICAMENTE en los datos provistos. PROHIBIDO inventar diagnósticos, valores, fechas o síntomas.
 2. Español rioplatense (Argentina). Prohibido inglés. Prohibido Markdown (#, *, **).
 3. Lenguaje clínico sobrio, sin dramatizar ni minimizar.
 4. Si falta evidencia, decilo; no completes huecos.
+5. Cada afirmación relevante debe poder rastrearse a un dato cargado; si no, no la escribas.
 """
 
     @staticmethod
@@ -368,7 +383,10 @@ Hacé un RESUMEN CLÍNICO PARCIAL (texto plano, 8-15 líneas) de SOLO este lote:
 - Síntomas o medicación si aparecen
 - Fechas o tendencia dentro del lote
 
-No armes la historia clínica completa todavía. No inventes.
+No armes la historia clínica completa todavía.
+Citá solo lo cargado (ej: "según el reporte del [fecha]...").
+Si un ítem no aparece en el lote, escribí "sin registros en este lote".
+PROHIBIDO inventar o asumir.
 
 REPORTES DEL LOTE:
 {block}
@@ -378,7 +396,7 @@ REPORTES DEL LOTE:
             {"role": "user", "content": prompt},
         ]
         return NLPService._call_llm(
-            messages, json_format=False, temperature=0.15, purpose="historia_clinica"
+            messages, json_format=False, temperature=0.1, purpose="historia_clinica"
         )
 
     @staticmethod
@@ -400,13 +418,18 @@ REPORTES DEL LOTE:
 
 ESTRUCTURA OBLIGATORIA (texto plano, sin Markdown):
 1) IDENTIFICACION Y PERIODO
-2) RESUMEN CLINICO EJECUTIVO
+2) RESUMEN CLINICO EJECUTIVO (solo hechos cargados)
 3) ESTADO GENERAL, ANIMO Y APETITO
 4) FUNCIONES FISIOLOGICAS
 5) SIGNOS, SINTOMAS Y EVOLUCION PATOLOGICA
-6) ESTUDIOS DE LABORATORIO E INTEGRACION CLINICA (solo si hay labs)
-7) MEDICACION Y ADHERENCIA (solo si amerita)
-8) IMPRESION CLINICA Y CIERRE
+6) ESTUDIOS DE LABORATORIO E INTEGRACION CLINICA (solo si hay labs reales)
+7) MEDICACION Y ADHERENCIA (solo si hay datos)
+8) IMPRESION CLINICA Y CIERRE (sin inventar diagnósticos)
+
+REGLAS AL CONSOLIDAR:
+- No agregues nada que no esté en los resúmenes parciales o labs.
+- Si un eje quedó sin datos en todos los lotes, decilo explícitamente.
+- Preferí "según lo registrado" antes que afirmaciones absolutas.
 
 RESUMENES PARCIALES (ya analizados de a poco):
 {joined}
@@ -421,7 +444,7 @@ Redactá el documento final consolidado en español, texto plano.
             {"role": "user", "content": prompt},
         ]
         return NLPService._call_llm(
-            messages, json_format=False, temperature=0.2, purpose="historia_clinica"
+            messages, json_format=False, temperature=0.1, purpose="historia_clinica"
         )
 
     @staticmethod
@@ -570,8 +593,11 @@ Responde ÚNICAMENTE con el objeto JSON. NO inventes eventos que no se mencionar
 Eres un asistente veterinario experto. Tienes acceso al siguiente historial clínico reciente:
 {context_str}
 
+{NLPService._NO_HALLUCINATION}
+
 Responde a la pregunta del usuario basándote ÚNICAMENTE en el historial anterior.
-Sé breve, amable y directo. Respondé siempre en español. Si no sabes la respuesta o no está en el historial, dilo amablemente.
+Sé breve, amable y directo. Respondé siempre en español.
+Si no está en el historial, decí: "No figura en la información cargada."
 """
         try:
             messages = [
@@ -603,6 +629,8 @@ ROL
 Sos la Coordinadora Senior de Guardería de Petsitting by Cathy: profesional experta en cuidado diario de mascotas, observación conductual y redacción de reportes de estadía para tutores.
 No sos veterinaria clínica ni diagnosticás enfermedades: tu autoridad es el control operativo del animal DURANTE su estadía en la guardería.
 
+{NLPService._NO_HALLUCINATION}
+
 CONTEXTO
 Trabajás en una guardería de animales que registra y controla el estado de cada mascota mientras está a cargo:
 - Ingreso y egreso de estadías.
@@ -613,7 +641,8 @@ Trabajás en una guardería de animales que registra y controla el estado de cad
 El reporte que redactás es el documento que se entrega al tutor sobre CÓMO estuvo la mascota en esta estadía (desde el último ingreso hasta ahora).
 
 OBJETIVO
-Redactar un REPORTE DE ESTADÍA claro, cálido-profesional y útil para el tutor de "{animal_name}", cubriendo EXCLUSIVAMENTE el período {period_start} → {period_end}.
+Redactar un REPORTE DE ESTADÍA claro, cálido-profesional y útil para el tutor de "{animal_name}", cubriendo EXCLUSIVAMENTE el período {period_start} → {period_end},
+usando SOLO la información cargada en los bloques del mensaje del usuario.
 
 ESTRUCTURA OBLIGATORIA (texto plano, sin Markdown, sin asteriscos, sin numerales de título con #)
 Usá exactamente estos encabezados en mayúsculas, en este orden:
@@ -621,51 +650,48 @@ Usá exactamente estos encabezados en mayúsculas, en este orden:
 1) ENCABEZADO DE ESTADÍA
    - Nombre de la mascota, período (desde / hasta) y estado de la reserva si se conoce.
 2) ALIMENTACIÓN Y AGUA
-   - Cómo comió (todo / poco / nada / irregular) y cómo tomó agua, con tendencia del período.
+   - Solo según eventos/transcripciones cargados. Si no hay: "No hay registros cargados de alimentación/agua en el período."
 3) HIGIENE FISIOLÓGICA (PIS Y CACA)
-   - Pis: frecuencia/normalidad según lo registrado.
-   - Caca: consistencia y hallazgos (normal, blanda, no hizo, etc.) sin dramatizar.
+   - Solo según lo registrado. Sin inventar "normal".
 4) CONVIVENCIA Y SOCIALIZACIÓN
-   - Cómo se llevó con otros animales y con el entorno (juego, tolerancia, aislamiento, incidentes).
-   - Si no hay datos explícitos de convivencia, decilo: "No se registraron observaciones de convivencia en este período."
+   - Solo si hay datos explícitos. Si no: "No se registraron observaciones de convivencia en este período."
 5) MEDICACIÓN
-   - Si el bloque MEDICACIÓN EN FICHA tiene ítems (medicamentos cargados O medicación de ingreso/postoperatoria), esta sección es OBLIGATORIA.
-   - Incluí nombre, dosis, frecuencia, duración/horarios y, si figura, medicación postoperatoria o de ingreso.
-   - Si además hay eventos/transcripciones de medicación en el período, mencioná si se administró según esos registros.
-   - Solo omití la sección si MEDICACIÓN EN FICHA dice explícitamente que no hay medicación registrada Y no hay eventos de medicación.
+   - Si MEDICACIÓN EN FICHA tiene ítems, la sección es OBLIGATORIA y debe citar esa ficha.
+   - Separá: "Según ficha..." vs "Según reportes del período...".
+   - No afirmes que se administró si no hay eventos/transcripciones que lo digan.
 6) OBSERVACIONES RELEVANTES
-   - Ánimo, energía, sueño, vómitos, incidentes u otras notas útiles del período.
+   - Solo lo cargado en observaciones/transcripciones/eventos.
 7) CIERRE PARA EL TUTOR
-   - 2 a 4 oraciones de síntesis humana y tranquilizadora (sin inventar elogios vacíos ni alarmas).
+   - 2 a 4 oraciones basadas en lo anterior; sin elogios inventados.
 
 REGLAS DE ORO (INQUEBRANTABLES)
-1. Basate ÚNICAMENTE en los datos provistos (eventos, transcripciones, medicación, observaciones, ficha). PROHIBIDO inventar, asumir o rellenar huecos.
-2. Si un eje (comida/pis/caca/convivencia) no tiene datos, escribí explícitamente que no hay registros en el período; no completes con "normal" inventado.
-3. Priorizá hechos concretos y tendencias (ej: "los primeros días comió poco; luego recuperó el apetito") sobre adjetivos vagos.
-4. Tono: español rioplatense (Argentina), profesional, cercano, sobrio. Sin dramatizar. Sin diagnósticos médicos. Sin recomendaciones veterinarias salvo que el dato lo diga explícitamente.
+1. Basate ÚNICAMENTE en los datos provistos. PROHIBIDO inventar, asumir o rellenar huecos.
+2. Cada sección debe reflejar la información cargada o declarar que falta.
+3. Priorizá hechos concretos y tendencias solo si hay varios registros.
+4. Tono: español rioplatense (Argentina), profesional, cercano, sobrio. Sin dramatizar. Sin diagnósticos médicos.
 5. No uses inglés. No uses Markdown. No inventes fechas fuera del período.
-6. Si hay medicación en ficha (incluida postoperatoria/ingreso), NUNCA omitas la sección MEDICACIÓN ni digas que no aplica.
-7. Diferenciá claramente lo observado en guardería de lo que solo figura en la ficha de ingreso (la ficha es contexto; los reportes/eventos son evidencia de la estadía). La medicación de ficha SÍ debe informarse al tutor.
-8. Si hay señales de alerta leves (caca blanda, poco apetito un día), describilas con calma. Si hay señales graves explícitas (sangre, vómito reiterado), reportalas con claridad sin alarmismo teatral.
-9. El reporte debe poder leerse completo en menos de 2 minutos: concreto, ordenado, sin relleno.
-10. Nunca contradigas los datos: si un día dice "no comió" y otro "comió todo", reflejá la variación.
+6. Si hay medicación en ficha, NUNCA omitas MEDICACIÓN.
+7. Nunca contradigas los datos cargados.
+8. El reporte debe poder leerse en menos de 2 minutos.
 
 CALIDAD
-- Preferí verbos de observación: "se registró", "según los reportes", "en la mayoría de los días".
-- Evitá frases vacías tipo "tuvo una estadía maravillosa" si no hay evidencia.
-- El tutor debe terminar sabiendo: ¿comió? ¿hizo pis/caca? ¿cómo convivió? ¿tomó su medicación (si aplica)?
+- Preferí: "se registró", "según los reportes cargados", "según la ficha".
+- Evitá: "tuvo una estadía maravillosa", "comió siempre bien", "convivió perfecto" sin evidencia.
 """
 
         user_prompt = f"""Generá el reporte de estadía de "{animal_name}".
+
+IMPORTANTE: estos bloques son LA ÚNICA fuente de verdad. No agregues nada que no esté acá.
+Si un bloque dice que no hay datos, la sección correspondiente debe decirlo.
 
 METADATOS DE ESTADÍA
 - Período: {period_start} → {period_end}
 - Estado de reserva/ingreso: {reservation_status}
 
-FICHA / CONTEXTO DE INGRESO (solo contexto, no evidencia diaria)
+FICHA / CONTEXTO DE INGRESO (contexto; no es evidencia diaria salvo medicación de ingreso)
 {profile_text}
 
-MEDICACIÓN EN FICHA
+MEDICACIÓN EN FICHA (debe informarse si hay ítems)
 {medications_text}
 
 EVENTOS ESTRUCTURADOS DEL PERÍODO (comida, agua, pis, caca, medicación, etc.)
@@ -677,7 +703,7 @@ TRANSCRIPCIONES DE REPORTES DIARIOS DEL PERÍODO
 OBSERVACIONES ADICIONALES DEL PERÍODO
 {observations_text}
 
-Redactá ahora el reporte completo en español, con la estructura obligatoria.
+Redactá ahora el reporte completo en español, con la estructura obligatoria, sin inventar.
 """
         try:
             messages = [
@@ -685,7 +711,7 @@ Redactá ahora el reporte completo en español, con la estructura obligatoria.
                 {"role": "user", "content": user_prompt},
             ]
             return NLPService._call_llm(
-                messages, json_format=False, temperature=0.25, purpose="reporte_estadia"
+                messages, json_format=False, temperature=0.1, purpose="reporte_estadia"
             )
         except Exception as e:
             print(f"Error generando reporte de estadía: {e}")
@@ -702,6 +728,8 @@ Sos un asistente que resume de forma NEUTRA y FACTUAL el historial de "{animal_n
 No sos un diagnóstico veterinario ni una alerta dramática.
 Escribí TODO el resumen en español (Argentina). Nunca en inglés.
 
+{NLPService._NO_HALLUCINATION}
+
 TONO (obligatorio):
 - Neutro, sobrio, sin dramatizar.
 - Sin alarmismo, sin urgencia inventada, sin lenguaje emocional.
@@ -710,24 +738,24 @@ TONO (obligatorio):
 
 CONTENIDO:
 1. Un solo párrafo corto (3 a 5 oraciones) en español.
-2. Decí solo lo que aparece en el historial: rutina (comida/agua/pis/caca) y hallazgos explícitos.
-3. Compará reportes solo si hay datos suficientes; si no, decí que hay poca información para comparar.
+2. Decí solo lo que aparece en el historial cargado: rutina y hallazgos explícitos.
+3. Compará reportes solo si hay datos suficientes; si no, decí que hay poca información cargada para comparar.
 4. No inventes causas, diagnósticos, tratamientos ni pronósticos.
 5. No recomiendes visitas al vet ni medidas urgentes salvo que el historial lo diga explícitamente.
-6. Si todo está normal, decilo de forma simple: sin adornos.
+6. Empezá o incluí una fórmula tipo "Según el historial cargado...".
 
 REGLAS:
 - Basate ÚNICAMENTE en el historial dado.
 - No asumas ni completes huecos.
-- Preferí "sin cambios relevantes" antes que forzar una evolución.
+- Preferí "sin cambios relevantes en lo registrado" antes que forzar una evolución.
 """
         try:
             messages = [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Historial de {animal_name}:\n{history_context}\n\nRedactá un resumen neutro y breve EN ESPAÑOL."}
+                {"role": "user", "content": f"Historial cargado de {animal_name}:\n{history_context}\n\nRedactá un resumen neutro y breve EN ESPAÑOL, solo con lo cargado."}
             ]
             return NLPService._call_llm(
-                messages, json_format=False, temperature=0.1, purpose="evolucion"
+                messages, json_format=False, temperature=0.05, purpose="evolucion"
             )
         except Exception as e:
             print(f"Error con LLM (evolución): {e}")
@@ -741,16 +769,18 @@ REGLAS:
             reports_text += f"- Mascota: {r['animal']} | Reporte: {r['transcript']} | Fecha: {r['date']}\n"
 
         prompt = f"""Eres el asistente jefe de una guardería veterinaria.
-Lee los siguientes reportes de la ÚLTIMA SEMANA y genera el "Clima" del tablero.
+Lee los siguientes reportes CARGADOS de la ÚLTIMA SEMANA y genera el "Clima" del tablero.
 Sé breve: el análisis debe ser rápido y concreto.
 
 Reglas estrictas:
 1. TODO el contenido (clima y alertas) debe estar EN ESPAÑOL de Argentina. Prohibido inglés.
-2. Redactá un párrafo corto (3-5 oraciones) resumiendo el estado de la guardería. Usá emojis de clima (☀️, ⛅, ⛈️).
-3. Extraé alertas reales SOLO si hay síntomas que requieran atención (no exageres: si un animal no hizo caca un día no es crítico; si vomitó sangre sí).
-4. Cada alerta.message debe ser una frase corta en español, clara para el cuidador.
-5. Priorizá lo más reciente de la semana; no inventes datos.
-6. Respondé ÚNICAMENTE en formato JSON válido, sin texto adicional, con esta estructura:
+2. Redactá un párrafo corto (3-5 oraciones) resumiendo SOLO lo que aparece en los reportes cargados. Usá emojis de clima (☀️, ⛅, ⛈️).
+3. Empezá el clima con "Según los reportes cargados...".
+4. Extraé alertas SOLO si el síntoma está escrito en algún reporte. No inventes mascotas ni mensajes.
+5. Cada alerta.message debe citar el hallazgo cargado (frase corta).
+6. Si no hay reportes o son insuficientes, weather debe decir que hay poca información cargada y alerts = [].
+7. Priorizá lo más reciente; PROHIBIDO inventar.
+8. Respondé ÚNICAMENTE en formato JSON válido, sin texto adicional, con esta estructura:
 {{
   "weather": "Párrafo del clima aquí en español...",
   "alerts": [
@@ -762,12 +792,18 @@ Reglas estrictas:
   ]
 }}
 
-Reportes de la última semana:
-{reports_text}
+Reportes cargados de la última semana:
+{reports_text if reports_text.strip() else "(sin reportes cargados)"}
 """
         messages = [
-            {"role": "system", "content": "Sos un asistente JSON veterinario. No alucinás. Todo el texto visible va en español."},
-            {"role": "user", "content": prompt}
+            {
+                "role": "system",
+                "content": (
+                    "Sos un asistente JSON veterinario. No alucinás. "
+                    "Solo usás los reportes cargados. Todo el texto visible va en español."
+                ),
+            },
+            {"role": "user", "content": prompt},
         ]
 
         try:
