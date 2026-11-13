@@ -244,11 +244,11 @@ export default function AnimalHistory({ animalId = 1, days = null, limit = 40 })
         </div>
       )}
 
-      {data.observations && data.observations.length > 0 && (
-        <div className="mb-6 bg-amber-50 border border-amber-200 p-4 rounded-2xl">
-          <h3 className="text-sm font-bold text-amber-900 uppercase tracking-wide mb-3">
-            📝 Observaciones y otros
-          </h3>
+      <div className="mb-6 bg-amber-50 border border-amber-200 p-4 rounded-2xl">
+        <h3 className="text-sm font-bold text-amber-900 uppercase tracking-wide mb-3">
+          📝 Observaciones y otros
+        </h3>
+        {data.observations && data.observations.length > 0 ? (
           <div className="space-y-3">
             {data.observations.map((obs) => (
               <div key={obs.id} className="bg-white p-3 rounded-xl border border-amber-100 shadow-sm">
@@ -286,8 +286,10 @@ export default function AnimalHistory({ animalId = 1, days = null, limit = 40 })
               </div>
             ))}
           </div>
-        </div>
-      )}
+        ) : (
+          <p className="text-sm text-amber-800/70 italic">No hay observaciones cargadas para esta mascota.</p>
+        )}
+      </div>
 
       <div className="relative border-l-2 border-indigo-200 pl-6 ml-4 space-y-8 pb-4">
         {data.reports.map((report) => (

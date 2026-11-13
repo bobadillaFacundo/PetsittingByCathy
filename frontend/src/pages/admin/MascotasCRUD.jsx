@@ -796,48 +796,26 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
               {editingId && (
                 <div className="border-b border-gray-100 shrink-0 bg-white chip-scroll scroll-touch">
                   <div className="chip-scroll-track px-1">
-                    <button
-                      type="button"
-                      onClick={() => setModalTab('basic')}
-                      className={modalTabButtonClass(modalTab === 'basic')}
-                    >
-                      <UserCircle size={18} className="shrink-0" /> Básicos
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setModalTab('libreta')}
-                      className={modalTabButtonClass(modalTab === 'libreta')}
-                    >
-                      <BookHeart size={18} className="shrink-0" /> Libreta
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setModalTab('deworming')}
-                      className={modalTabButtonClass(modalTab === 'deworming')}
-                    >
-                      <Syringe size={18} className="shrink-0" /> Desparas.
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setModalTab('labs')}
-                      className={modalTabButtonClass(modalTab === 'labs')}
-                    >
-                      <FileText size={18} className="shrink-0" /> Labs
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setModalTab('medicacion')}
-                      className={modalTabButtonClass(modalTab === 'medicacion')}
-                    >
-                      <Syringe size={18} className="shrink-0" /> Medicación
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setModalTab('observaciones')}
-                      className={modalTabButtonClass(modalTab === 'observaciones')}
-                    >
-                      <StickyNote size={18} className="shrink-0" /> Observaciones
-                    </button>
+                    {[
+                      { id: 'basic', label: 'Básicos', Icon: UserCircle },
+                      { id: 'libreta', label: 'Libreta', Icon: BookHeart },
+                      { id: 'deworming', label: 'Desparas.', Icon: Syringe },
+                      { id: 'labs', label: 'Labs', Icon: FileText },
+                      { id: 'medicacion', label: 'Medicación', Icon: Syringe },
+                      { id: 'observaciones', label: 'Observaciones', Icon: StickyNote },
+                    ].map(({ id, label, Icon }) => (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={(e) => {
+                          setModalTab(id);
+                          e.currentTarget.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                        }}
+                        className={modalTabButtonClass(modalTab === id)}
+                      >
+                        <Icon size={18} className="shrink-0" /> {label}
+                      </button>
+                    ))}
                   </div>
                 </div>
               )}

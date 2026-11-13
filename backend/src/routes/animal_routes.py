@@ -386,15 +386,16 @@ def get_animal_history(
             attachments=attachment_dtos,
         ))
 
-    # Observaciones con multimedia (entidad débil 1:N)
-    obs_q = (
+    # Observaciones: siempre visibles (no las corta el filtro days= del tablero).
+    # Los reportes sí pueden limitarse a la última semana por performance.
+    obs_rows = (
         db.query(AnimalObservation)
         .options(joinedload(AnimalObservation.attachments), joinedload(AnimalObservation.user))
         .filter(AnimalObservation.animal_id == animal_id)
+        .order_by(AnimalObservation.created_at.desc())
+        .limit(safe_limit)
+        .all()
     )
-    if since is not None:
-        obs_q = obs_q.filter(AnimalObservation.created_at >= since)
-    obs_rows = obs_q.order_by(AnimalObservation.created_at.desc()).limit(safe_limit).all()
 
     observation_dtos = [
         ObservationDTO(
