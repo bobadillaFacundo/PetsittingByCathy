@@ -1,8 +1,18 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, RefreshCw, Activity, CheckCircle2, Filter, Mic, Square, Download, Database, Sun, CloudSun, AlertTriangle, X, Trash2 } from 'lucide-react';
+import { Send, RefreshCw, Activity, CheckCircle2, Mic, Square, Download, Database, Sun, CloudSun, AlertTriangle, X, Trash2 } from 'lucide-react';
 import VoiceRecorder from '../../components/VoiceRecorder';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import {
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend,
+  ResponsiveContainer,
+  ComposedChart,
+  Line,
+} from 'recharts';
 import { API_BASE, apiUrl, mediaUrl } from '../../lib/api';
 import {
   resolveEventColor,
@@ -20,6 +30,7 @@ export default function AuditoriaPanel() {
   const [filterDateStart, setFilterDateStart] = useState('');
   const [filterDateEnd, setFilterDateEnd] = useState('');
   const [filterColor, setFilterColor] = useState('Todos'); // Todos | green | yellow | red
+  const [chartGranularity, setChartGranularity] = useState('semana'); // semana | mes
   const [weatherData, setWeatherData] = useState(null);
   const [loadingWeather, setLoadingWeather] = useState(false);
   const [colorRules, setColorRules] = useState([]);
@@ -73,13 +84,6 @@ export default function AuditoriaPanel() {
     return e.type || type;
   };
 
-  /** Nombre para gráfico ampliado: incluye rutina normal si no hay anomalías. */
-  const getAnyEventChartName = (e) => {
-    const type = (e.type || '').toLowerCase().trim();
-    if (!type || type === 'peso') return null;
-    return e.type || type;
-  };
-
   const reportHasSymptom = (report, symptomName) => {
     if (symptomName === 'Todos') return true;
     return (report.events || []).some((e) => getSymptomChartName(e, report) === symptomName);
@@ -106,17 +110,6 @@ export default function AuditoriaPanel() {
     setFilterDateEnd(value);
     clearSymptomFilter();
   };
-
-  const handleSymptomPieClick = (data) => {
-    if (!data?.name) return;
-    if (filterSymptom === data.name) {
-      clearSymptomFilter();
-    } else {
-      setFilterSymptom(data.name);
-    }
-  };
-
-  const COLORS = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
   const fetchReports = async () => {
     setIsLoading(true);
@@ -227,16 +220,6 @@ export default function AuditoriaPanel() {
     });
   }, [reports, filterAnimal, filterSymptom, filterDateStart, filterDateEnd, filterColor, colorRules]);
 
-  const recentReportsGlobal = useMemo(() => {
-    const fortyEightHoursAgo = new Date();
-    fortyEightHoursAgo.setHours(fortyEightHoursAgo.getHours() - 48);
-    return reports.filter(r => new Date(r.created_at) >= fortyEightHoursAgo);
-  }, [reports]);
-
-  const recentReportsFiltered = useMemo(() => {
-    return recentReportsGlobal.filter(r => filterAnimal === 'Todas' || r.animal_name === filterAnimal);
-  }, [recentReportsGlobal, filterAnimal]);
-
   const groupedReports = useMemo(() => {
     const groups = {};
     filteredReports.forEach(r => {
@@ -252,53 +235,102 @@ export default function AuditoriaPanel() {
     return [...new Set(reports.map(r => r.animal_name))];
   }, [reports]);
 
-  const chartDataSintomas = useMemo(() => {
-    const buildCounts = (nameFn) => {
-      const counts = {};
-      const baseReports = filterAnimal === 'Todas'
-        ? recentReportsGlobal
-        : recentReportsGlobal.filter((r) => r.animal_name === filterAnimal);
+  /** Avance temporal: reportes por semana/mes con semáforo (normal / atención / alerta). */
+  const evolutionChart = useMemo(() => {
+    const base =
+      filterAnimal === 'Todas'
+        ? reports
+        : reports.filter((r) => r.animal_name === filterAnimal);
 
-      baseReports.forEach((r) => {
-        (r.events || []).forEach((e) => {
-          const chartName = nameFn(e, r);
-          if (!chartName) return;
-          if (!counts[chartName]) counts[chartName] = new Set();
-          counts[chartName].add((r.animal_name || 'Desconocido').trim());
-        });
-      });
-      return Object.keys(counts)
-        .map((name) => ({ name, value: counts[name].size }))
-        .sort((a, b) => b.value - a.value);
+    const startOfWeekMon = (d) => {
+      const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      const day = (x.getDay() + 6) % 7; // lunes = 0
+      x.setDate(x.getDate() - day);
+      return x;
     };
 
-    // Preferir solo anomalías; si no hay, mostrar todos los eventos (así el gráfico no queda vacío)
-    const anomalies = buildCounts(getSymptomChartName);
-    if (anomalies.length > 0) return anomalies;
-    return buildCounts((e) => getAnyEventChartName(e));
-  }, [recentReportsGlobal, filterAnimal, colorRules, mascotas]);
+    const bucketKey = (d) => {
+      if (chartGranularity === 'mes') {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        return `${y}-${m}`;
+      }
+      const sow = startOfWeekMon(d);
+      const y = sow.getFullYear();
+      const m = String(sow.getMonth() + 1).padStart(2, '0');
+      const day = String(sow.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
 
-  const chartDataAnimalsBySymptom = useMemo(() => {
-    if (filterSymptom === 'Todos') return [];
+    const bucketLabel = (key) => {
+      if (chartGranularity === 'mes') {
+        const [y, m] = key.split('-').map(Number);
+        return new Date(y, m - 1, 1)
+          .toLocaleDateString('es-AR', { month: 'short', year: '2-digit' })
+          .replace('.', '');
+      }
+      const [y, m, d] = key.split('-').map(Number);
+      const start = new Date(y, m - 1, d);
+      const end = new Date(y, m - 1, d + 6);
+      const a = start.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }).replace('.', '');
+      const b = end.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }).replace('.', '');
+      return `${a}–${b}`;
+    };
 
-    const counts = {};
-    const baseReports = filterAnimal === 'Todas'
-      ? recentReportsGlobal
-      : recentReportsGlobal.filter((r) => r.animal_name === filterAnimal);
-
-    baseReports.forEach((r) => {
-      if (!reportHasSymptom(r, filterSymptom)) return;
-      const petName = r.animal_name.trim();
-      counts[petName] = (counts[petName] || 0) + 1;
+    const buckets = new Map();
+    base.forEach((r) => {
+      const dt = new Date(r.created_at);
+      if (Number.isNaN(dt.getTime())) return;
+      const key = bucketKey(dt);
+      if (!buckets.has(key)) {
+        buckets.set(key, {
+          key,
+          label: bucketLabel(key),
+          reportes: 0,
+          normal: 0,
+          atencion: 0,
+          alerta: 0,
+        });
+      }
+      const row = buckets.get(key);
+      row.reportes += 1;
+      const color = getReportColor(r);
+      if (color === 'red') row.alerta += 1;
+      else if (color === 'yellow') row.atencion += 1;
+      else row.normal += 1;
     });
 
-    return Object.keys(counts)
-      .map((name) => ({ name, Reportes: counts[name] }))
-      .sort((a, b) => b.Reportes - a.Reportes);
-  }, [recentReportsGlobal, filterAnimal, filterSymptom, colorRules]);
+    const sorted = [...buckets.values()].sort((a, b) => a.key.localeCompare(b.key));
+    const limit = chartGranularity === 'mes' ? 6 : 8;
+    const slice = sorted.slice(-limit).map((row) => ({
+      ...row,
+      bienestar: row.reportes
+        ? Math.round((row.normal / row.reportes) * 100)
+        : 0,
+    }));
 
-  const showSymptomDrilldown = filterSymptom !== 'Todos';
+    let trend = 'sin_datos';
+    if (slice.length >= 2) {
+      const prev = slice[slice.length - 2].bienestar;
+      const last = slice[slice.length - 1].bienestar;
+      const diff = last - prev;
+      if (diff >= 8) trend = 'mejorando';
+      else if (diff <= -8) trend = 'empeorando';
+      else trend = 'estable';
+    } else if (slice.length === 1) {
+      trend = 'estable';
+    }
 
+    const last = slice[slice.length - 1] || null;
+    return {
+      data: slice,
+      totalReports: base.length,
+      periods: slice.length,
+      trend,
+      lastBienestar: last?.bienestar ?? null,
+      lastLabel: last?.label ?? null,
+    };
+  }, [reports, filterAnimal, chartGranularity, colorRules, mascotas]);
 
   return (
     <div className="space-y-6 md:space-y-8 animate-fade-in-up pb-24 md:pb-0">
@@ -340,161 +372,235 @@ export default function AuditoriaPanel() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-bold text-gray-800 mb-1 flex items-center gap-2">
-            <Filter size={20} className="text-indigo-500" />
-            Filtrar por mascota
-          </h3>
-          <p className="text-sm text-gray-500 mb-4">
-            Últimas 48 h · afecta historial y gráfico de síntomas
-          </p>
-          <select
-            value={filterAnimal}
-            onChange={(e) => handleFilterAnimalChange(e.target.value)}
-            className="w-full border border-gray-300 rounded-xl px-4 py-3 bg-gray-50 text-gray-800 font-semibold focus:ring-2 focus:ring-indigo-500 outline-none"
-          >
-            <option value="Todas">Todas las mascotas</option>
-            {uniqueAnimals.map((name) => (
-              <option key={name} value={name}>{name}</option>
-            ))}
-          </select>
-          {filterAnimal !== 'Todas' && (
-            <div className="mt-4 flex items-center justify-between gap-2 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3">
-              <span className="text-sm font-bold text-indigo-800">
-                Mostrando: {filterAnimal}
-              </span>
-              <button
-                type="button"
-                onClick={() => handleFilterAnimalChange('Todas')}
-                className="text-xs font-bold text-indigo-600 hover:text-indigo-800 uppercase tracking-wide"
-              >
-                Quitar
-              </button>
-            </div>
-          )}
-          <p className="text-xs text-gray-400 mt-4">
-            {recentReportsFiltered.length} reporte{recentReportsFiltered.length !== 1 ? 's' : ''} en las últimas 48 h
-            {filterAnimal !== 'Todas' ? ` de ${filterAnimal}` : ''}
-          </p>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-bold text-gray-800 mb-1">Distribución de Síntomas</h3>
-          <p className="text-sm text-gray-500 mb-4">
-            Últimas 48 h · clic en un segmento para filtrar
-            {filterAnimal !== 'Todas' ? ` · ${filterAnimal}` : ''}
-          </p>
-          {chartDataSintomas.length > 0 ? (
-            <div className="w-full" style={{ height: 320, minHeight: 320 }}>
-              <ResponsiveContainer width="100%" height={320} minHeight={320}>
-                <PieChart>
-                  <Pie
-                    data={chartDataSintomas}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="45%"
-                    innerRadius={55}
-                    outerRadius={90}
-                    paddingAngle={3}
-                    onClick={handleSymptomPieClick}
-                    className="cursor-pointer"
-                    isAnimationActive={false}
-                  >
-                    {chartDataSintomas.map((entry, i) => (
-                      <Cell
-                        key={`cell-${entry.name}-${i}`}
-                        fill={filterSymptom === 'Todos' || filterSymptom === entry.name ? COLORS[i % COLORS.length] : '#e5e7eb'}
-                        stroke={filterSymptom === entry.name ? '#312e81' : '#fff'}
-                        strokeWidth={filterSymptom === entry.name ? 2 : 1}
-                      />
-                    ))}
-                  </Pie>
-                  <RechartsTooltip
-                    formatter={(value, _name, props) => [
-                      `${value} mascota${value !== 1 ? 's' : ''}`,
-                      props?.payload?.name || '',
-                    ]}
-                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                  />
-                  <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{ paddingTop: '8px' }} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="h-64 flex flex-col items-center justify-center text-gray-400 gap-2 text-center px-4">
-              <span className="font-medium">Sin datos para graficar</span>
-              <span className="text-xs text-gray-400">
-                {recentReportsFiltered.length === 0
-                  ? 'No hay reportes en las últimas 48 horas.'
-                  : 'Los reportes recientes no tienen eventos para mostrar.'}
-              </span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {showSymptomDrilldown && (
-        <div className="bg-white rounded-2xl shadow-sm border-2 border-indigo-200 p-6 animate-fade-in-up">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-            <div>
-              <h3 className="text-lg font-bold text-gray-800">
-                Mascotas con «{filterSymptom}»
+      {/* Evolución del animal — pensado para celular */}
+      <div className="rounded-3xl border border-teal-900/10 bg-gradient-to-b from-teal-950 via-teal-900 to-teal-800 text-teal-50 shadow-lg overflow-hidden">
+        <div className="p-4 sm:p-6 space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-teal-200/80">
+                Pulso de evolución
+              </p>
+              <h3 className="text-xl sm:text-2xl font-black tracking-tight mt-1 truncate">
+                {filterAnimal === 'Todas' ? 'Toda la guardería' : filterAnimal}
               </h3>
-              <p className="text-sm text-gray-500 mt-0.5">
-                Reportes en las últimas 48 h
-                {filterAnimal !== 'Todas' ? ` · filtro activo: ${filterAnimal}` : ''}
+              <p className="text-sm text-teal-100/75 mt-1">
+                Cómo viene el animal {chartGranularity === 'semana' ? 'semana a semana' : 'mes a mes'}:
+                reportes normales, con atención y con alerta.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={clearSymptomFilter}
-              className="inline-flex items-center gap-1.5 text-sm font-bold text-gray-600 hover:text-indigo-700 bg-gray-100 hover:bg-indigo-50 px-3 py-2 rounded-xl transition-colors"
-            >
-              <X size={16} /> Cerrar detalle
-            </button>
-          </div>
-          {chartDataAnimalsBySymptom.length > 0 ? (
-            <div className="w-full" style={{ height: 288, minHeight: 288 }}>
-              <ResponsiveContainer width="100%" height={288} minHeight={288}>
-                <BarChart data={chartDataAnimalsBySymptom} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                  <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#6b7280' }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 12, fill: '#6b7280' }} axisLine={false} tickLine={false} allowDecimals={false} />
-                  <RechartsTooltip
-                    cursor={{ fill: '#f3f4f6' }}
-                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                  />
-                  <Bar
-                    dataKey="Reportes"
-                    radius={[4, 4, 0, 0]}
-                    isAnimationActive={false}
-                    onClick={(data) => {
-                      if (!data?.name) return;
-                      setFilterAnimal(filterAnimal === data.name ? 'Todas' : data.name);
-                    }}
-                    className="cursor-pointer"
-                  >
-                    {chartDataAnimalsBySymptom.map((entry) => (
-                      <Cell
-                        key={entry.name}
-                        fill={filterAnimal === entry.name ? '#4f46e5' : '#818cf8'}
-                      />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="flex flex-wrap gap-2 shrink-0">
+              <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold ${
+                evolutionChart.trend === 'mejorando'
+                  ? 'bg-emerald-400/20 text-emerald-200 ring-1 ring-emerald-300/30'
+                  : evolutionChart.trend === 'empeorando'
+                    ? 'bg-rose-400/20 text-rose-200 ring-1 ring-rose-300/30'
+                    : evolutionChart.trend === 'estable'
+                      ? 'bg-amber-300/15 text-amber-100 ring-1 ring-amber-200/25'
+                      : 'bg-white/10 text-teal-100'
+              }`}>
+                <Activity size={14} />
+                {evolutionChart.trend === 'mejorando' && 'Mejorando'}
+                {evolutionChart.trend === 'empeorando' && 'Empeorando'}
+                {evolutionChart.trend === 'estable' && 'Estable'}
+                {evolutionChart.trend === 'sin_datos' && 'Sin datos'}
+              </span>
+              {evolutionChart.lastBienestar != null && (
+                <span className="inline-flex items-center rounded-full bg-white/10 px-3 py-1.5 text-xs font-bold text-white ring-1 ring-white/15">
+                  Bienestar {evolutionChart.lastBienestar}%
+                </span>
+              )}
             </div>
-          ) : (
-            <div className="h-40 flex items-center justify-center text-gray-400 border border-dashed border-gray-200 rounded-xl">
-              No hay mascotas con este síntoma en el período
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3">
+            <label className="block min-w-0">
+              <span className="sr-only">Mascota</span>
+              <select
+                value={filterAnimal}
+                onChange={(e) => handleFilterAnimalChange(e.target.value)}
+                className="w-full rounded-2xl border-0 bg-white/10 px-4 py-3 text-sm font-semibold text-white outline-none ring-1 ring-white/15 focus:ring-2 focus:ring-teal-300/50"
+              >
+                <option value="Todas" className="text-gray-900">Todas las mascotas</option>
+                {uniqueAnimals.map((name) => (
+                  <option key={name} value={name} className="text-gray-900">{name}</option>
+                ))}
+              </select>
+            </label>
+            <div className="inline-flex rounded-2xl bg-black/20 p-1 ring-1 ring-white/10 self-start">
+              <button
+                type="button"
+                onClick={() => setChartGranularity('semana')}
+                className={`px-4 py-2.5 rounded-xl text-xs font-bold transition ${
+                  chartGranularity === 'semana'
+                    ? 'bg-teal-300 text-teal-950 shadow'
+                    : 'text-teal-100/80 hover:bg-white/5'
+                }`}
+              >
+                Semana
+              </button>
+              <button
+                type="button"
+                onClick={() => setChartGranularity('mes')}
+                className={`px-4 py-2.5 rounded-xl text-xs font-bold transition ${
+                  chartGranularity === 'mes'
+                    ? 'bg-teal-300 text-teal-950 shadow'
+                    : 'text-teal-100/80 hover:bg-white/5'
+                }`}
+              >
+                Mes
+              </button>
+            </div>
+          </div>
+
+          {/* Chips rápidos de mascotas (móvil) */}
+          {uniqueAnimals.length > 0 && (
+            <div className="chip-scroll scroll-touch -mx-1 px-1">
+              <div className="chip-scroll-track">
+                <button
+                  type="button"
+                  onClick={() => handleFilterAnimalChange('Todas')}
+                  className={`rounded-full px-3 py-1.5 text-xs font-bold whitespace-nowrap ${
+                    filterAnimal === 'Todas'
+                      ? 'bg-teal-300 text-teal-950'
+                      : 'bg-white/10 text-teal-50 ring-1 ring-white/15'
+                  }`}
+                >
+                  Todas
+                </button>
+                {uniqueAnimals.map((name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => handleFilterAnimalChange(name)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-bold whitespace-nowrap ${
+                      filterAnimal === name
+                        ? 'bg-teal-300 text-teal-950'
+                        : 'bg-white/10 text-teal-50 ring-1 ring-white/15'
+                    }`}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
-          <p className="text-xs text-gray-400 mt-3">
-            Clic en una barra para filtrar el historial por esa mascota. Cambiar color o fechas oculta este detalle.
+
+          {evolutionChart.data.length > 0 ? (
+            <>
+              <div className="w-full rounded-2xl bg-black/20 p-2 sm:p-3 ring-1 ring-white/10" style={{ height: 260, minHeight: 260 }}>
+                <ResponsiveContainer width="100%" height={240} minHeight={240}>
+                  <ComposedChart data={evolutionChart.data} margin={{ top: 8, right: 4, left: -18, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.08)" />
+                    <XAxis
+                      dataKey="label"
+                      tick={{ fontSize: 10, fill: 'rgba(204,251,241,0.75)' }}
+                      axisLine={false}
+                      tickLine={false}
+                      interval={0}
+                      angle={-18}
+                      textAnchor="end"
+                      height={48}
+                    />
+                    <YAxis
+                      yAxisId="left"
+                      allowDecimals={false}
+                      tick={{ fontSize: 10, fill: 'rgba(204,251,241,0.65)' }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      yAxisId="right"
+                      orientation="right"
+                      domain={[0, 100]}
+                      tick={{ fontSize: 10, fill: 'rgba(204,251,241,0.55)' }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={32}
+                    />
+                    <RechartsTooltip
+                      cursor={{ fill: 'rgba(255,255,255,0.06)' }}
+                      contentStyle={{
+                        borderRadius: 14,
+                        border: 'none',
+                        background: '#042f2e',
+                        color: '#ecfdf5',
+                        boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
+                        fontSize: 12,
+                      }}
+                      formatter={(value, name) => {
+                        if (name === 'bienestar') return [`${value}%`, 'Bienestar'];
+                        if (name === 'normal') return [value, 'Normal'];
+                        if (name === 'atencion') return [value, 'Atención'];
+                        if (name === 'alerta') return [value, 'Alerta'];
+                        return [value, name];
+                      }}
+                    />
+                    <Legend
+                      wrapperStyle={{ fontSize: 11, color: '#ccfbf1', paddingTop: 4 }}
+                      formatter={(value) =>
+                        ({ normal: 'Normal', atencion: 'Atención', alerta: 'Alerta', bienestar: 'Bienestar %' }[value] || value)
+                      }
+                    />
+                    <Bar yAxisId="left" dataKey="normal" stackId="sem" fill="#34d399" radius={[0, 0, 0, 0]} maxBarSize={28} />
+                    <Bar yAxisId="left" dataKey="atencion" stackId="sem" fill="#fbbf24" maxBarSize={28} />
+                    <Bar yAxisId="left" dataKey="alerta" stackId="sem" fill="#fb7185" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                    <Line
+                      yAxisId="right"
+                      type="monotone"
+                      dataKey="bienestar"
+                      stroke="#5eead4"
+                      strokeWidth={2.5}
+                      dot={{ r: 3, fill: '#99f6e4', strokeWidth: 0 }}
+                      activeDot={{ r: 5 }}
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Tarjetas de períodos — lectura rápida en el celu */}
+              <div className="chip-scroll scroll-touch -mx-1 px-1">
+                <div className="chip-scroll-track gap-2">
+                  {evolutionChart.data.map((row) => (
+                    <div
+                      key={row.key}
+                      className="min-w-[7.5rem] rounded-2xl bg-white/8 ring-1 ring-white/10 px-3 py-2.5"
+                    >
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-teal-200/70 truncate">
+                        {row.label}
+                      </p>
+                      <p className="text-lg font-black text-white mt-0.5">{row.bienestar}%</p>
+                      <p className="text-[11px] text-teal-100/70 mt-1">
+                        {row.reportes} rep. · {row.alerta > 0 ? `${row.alerta} alerta` : 'sin alerta'}
+                      </p>
+                      <div className="mt-2 h-1.5 rounded-full bg-black/30 overflow-hidden flex">
+                        <span className="h-full bg-emerald-400" style={{ width: `${row.reportes ? (row.normal / row.reportes) * 100 : 0}%` }} />
+                        <span className="h-full bg-amber-400" style={{ width: `${row.reportes ? (row.atencion / row.reportes) * 100 : 0}%` }} />
+                        <span className="h-full bg-rose-400" style={{ width: `${row.reportes ? (row.alerta / row.reportes) * 100 : 0}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="rounded-2xl bg-black/20 ring-1 ring-white/10 px-4 py-10 text-center">
+              <p className="font-bold text-teal-50">Todavía no hay evolución para graficar</p>
+              <p className="text-sm text-teal-100/70 mt-1">
+                Elegí una mascota con reportes o esperá a que haya más historia.
+              </p>
+            </div>
+          )}
+
+          <p className="text-[11px] text-teal-100/55">
+            {evolutionChart.totalReports} reporte{evolutionChart.totalReports !== 1 ? 's' : ''} en total
+            {filterAnimal !== 'Todas' ? ` de ${filterAnimal}` : ''}
+            {evolutionChart.periods > 0
+              ? ` · mostrando ${evolutionChart.periods} ${chartGranularity === 'semana' ? 'semanas' : 'meses'}`
+              : ''}
+            . El % de bienestar es la proporción de reportes “normales” en cada período.
           </p>
         </div>
-      )}
+      </div>
 
       <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="p-6 border-b border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gray-50/50">

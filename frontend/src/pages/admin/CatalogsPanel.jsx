@@ -27,22 +27,26 @@ export default function CatalogsPanel() {
   ];
 
   return (
-    <div className="pet-section">
-      <div className="pet-panel p-4 flex gap-2 overflow-x-auto scroll-touch">
-        {catalogs.map(c => (
-          <button
-            key={c.id}
-            type="button"
-            onClick={() => setActiveCatalog(c.id)}
-            className={`pet-tab-pill text-sm ${
-              activeCatalog === c.id 
-                ? 'pet-tab-pill--active' 
-                : 'pet-tab-pill--inactive'
-            }`}
-          >
-            {c.label}
-          </button>
-        ))}
+    <div className="pet-section min-w-0">
+      <div className="pet-panel p-4 min-w-0">
+        <div className="chip-scroll scroll-touch">
+          <div className="chip-scroll-track">
+            {catalogs.map(c => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setActiveCatalog(c.id)}
+                className={`pet-tab-pill text-sm ${
+                  activeCatalog === c.id 
+                    ? 'pet-tab-pill--active' 
+                    : 'pet-tab-pill--inactive'
+                }`}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div>

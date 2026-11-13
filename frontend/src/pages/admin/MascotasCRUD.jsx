@@ -794,49 +794,51 @@ export default function MascotasCRUD({ daycareOnly = true, title, subtitle }) {
               )}
 
               {editingId && (
-                <div className="flex border-b border-gray-100 shrink-0 bg-white">
-                  <button
-                    type="button"
-                    onClick={() => setModalTab('basic')}
-                    className={modalTabButtonClass(modalTab === 'basic')}
-                  >
-                    <UserCircle size={18} className="shrink-0" /> Básicos
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setModalTab('libreta')}
-                    className={modalTabButtonClass(modalTab === 'libreta')}
-                  >
-                    <BookHeart size={18} className="shrink-0" /> Libreta
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setModalTab('deworming')}
-                    className={modalTabButtonClass(modalTab === 'deworming')}
-                  >
-                    <Syringe size={18} className="shrink-0" /> Desparas.
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setModalTab('labs')}
-                    className={modalTabButtonClass(modalTab === 'labs')}
-                  >
-                    <FileText size={18} className="shrink-0" /> Labs
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setModalTab('medicacion')}
-                    className={modalTabButtonClass(modalTab === 'medicacion')}
-                  >
-                    <Syringe size={18} className="shrink-0" /> Medicación
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setModalTab('observaciones')}
-                    className={modalTabButtonClass(modalTab === 'observaciones')}
-                  >
-                    <StickyNote size={18} className="shrink-0" /> Observaciones
-                  </button>
+                <div className="border-b border-gray-100 shrink-0 bg-white chip-scroll scroll-touch">
+                  <div className="chip-scroll-track px-1">
+                    <button
+                      type="button"
+                      onClick={() => setModalTab('basic')}
+                      className={modalTabButtonClass(modalTab === 'basic')}
+                    >
+                      <UserCircle size={18} className="shrink-0" /> Básicos
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setModalTab('libreta')}
+                      className={modalTabButtonClass(modalTab === 'libreta')}
+                    >
+                      <BookHeart size={18} className="shrink-0" /> Libreta
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setModalTab('deworming')}
+                      className={modalTabButtonClass(modalTab === 'deworming')}
+                    >
+                      <Syringe size={18} className="shrink-0" /> Desparas.
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setModalTab('labs')}
+                      className={modalTabButtonClass(modalTab === 'labs')}
+                    >
+                      <FileText size={18} className="shrink-0" /> Labs
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setModalTab('medicacion')}
+                      className={modalTabButtonClass(modalTab === 'medicacion')}
+                    >
+                      <Syringe size={18} className="shrink-0" /> Medicación
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setModalTab('observaciones')}
+                      className={modalTabButtonClass(modalTab === 'observaciones')}
+                    >
+                      <StickyNote size={18} className="shrink-0" /> Observaciones
+                    </button>
+                  </div>
                 </div>
               )}
 

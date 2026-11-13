@@ -56,18 +56,18 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen min-h-dvh bg-gray-50 flex">
       {/* Sidebar Desktop (Hidden on mobile) */}
-      <aside className={`hidden md:block bg-indigo-900 text-white flex-shrink-0 transition-all duration-300 ${isSidebarOpen ? 'w-64' : 'w-20'}`}>
-        <div className="p-4 flex items-center justify-between border-b border-indigo-800">
+      <aside className={`hidden md:flex md:flex-col bg-indigo-900 text-white flex-shrink-0 h-screen h-dvh transition-all duration-300 ${isSidebarOpen ? 'w-64' : 'w-20'}`}>
+        <div className="p-4 flex items-center justify-between border-b border-indigo-800 shrink-0">
           <div className={`flex items-center gap-3 ${!isSidebarOpen && 'hidden'}`}>
             <img src="/logo.png" alt="Logo" className="w-8 h-8 rounded-xl object-contain bg-white/10" />
             <span className="font-bold text-lg tracking-wide">Admin</span>
           </div>
-          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-1 hover:bg-indigo-800 rounded-lg">
+          <button type="button" onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-1 hover:bg-indigo-800 rounded-lg">
             <Menu size={20} />
           </button>
         </div>
         
-        <nav className="p-4 space-y-2 mt-4 overflow-y-auto scroll-touch max-h-[calc(100dvh-5rem)]">
+        <nav className="p-4 space-y-2 flex-1 min-h-0 overflow-y-auto scroll-touch">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
@@ -118,8 +118,8 @@ export default function AdminDashboard() {
         </header>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto scroll-touch p-3 sm:p-4 md:p-8">
-          <div className="max-w-6xl mx-auto pet-section">
+        <div className="flex-1 min-w-0 overflow-y-auto scroll-touch p-3 sm:p-4 md:p-8">
+          <div className="max-w-6xl mx-auto pet-section min-w-0">
             {activeTab === 'diccionario' && (
               <DiccionarioPanel />
             )}
@@ -170,15 +170,17 @@ export default function AdminDashboard() {
 
       {/* Mobile Bottom Navigation Bar */}
       <nav className="md:hidden fixed bottom-0 left-0 w-full bg-white/90 backdrop-blur-xl border-t border-gray-200 pb-safe z-50 shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.1)]">
-        <div className="flex items-stretch gap-0.5 px-1 py-2 overflow-x-auto scroll-touch">
+        <div className="chip-scroll scroll-touch px-1 py-2">
+          <div className="chip-scroll-track gap-0.5">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (
               <button
                 key={item.id}
+                type="button"
                 onClick={() => setActiveTab(item.id)}
-                className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1.5 min-w-[3.25rem] flex-1 rounded-2xl transition-all duration-300 ${
+                className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1.5 min-w-[4rem] rounded-2xl transition-all duration-300 ${
                   isActive 
                     ? 'text-indigo-600' 
                     : 'text-gray-400'
@@ -193,6 +195,7 @@ export default function AdminDashboard() {
               </button>
             );
           })}
+          </div>
         </div>
       </nav>
     </div>
